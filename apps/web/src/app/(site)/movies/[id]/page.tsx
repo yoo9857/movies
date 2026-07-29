@@ -1,5 +1,4 @@
 import { prisma } from "@cinepixo/db";
-import { parseJsonArray } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -61,22 +60,14 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
   const movie = await getMovie(id);
   if (!movie) notFound();
 
-  const genres = parseJsonArray(movie.genres);
-  const keywords = parseJsonArray(movie.keywords);
-  const countries = parseJsonArray(movie.countries);
+  const { genres, keywords, countries } = movie;
   const ratings = movie.reviews.map((r) => r.rating);
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
 
-  // Production companies are stored as JSON; render only well-formed entries.
-  let companies: { name: string; logoPath: string | null }[] = [];
-  try {
-    const parsed = JSON.parse(movie.companies ?? "[]");
-    if (Array.isArray(parsed)) {
-      companies = parsed.filter((c) => typeof c?.name === "string").slice(0, 8);
-    }
-  } catch {
-    companies = [];
-  }
+  // companies is a JSON column: shape it defensively, it is external data.
+  const companies = (Array.isArray(movie.companies) ? movie.companies : [])
+    .filter((c): c is { name: string } => typeof (c as { name?: unknown })?.name === "string")
+    .slice(0, 8);
 
   // Other films in the same franchise, if the library has any.
   const seriesEntries = movie.collectionId
@@ -117,7 +108,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
         )
           .map((m) => ({
             ...m,
-            overlap: parseJsonArray(m.genres).filter((g) => genres.includes(g)).length,
+            overlap: m.genres.filter((g) => genres.includes(g)).length,
           }))
           .filter((m) => m.overlap > 0)
           .sort((a, b) => b.overlap - a.overlap || b._count.reviews - a._count.reviews)

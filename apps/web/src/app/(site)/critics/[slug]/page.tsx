@@ -10,20 +10,16 @@ interface CriticLink {
   url: string;
 }
 
-function parseLinks(raw: string | null): CriticLink[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (l): l is CriticLink =>
-        typeof l?.label === "string" &&
-        typeof l?.url === "string" &&
-        /^https?:\/\//.test(l.url), // render http/https links only
-    );
-  } catch {
-    return [];
-  }
+// links is a JSON column of external data: validate every entry, and render
+// only http/https so a stored javascript: URL can never become a live link.
+function parseLinks(raw: unknown): CriticLink[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (l): l is CriticLink =>
+      typeof (l as CriticLink)?.label === "string" &&
+      typeof (l as CriticLink)?.url === "string" &&
+      /^https?:\/\//.test((l as CriticLink).url),
+  );
 }
 
 async function getCritic(rawSlug: string) {

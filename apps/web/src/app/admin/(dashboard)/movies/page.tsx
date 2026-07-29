@@ -1,5 +1,4 @@
 import { prisma } from "@cinepixo/db";
-import { parseJsonArray } from "@cinepixo/shared";
 import { MovieImporter } from "@/components/admin/MovieImporter";
 import { RefreshMovieButton } from "@/components/admin/RefreshMovieButton";
 
@@ -67,7 +66,7 @@ export default async function AdminMoviesPage() {
                     </td>
                     <td className="px-4 py-3 text-muted">{m.director ?? "—"}</td>
                     <td className="px-4 py-3 text-muted">
-                      {parseJsonArray(m.genres).join(", ") || "—"}
+                      {m.genres.join(", ") || "—"}
                     </td>
                     <td className="px-4 py-3 tabular-nums text-muted">{m._count.reviews}</td>
                     <td className="px-4 py-3 text-right">

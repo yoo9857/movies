@@ -1,44 +1,78 @@
+// CinePixo — PostgreSQL schema.
+//
+// Choices worth knowing:
+//  · state columns are real enums, so an invalid status cannot be written even
+//    by a raw query or a bad migration
+//  · list columns are native text[] rather than JSON strings, so filtering by
+//    genre is a database query instead of loading the table into memory
+//  · every timestamp is timestamptz — a Date without a zone is a bug waiting
+//    for the first server that isn't UTC
+//  · ratings and counters carry CHECK constraints, added in the migration SQL
+//    that Prisma cannot express (see migrations/*_constraints)
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
-// Fan account. Reviews are written by users; the site owner is role=ADMIN.
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum ReviewStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum SpoilerLevel {
+  NONE
+  MILD
+  FULL
+}
+
+enum ImageKind {
+  poster
+  backdrop
+}
+
+/// Fan account. Reviews are written by users; the site owner is role=ADMIN.
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   username     String   @unique
-  // scrypt hash, format: scrypt$N$r$p$salt$hash (never store plaintext)
+  /// scrypt hash, format: scrypt$N$r$p$salt$hash (never store plaintext)
   passwordHash String
-  // "ADMIN" | "MEMBER" (SQLite has no enums — validated with zod at the app layer)
-  role         String   @default("MEMBER")
+  role         UserRole @default(MEMBER)
   displayName  String?
   bio          String?
   avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
   reviews      Review[]
   votes        ReviewVote[]
 }
 
-// A professional film critic the fandom follows — profile directory.
+/// A professional film critic the fandom follows — profile directory.
 model Critic {
   id        String   @id @default(cuid())
   slug      String   @unique
   name      String
   bio       String?
   avatarUrl String?
-  // JSON string: [{ "label": "YouTube", "url": "..." }]
-  links     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// [{ "label": "YouTube", "url": "..." }]
+  links     Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
 }
 
-// A film — imported from TMDB or added manually.
+/// A film — imported from TMDB or added manually.
 model Movie {
   id            String    @id @default(cuid())
   tmdbId        Int?      @unique
@@ -49,37 +83,32 @@ model Movie {
   overview      String?
   posterPath    String?
   backdropPath  String?
-  releaseDate   DateTime?
+  releaseDate   DateTime? @db.Date
   runtime       Int?
   director      String?
-  // JSON string: ["Drama", "Thriller"]
-  genres        String?
-  // JSON string: ["class", "black comedy"]
-  keywords      String?
-  // JSON string: ["South Korea"]
-  countries     String?
-  // US certification, e.g. "R", "PG-13"
+  genres        String[]
+  keywords      String[]
+  countries     String[]
+  /// US certification, e.g. "R", "PG-13"
   certification String?
-  // USD — Float so >2^31 revenues (Avatar) fit without BigInt JSON issues
+  /// USD. Float because a revenue over 2^31 must not overflow.
   budget        Float?
   revenue       Float?
   voteAverage   Float?
   voteCount     Int?
   popularity    Float?
-  // YouTube key of the primary trailer (the rest live in MovieVideo)
+  /// YouTube key of the primary trailer (the rest live in MovieVideo)
   trailerKey    String?
-  // Franchise / series this film belongs to
   collectionId   Int?
   collectionName String?
-  // JSON string: [{ "name": "Barunson E&A", "logoPath": "/x.png" }]
-  companies      String?
-  // Official presence
+  /// [{ "name": "Barunson E&A", "logoPath": "/x.png" }]
+  companies      Json?
   homepage       String?
   instagram      String?
   facebook       String?
   twitter        String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
   reviews       Review[]
   cast          MovieCast[]
   crew          MovieCrew[]
@@ -88,41 +117,15 @@ model Movie {
 
   @@index([title])
   @@index([collectionId])
+  /// list ordering and filtering
+  @@index([releaseDate(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([voteAverage(sort: Desc)])
+  /// genre filters use the array containment operator — GIN is the right index
+  @@index([genres], type: Gin)
 }
 
-// Trailers, teasers and clips — so a film with several gets a picker.
-model MovieVideo {
-  id          String   @id @default(cuid())
-  movieId     String
-  movie       Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  youtubeKey  String
-  name        String
-  type        String   // "Trailer" | "Teaser" | "Clip" | "Featurette"
-  official    Boolean  @default(false)
-  publishedAt DateTime?
-  sort        Int      @default(0)
-
-  @@unique([movieId, youtubeKey])
-  @@index([movieId, sort])
-}
-
-// Alternate posters and stills for the gallery.
-model MovieImage {
-  id      String  @id @default(cuid())
-  movieId String
-  movie   Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  // "poster" | "backdrop"
-  kind    String
-  path    String
-  // ISO 639-1 language of any burned-in title text, when TMDB reports one
-  lang    String?
-  sort    Int     @default(0)
-
-  @@unique([movieId, path])
-  @@index([movieId, kind, sort])
-}
-
-// Top-billed cast, in TMDB billing order.
+/// Top-billed cast, in TMDB billing order.
 model MovieCast {
   id           String  @id @default(cuid())
   movieId      String
@@ -134,9 +137,10 @@ model MovieCast {
   order        Int
 
   @@index([movieId, order])
+  @@index([name])
 }
 
-// Key crew: Director, Screenplay, Director of Photography, Composer, Editor…
+/// Key crew: Director, Screenplay, Director of Photography, Composer, Editor…
 model MovieCrew {
   id           String  @id @default(cuid())
   movieId      String
@@ -148,50 +152,83 @@ model MovieCrew {
   profilePath  String?
 
   @@index([movieId])
+  @@index([name])
 }
 
-// A fan-written review of a movie.
-model Review {
+/// Trailers, teasers and clips — so a film with several gets a picker.
+model MovieVideo {
   id          String    @id @default(cuid())
-  slug        String    @unique
-  title       String
-  excerpt     String?
-  // Conclusion-first: the one-line takeaway, shown before the body
-  verdict     String?
-  // "NONE" | "MILD" | "FULL" — warns readers before they start
-  spoilers    String    @default("NONE")
-  // Markdown body — rendered with raw HTML disabled (XSS prevention)
-  content     String
-  // 0.0–10.0 in 0.5 steps — displayed as a 5-star scale
-  rating      Float
-  // "DRAFT" | "PUBLISHED" (validated with zod at the app layer)
-  status      String    @default("DRAFT")
-  publishedAt DateTime?
-  viewCount   Int       @default(0)
-  authorId    String
-  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   movieId     String
   movie       Movie     @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  helpfulCount Int      @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  youtubeKey  String
+  name        String
+  /// "Trailer" | "Teaser" | "Clip" | "Featurette" — free text by design, TMDB
+  /// adds new kinds and an unknown one must not fail an import
+  type        String
+  official    Boolean   @default(false)
+  publishedAt DateTime? @db.Timestamptz(3)
+  sort        Int       @default(0)
+
+  @@unique([movieId, youtubeKey])
+  @@index([movieId, sort])
+}
+
+/// Alternate posters and stills for the gallery.
+model MovieImage {
+  id      String    @id @default(cuid())
+  movieId String
+  movie   Movie     @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  kind    ImageKind
+  path    String
+  /// ISO 639-1 language of any burned-in title text, when TMDB reports one
+  lang    String?
+  sort    Int       @default(0)
+
+  @@unique([movieId, path])
+  @@index([movieId, kind, sort])
+}
+
+/// A fan-written review of a movie.
+model Review {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  title       String
+  excerpt     String?
+  /// Conclusion-first: the one-line takeaway, shown before the body
+  verdict     String?
+  /// Markdown body — rendered with raw HTML disabled (XSS prevention)
+  content     String
+  /// 0.0–10.0 in 0.5 steps — displayed as a 5-star scale. Range and step are
+  /// enforced by a CHECK constraint as well as by zod.
+  rating      Float
+  status      ReviewStatus @default(DRAFT)
+  spoilers    SpoilerLevel @default(NONE)
+  publishedAt DateTime?    @db.Timestamptz(3)
+  viewCount   Int          @default(0)
+  helpfulCount Int         @default(0)
+  authorId    String
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  movieId     String
+  movie       Movie        @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
   votes       ReviewVote[]
 
   @@index([status, publishedAt(sort: Desc)])
-  @@index([authorId])
-  @@index([movieId])
+  @@index([authorId, updatedAt(sort: Desc)])
+  @@index([movieId, status])
   @@index([status, helpfulCount(sort: Desc)])
 }
 
-// "This review was useful" — one per member per review. The denormalised
-// counter on Review keeps list sorting cheap.
+/// "This review was useful" — one per member per review. The denormalised
+/// counter on Review keeps list sorting cheap.
 model ReviewVote {
   id        String   @id @default(cuid())
   reviewId  String
   review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([reviewId, userId])
   @@index([userId])

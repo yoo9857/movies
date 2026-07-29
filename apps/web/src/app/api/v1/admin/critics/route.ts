@@ -23,7 +23,7 @@ export const POST = handle(async (request: Request) => {
       name: input.name,
       bio: input.bio,
       avatarUrl: input.avatarUrl,
-      links: JSON.stringify(input.links),
+      links: input.links,
     },
   });
   return json({ critic }, { status: 201 });

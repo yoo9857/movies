@@ -1,5 +1,5 @@
 import { prisma } from "@cinepixo/db";
-import { parseJsonArray, toStarScale } from "@cinepixo/shared";
+import { toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -20,7 +20,13 @@ const SORTS = {
 type SortKey = keyof typeof SORTS;
 
 export default async function MoviesPage(props: {
-  searchParams: Promise<{ genre?: string; decade?: string; sort?: string; view?: string }>;
+  searchParams: Promise<{
+    genre?: string;
+    decade?: string;
+    sort?: string;
+    view?: string;
+    page?: string;
+  }>;
 }) {
   const sp = await props.searchParams;
   const genre = (sp.genre ?? "").slice(0, 40);
@@ -32,72 +38,109 @@ export default async function MoviesPage(props: {
   // index stays available for anyone comparing numbers.
   const view = sp.view === "index" ? "index" : "grid";
 
-  const rows = await prisma.movie.findMany({
-    select: {
-      id: true,
-      title: true,
-      posterPath: true,
-      backdropPath: true,
-      releaseDate: true,
-      director: true,
-      genres: true,
-      voteAverage: true,
-      createdAt: true,
-      reviews: { where: { status: "PUBLISHED" }, select: { rating: true } },
-    },
-  });
+  const page = Math.max(1, Math.min(500, Number(sp.page) || 1));
+  const PER_PAGE = 30;
 
-  const allGenres = Array.from(new Set(rows.flatMap((m) => parseJsonArray(m.genres)))).sort();
-  const decades = Array.from(
-    new Set(
-      rows
-        .map((m) => (m.releaseDate ? Math.floor(m.releaseDate.getFullYear() / 10) * 10 : null))
-        .filter((d): d is number => d != null),
+  // Filters run in the database — genres is a text[] with a GIN index, so this
+  // stays a single indexed lookup however large the library gets. Loading every
+  // row to filter in JavaScript worked at nine films and would not at nine
+  // hundred.
+  const where = {
+    ...(genre ? { genres: { has: genre } } : {}),
+    ...(decade != null
+      ? {
+          releaseDate: {
+            gte: new Date(Date.UTC(decade, 0, 1)),
+            lt: new Date(Date.UTC(decade + 10, 0, 1)),
+          },
+        }
+      : {}),
+  };
+
+  const orderBy =
+    sort === "recent"
+      ? [{ createdAt: "desc" as const }]
+      : sort === "year"
+        ? [{ releaseDate: "desc" as const }]
+        : sort === "reviews"
+          ? [{ reviews: { _count: "desc" as const } }]
+          : // "fandom": no rating column to sort on, so order by review volume
+            // and refine within the page below
+            [{ reviews: { _count: "desc" as const } }, { voteAverage: "desc" as const }];
+
+  const select = {
+    id: true,
+    title: true,
+    posterPath: true,
+    backdropPath: true,
+    releaseDate: true,
+    director: true,
+    genres: true,
+    voteAverage: true,
+    createdAt: true,
+    reviews: { where: { status: "PUBLISHED" as const }, select: { rating: true } },
+  };
+
+  // Facet lists come from distinct values, not from every row's payload.
+  const [total, rows, genreRows, yearRows] = await Promise.all([
+    prisma.movie.count({ where }),
+    prisma.movie.findMany({
+      where,
+      orderBy,
+      select,
+      skip: (page - 1) * PER_PAGE,
+      take: PER_PAGE,
+    }),
+    prisma.$queryRawUnsafe<{ genre: string }[]>(
+      `SELECT DISTINCT UNNEST("genres") AS genre FROM "Movie" ORDER BY genre`,
     ),
-  ).sort((a, b) => b - a);
+    prisma.$queryRawUnsafe<{ decade: number }[]>(
+      `SELECT DISTINCT (EXTRACT(YEAR FROM "releaseDate")::int / 10) * 10 AS decade
+       FROM "Movie" WHERE "releaseDate" IS NOT NULL ORDER BY decade DESC`,
+    ),
+  ]);
 
-  let movies = rows.map((m) => {
+  const allGenres = genreRows.map((g) => g.genre);
+  const decades = yearRows.map((d) => Number(d.decade));
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+
+  const withScores = rows.map((m) => {
     const count = m.reviews.length;
     const avg = count > 0 ? m.reviews.reduce((s, r) => s + r.rating, 0) / count : null;
     return { ...m, count, avg, ratings: m.reviews.map((r) => r.rating) };
   });
 
-  if (genre) movies = movies.filter((m) => parseJsonArray(m.genres).includes(genre));
-  if (decade != null) {
-    movies = movies.filter(
-      (m) =>
-        m.releaseDate &&
-        Math.floor(m.releaseDate.getFullYear() / 10) * 10 === decade,
-    );
-  }
+  // Fandom average is derived, so the final ordering happens on the page slice.
+  const movies =
+    sort === "fandom"
+      ? [...withScores].sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1) || b.count - a.count)
+      : withScores;
 
-  movies.sort((a, b) => {
-    switch (sort) {
-      case "reviews":
-        return b.count - a.count;
-      case "recent":
-        return b.createdAt.getTime() - a.createdAt.getTime();
-      case "year":
-        return (b.releaseDate?.getTime() ?? 0) - (a.releaseDate?.getTime() ?? 0);
-      default:
-        return (b.avg ?? -1) - (a.avg ?? -1) || b.count - a.count;
-    }
-  });
-
-  // Editor's pick banner: unfiltered views only, and only once the library is
-  // big enough that pulling one film out doesn't thin the grid.
+  // Editor's pick banner: first page of an unfiltered view only, and only once
+  // the library is big enough that pulling one film out doesn't thin the grid.
   const featured =
-    !genre && decade == null && movies.length >= 6
+    !genre && decade == null && page === 1 && total >= 6
       ? ([...movies].sort((a, b) => b.count - a.count).find((m) => m.count > 0) ?? null)
       : null;
   const listed = featured ? movies.filter((m) => m.id !== featured.id) : movies;
 
   const qs = (patch: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    const merged = { genre, decade: decade?.toString(), sort, view, ...patch };
+    // Changing a filter or the sort returns to page 1; only an explicit page
+    // patch carries a page through.
+    const merged: Record<string, string | undefined> = {
+      genre,
+      decade: decade?.toString(),
+      sort,
+      view,
+      ...patch,
+    };
     for (const [k, v] of Object.entries(merged)) {
-      if (v && !(k === "sort" && v === "fandom") && !(k === "view" && v === "grid"))
-        params.set(k, v);
+      if (!v) continue;
+      if (k === "sort" && v === "fandom") continue;
+      if (k === "view" && v === "grid") continue;
+      if (k === "page" && v === "1") continue;
+      params.set(k, v);
     }
     const s = params.toString();
     return s ? `/movies?${s}` : "/movies";
@@ -109,7 +152,7 @@ export default async function MoviesPage(props: {
     posterPath: m.posterPath,
     releaseDate: m.releaseDate,
     director: m.director,
-    genres: parseJsonArray(m.genres),
+    genres: m.genres,
     voteAverage: m.voteAverage,
     fandomAvg: m.avg,
     reviewCount: m.count,
@@ -117,7 +160,15 @@ export default async function MoviesPage(props: {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold tracking-tight">Movies</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="text-3xl font-bold tracking-tight">Movies</h1>
+        <p className="font-mono text-xs text-muted">
+          {total} film{total === 1 ? "" : "s"}
+          {genre ? ` · ${genre}` : ""}
+          {decade != null ? ` · ${decade}s` : ""}
+          {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
+        </p>
+      </div>
 
       {/* Filter rail — text links on a hairline, no dropdown boxes */}
       <nav
@@ -264,8 +315,8 @@ export default async function MoviesPage(props: {
                 <span className="text-sm text-muted">
                   {m.releaseDate ? ` (${m.releaseDate.getFullYear()})` : ""}
                   {m.director ? ` · ${m.director}` : ""}
-                  {parseJsonArray(m.genres).length > 0
-                    ? ` · ${parseJsonArray(m.genres).slice(0, 3).join(", ")}`
+                  {m.genres.length > 0
+                    ? ` · ${m.genres.slice(0, 3).join(", ")}`
                     : ""}
                 </span>
               </span>
@@ -288,6 +339,37 @@ export default async function MoviesPage(props: {
             </Link>
           ))}
         </div>
+      )}
+
+      {totalPages > 1 && (
+        <nav
+          className="mt-10 flex items-baseline justify-between font-mono text-sm"
+          aria-label="Pagination"
+        >
+          {page > 1 ? (
+            <Link
+              href={qs({ page: String(page - 1) })}
+              className="text-muted transition-colors hover:text-foreground"
+            >
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-muted tabular-nums">
+            {page} / {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link
+              href={qs({ page: String(page + 1) })}
+              className="text-muted transition-colors hover:text-foreground"
+            >
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
       )}
     </div>
   );

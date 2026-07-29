@@ -202,7 +202,7 @@ async function main() {
     await prisma.movie.update({
       where: { id: movie.id },
       data: {
-        companies: JSON.stringify(d.companies.map((name) => ({ name, logoPath: null }))),
+        companies: d.companies.map((name) => ({ name, logoPath: null })),
         collectionId: d.collection?.id ?? null,
         collectionName: d.collection?.name ?? null,
         instagram: d.instagram ?? null,

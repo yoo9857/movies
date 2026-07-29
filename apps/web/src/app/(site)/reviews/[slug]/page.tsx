@@ -1,7 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import {
   extractHeadings,
-  parseJsonArray,
   readingMinutes,
   slugSchema,
   toStarScale,
@@ -224,8 +223,8 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
               runtime: movie.runtime,
               certification: movie.certification,
               director: movie.director,
-              genres: parseJsonArray(movie.genres),
-              countries: parseJsonArray(movie.countries),
+              genres: movie.genres,
+              countries: movie.countries,
               posterPath: movie.posterPath,
             }}
           />

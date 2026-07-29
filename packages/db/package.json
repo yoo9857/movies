@@ -5,21 +5,27 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./password": "./src/password.ts"
+    "./password": "./src/password.ts",
+    "./errors": "./src/errors.ts"
   },
   "scripts": {
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "deploy": "prisma migrate deploy",
+    "status": "prisma migrate status",
     "seed": "tsx prisma/seed.ts",
     "seed:library": "tsx prisma/seed-movies.ts && tsx prisma/seed-details.ts && tsx prisma/seed-artwork.ts",
+    "import:sqlite": "tsx prisma/import-from-sqlite.ts",
     "studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.9.1",
-    "@prisma/client": "^7.9.1"
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "better-sqlite3": "^12.4.1",
     "prisma": "^7.9.1",
     "tsx": "^4.20.0",
     "typescript": "^5"

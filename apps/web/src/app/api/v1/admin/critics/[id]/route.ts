@@ -29,7 +29,7 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
       name: input.name,
       bio: input.bio ?? null,
       avatarUrl: input.avatarUrl ?? null,
-      links: JSON.stringify(input.links),
+      links: input.links,
     },
   });
   return json({ critic });

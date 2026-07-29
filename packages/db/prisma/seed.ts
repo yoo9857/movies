@@ -33,7 +33,7 @@ async function main() {
       slug: "roger-ebert",
       name: "Roger Ebert",
       bio: "The most influential American film critic of his era. Pulitzer Prize winner (1975), co-host of Siskel & Ebert, and patron saint of everyone who ever argued about movies on the internet.",
-      links: JSON.stringify([{ label: "RogerEbert.com", url: "https://www.rogerebert.com" }]),
+      links: [{ label: "RogerEbert.com", url: "https://www.rogerebert.com" }],
     },
   });
 
@@ -50,7 +50,7 @@ async function main() {
       releaseDate: new Date("2019-05-30"),
       runtime: 133,
       director: "Bong Joon-ho",
-      genres: JSON.stringify(["Comedy", "Thriller", "Drama"]),
+      genres: ["Comedy", "Thriller", "Drama"],
     },
   });
 

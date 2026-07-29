@@ -4,16 +4,12 @@ import { CriticForm } from "@/components/admin/CriticForm";
 
 export const dynamic = "force-dynamic";
 
-function parseLinks(raw: string | null): { label: string; url: string }[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((l) => typeof l?.label === "string" && typeof l?.url === "string")
-      : [];
-  } catch {
-    return [];
-  }
+function parseLinks(raw: unknown): { label: string; url: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (l): l is { label: string; url: string } =>
+      typeof l?.label === "string" && typeof l?.url === "string",
+  );
 }
 
 export default async function EditCriticPage(props: { params: Promise<{ id: string }> }) {

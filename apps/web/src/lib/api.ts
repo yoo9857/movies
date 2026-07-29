@@ -1,3 +1,4 @@
+import { classify } from "@cinepixo/db/errors";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
@@ -32,8 +33,37 @@ export function handle<Args extends unknown[]>(
       if (err instanceof ApiError) {
         return json({ error: err.message }, { status: err.status });
       }
-      console.error("[api] unhandled error:", err);
-      return json({ error: "Internal server error" }, { status: 500 });
+
+      // Database failures get an honest status instead of a blanket 500, so a
+      // client can tell "you asked for something impossible" from "come back
+      // in a moment". No constraint names or connection details are echoed.
+      const failure = classify(err);
+      switch (failure.kind) {
+        case "conflict":
+          return json(
+            {
+              error: failure.field
+                ? `That ${failure.field} is already taken`
+                : "That already exists",
+            },
+            { status: 409 },
+          );
+        case "not_found":
+          return json({ error: "Not found" }, { status: 404 });
+        case "invalid_reference":
+          return json({ error: "Referenced record does not exist" }, { status: 400 });
+        case "constraint":
+          return json({ error: "That value is not allowed" }, { status: 422 });
+        case "unavailable":
+          console.error("[api] database unavailable:", err);
+          return json(
+            { error: "The database is unavailable — please try again shortly" },
+            { status: 503, headers: { "Retry-After": "5" } },
+          );
+        default:
+          console.error("[api] unhandled error:", err);
+          return json({ error: "Internal server error" }, { status: 500 });
+      }
     }
   };
 }

@@ -1,0 +1,71 @@
+# CinePixo's own PostgreSQL. Deliberately isolated from the other databases on
+# this host: its own container, its own volume, its own port, and bound to
+# loopback only so nothing is reachable from outside the machine.
+#
+#   cd ~/cinepixo/ops/postgres && docker compose up -d
+#
+# The password lives in .env beside this file (chmod 600), never in the repo.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: cinepixo-postgres
+    restart: unless-stopped
+    # loopback only — the app talks to it over 127.0.0.1
+    ports:
+      - "127.0.0.1:5435:5432"
+    environment:
+      POSTGRES_DB: cinepixo
+      POSTGRES_USER: cinepixo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in ops/postgres/.env}
+      # deterministic collation, so ORDER BY never shifts under a locale change
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: UTC
+    command:
+      - postgres
+      # This box hosts several services; stay a modest tenant.
+      - -c
+      - max_connections=60
+      - -c
+      - shared_buffers=192MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      # A stuck query must not hold a connection forever.
+      - -c
+      - statement_timeout=15s
+      - -c
+      - idle_in_transaction_session_timeout=30s
+      - -c
+      - lock_timeout=5s
+      # Surface slow queries in the container log for later tuning.
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - log_lock_waits=on
+      - -c
+      - log_line_prefix=%m [%p] %u@%d
+    volumes:
+      # Postgres 18+ expects the mount one level up: the image then keeps data
+      # in a version-named subdirectory so `pg_upgrade --link` can work later
+      # without crossing a mount boundary.
+      - cinepixo_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinepixo -d cinepixo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Keep the log from growing without bound on a shared box.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: 768m
+
+volumes:
+  cinepixo_pgdata:
+    name: cinepixo_pgdata

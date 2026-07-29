@@ -1,5 +1,5 @@
 import { prisma } from "@cinepixo/db";
-import { parseJsonArray, toStarScale } from "@cinepixo/shared";
+import { toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { RatingHistogram } from "@/components/RatingHistogram";
@@ -33,7 +33,7 @@ export default async function StatsPage() {
   // ── Genre averages ──
   const genreMap = new Map<string, number[]>();
   for (const r of reviews) {
-    for (const g of parseJsonArray(r.movie.genres)) {
+    for (const g of r.movie.genres) {
       genreMap.set(g, [...(genreMap.get(g) ?? []), r.rating]);
     }
   }
