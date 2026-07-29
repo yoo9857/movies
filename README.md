@@ -41,6 +41,46 @@ Admin: `GET|POST /api/v1/admin/reviews`, `GET|PUT|DELETE /api/v1/admin/reviews/:
 
 A future native app consumes the same `/api/v1` endpoints.
 
+## SEO and GEO
+
+Set **`NEXT_PUBLIC_SITE_URL`** before deploying. Every canonical, Open Graph URL,
+sitemap entry and JSON-LD `@id` is derived from it; left at its default, production
+declares its canonical home to be `localhost`.
+
+**Machine-readable surfaces**
+
+| URL | What it is |
+| --- | --- |
+| `/robots.txt` | Crawl policy; search and assistant agents named explicitly |
+| `/sitemap.xml` | Every indexable URL, with posters as image entries |
+| `/feed.xml` | RSS 2.0 — full text via `content:encoded`, `atom:link rel=self` |
+| `/feed.json` | JSON Feed 1.1 — same content, real author objects, ratings |
+| `/llms.txt` | What the site is and what its ratings mean, for language models |
+| `/llms-full.txt` | Full text of every published review as one document |
+| `/reviews/{slug}.md` | One review as clean Markdown with YAML front matter |
+| `/movies/{id}.md` | One film: credits, cast, and the criticism on it |
+
+The `.md` URLs are rewrites onto `/md/*` handlers (see `next.config.ts`) and are
+advertised from each page as `rel="alternate" type="text/markdown"`.
+
+**Structured data** — `src/lib/seo.ts` builds one `@graph` per page from nodes that
+reference each other by `@id`, so a crawler resolves one Organization, one film and
+one review across the whole site rather than a fresh copy per URL. `Review`,
+`Movie`, `Person`, `BreadcrumbList`, `ItemList`, `FAQPage` and `Dataset` are all
+emitted. Two rules hold everywhere:
+
+- **Never claim what isn't rendered.** `aggregateRating` appears on the film page,
+  which shows the aggregate — not on a review page, which shows one score.
+- **One script tag per page**, emitted only through `components/JsonLd.tsx`, which
+  escapes `<`, `>`, `&` and the U+2028/U+2029 line separators. A review title
+  containing `</script>` is otherwise an XSS sink.
+
+**Indexing policy** — `/search` and the authenticated pages are `noindex, follow`;
+admin is `noindex, nofollow` in metadata *and* via `X-Robots-Tag`, because a crawler
+blocked by robots.txt never reads the tag inside the page. On `/movies`, genre and
+decade filters each get their own canonical URL; sort order and view mode
+canonicalise away.
+
 ## Security posture
 
 - Auth enforced in the **data access layer** (`src/lib/auth.ts`) inside every protected route/page — `proxy.ts` is a convenience redirect only (lesson of CVE-2025-29927)

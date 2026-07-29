@@ -68,6 +68,7 @@ export async function SiteHeader() {
             <UserMenu
               username={user.username}
               displayName={user.displayName}
+              avatarUrl={user.avatarUrl}
               isAdmin={user.role === "ADMIN"}
             />
           ) : (

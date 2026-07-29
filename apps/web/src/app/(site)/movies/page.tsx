@@ -218,7 +218,6 @@ export default async function MoviesPage(props: {
     releaseDate: m.releaseDate,
     director: m.director,
     genres: m.genres,
-    voteAverage: m.voteAverage,
     fandomAvg: m.avg,
     reviewCount: m.count,
   });
@@ -432,12 +431,13 @@ export default async function MoviesPage(props: {
                   {m.avg != null ? (
                     <span className="text-accent">★ {toStarScale(m.avg).toFixed(1)}</span>
                   ) : (
-                    <span className="text-muted">unrated</span>
+                    <span className="text-muted">unread</span>
                   )}
                 </span>
                 <span className="block font-mono text-[11px] text-muted">
-                  {m.voteAverage != null ? `TMDB ${m.voteAverage.toFixed(1)}` : ""}
-                  {m.count > 0 ? ` · ${m.count} rev` : ""}
+                  {m.count > 0
+                    ? `${m.count} review${m.count === 1 ? "" : "s"}`
+                    : "no reviews yet"}
                 </span>
               </span>
             </Link>

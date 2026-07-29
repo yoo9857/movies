@@ -2,14 +2,28 @@
 // lives here so metadata, structured data, feeds and the LLM surfaces can never
 // drift apart.
 
-/// Canonical origin, no trailing slash — set NEXT_PUBLIC_SITE_URL in production.
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(
-  /\/+$/,
-  "",
-);
+const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+// NEXT_PUBLIC_* is inlined at build time, so a production bundle built without
+// this value would ship `localhost` inside every canonical URL, Open Graph tag,
+// sitemap entry and JSON-LD @id — telling search engines the site's real home is
+// a machine they cannot reach. That failure is invisible in the built output and
+// expensive to discover later, so it fails the build instead.
+if (process.env.NODE_ENV === "production" && !configuredUrl) {
+  throw new Error(
+    "NEXT_PUBLIC_SITE_URL is required for a production build — every canonical URL is derived from it. Set it in apps/web/.env.local (e.g. https://cinepixo.com).",
+  );
+}
+
+/// Canonical origin, no trailing slash.
+export const SITE_URL = (configuredUrl ?? "http://localhost:3000").replace(/\/+$/, "");
 
 export const SITE_NAME = "CinePixo";
-export const SITE_TAGLINE = "Film Critic Fandom";
+
+/// Sits after the site name in the title template and the manifest, so it does
+/// double duty as the category a search result is filed under. "Long-form" is the
+/// distinction that matters to the readers and writers this is built for.
+export const SITE_TAGLINE = "Long-form Film Criticism";
 export const SITE_DESCRIPTION =
   "CinePixo is a home for film criticism as a craft — long-form reviews, half-star ratings, and profiles of the critics whose work set the standard.";
 

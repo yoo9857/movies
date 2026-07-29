@@ -301,11 +301,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
       {/* ② Score band — poster layered over it */}
       <div className="relative">
         <div className="sm:pl-44">
-          <ScoreBand
-            ratings={ratings}
-            tmdbScore={movie.voteAverage}
-            tmdbVotes={movie.voteCount}
-          />
+          <ScoreBand ratings={ratings} />
         </div>
         <div className="absolute -top-36 left-0 hidden w-36 sm:block">
           <Poster

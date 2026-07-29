@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { Avatar } from "./Avatar";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export function UserMenu({
   username,
   displayName,
+  avatarUrl,
   isAdmin,
 }: {
   username: string;
   displayName: string | null;
+  avatarUrl: string | null;
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -39,9 +42,7 @@ export function UserMenu({
         aria-expanded={open}
         className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm transition-colors hover:border-accent-dim"
       >
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-accent text-[10px] font-bold text-black">
-          {(displayName ?? username).charAt(0).toUpperCase()}
-        </span>
+        <Avatar src={avatarUrl} name={displayName ?? username} size={20} />
         <span className="max-w-24 truncate">{displayName ?? username}</span>
       </button>
       {open && (
@@ -52,6 +53,13 @@ export function UserMenu({
             className="block px-4 py-2 hover:bg-surface"
           >
             My reviews
+          </Link>
+          <Link
+            href="/me/settings"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2 hover:bg-surface"
+          >
+            Your profile
           </Link>
           <Link
             href="/write"

@@ -30,3 +30,6 @@ packages/db/src/generated/
 *.log
 .vercel
 .turbo
+
+# locally-stored uploads (object storage takes over when configured)
+var/uploads/

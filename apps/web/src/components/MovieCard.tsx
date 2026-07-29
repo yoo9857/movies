@@ -11,7 +11,6 @@ export interface MovieCardData {
   releaseDate: Date | string | null;
   director: string | null;
   genres: string[];
-  voteAverage: number | null;
   fandomAvg: number | null;
   reviewCount: number;
 }
@@ -36,18 +35,17 @@ export function MovieCard({ movie, rank }: { movie: MovieCardData; rank?: number
           </span>
         )}
 
-        {/* Score chip: fandom if we have it, otherwise the world's number,
-            clearly labelled so the two are never confused. */}
+        {/* Score chip. Only ever the fandom's own number: a film nobody here has
+            written about is "unread", not silently backfilled with a crowd score
+            from elsewhere. The gap is an invitation, and it should look like one. */}
         <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/85 px-2 py-1 font-mono text-[11px] backdrop-blur">
           {stars != null ? (
             <>
               <span className="text-accent">★ {stars.toFixed(1)}</span>
               <span className="text-muted">·{movie.reviewCount}</span>
             </>
-          ) : movie.voteAverage != null ? (
-            <span className="text-muted">TMDB {movie.voteAverage.toFixed(1)}</span>
           ) : (
-            <span className="text-muted">unrated</span>
+            <span className="text-muted">unread</span>
           )}
         </span>
 

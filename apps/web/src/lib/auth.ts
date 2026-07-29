@@ -5,7 +5,10 @@ import { prisma, type User } from "@cinepixo/db";
 import { ApiError } from "./api";
 import { readSession } from "./session";
 
-export type SafeUser = Pick<User, "id" | "email" | "username" | "displayName" | "role">;
+export type SafeUser = Pick<
+  User,
+  "id" | "email" | "username" | "displayName" | "role" | "avatarUrl"
+>;
 
 const safeSelect = {
   id: true,
@@ -13,6 +16,7 @@ const safeSelect = {
   username: true,
   displayName: true,
   role: true,
+  avatarUrl: true,
 } as const;
 
 // Loads the user fresh from the DB so revoked/demoted accounts lose access

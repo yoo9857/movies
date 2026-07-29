@@ -8,4 +8,5 @@ English-language fandom site for film-critic fans (reviews, ratings, critic prof
 - All API input goes through zod schemas in `packages/shared`. Mutating routes must call `requireSameOrigin(request)`.
 - SQLite has no enums — `Review.status` / `User.role` are strings validated by zod.
 - Prisma client is generated to `packages/db/src/generated` (gitignored). After schema changes: `npm run db:migrate` then `npm run db:generate`.
+- **SEO/GEO lives in `apps/web/src/lib/seo.ts`** — see the README section. Page metadata goes through `pageMetadata()` (never hand-rolled, or canonicals drift); structured data goes through `graph()` + `<JsonLd>` (one `@graph` per page, `@id`-linked). Never emit a rating, date or count that isn't rendered on the page.
 - Keep `npm audit` at 0: patched transitive versions are pinned in root package.json `overrides`.

@@ -12,6 +12,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
+import { Avatar } from "@/components/Avatar";
 import { Poster } from "@/components/Poster";
 import { ReelDivider, SectionHead } from "@/components/ReelDivider";
 import { FilmSpecCard } from "@/components/review/FilmSpecCard";
@@ -45,7 +46,9 @@ const getReview = cache(async (rawSlug: string) => {
   return prisma.review.findFirst({
     where: { slug: parsed.data, status: "PUBLISHED" },
     include: {
-      author: { select: { id: true, username: true, displayName: true, bio: true } },
+      author: {
+        select: { id: true, username: true, displayName: true, bio: true, avatarUrl: true },
+      },
       movie: { include: { images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" } } } },
     },
   });
@@ -326,9 +329,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
           {/* Author card */}
           <section className="rounded-xl border border-line bg-surface p-5">
             <div className="flex items-start gap-4">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-lg font-bold text-black">
-                {authorName.charAt(0).toUpperCase()}
-              </span>
+              <Avatar src={review.author.avatarUrl} name={authorName} size={44} />
               <div className="min-w-0">
                 <p className="font-semibold">{authorName}</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">
