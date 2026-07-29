@@ -11,13 +11,13 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3
 export const SITE_NAME = "CinePixo";
 export const SITE_TAGLINE = "Film Critic Fandom";
 export const SITE_DESCRIPTION =
-  "CinePixo is a fandom home for lovers of film criticism — reviews, ratings, and tributes to the critics who taught us how to watch movies.";
+  "CinePixo is a home for film criticism as a craft — long-form reviews, half-star ratings, and profiles of the critics whose work set the standard.";
 
 /// A second, longer statement of what the site is. Used where a crawler or an
 /// answer engine has room for more than a meta description: llms.txt, the
 /// Organization node, feed channel descriptions.
 export const SITE_ABOUT =
-  "CinePixo is an independent, English-language community for people who love film criticism. Members publish long-form reviews of individual films, score them from 0 to 10 in half-point steps (displayed as a 5-star scale), and the site aggregates those scores into a fandom rating shown next to TMDB's public score so the two can be compared. Alongside the reviews, CinePixo maintains a film library with full credits and a directory of the professional critics the community follows.";
+  "CinePixo is an independent, English-language home for film criticism as a craft. Members publish long-form, signed reviews of individual films — argued and structured, not scored in passing — rated from 0 to 10 in half-point steps and shown on a five-star scale. Alongside the writing, CinePixo keeps a film library with full credits (direction, screenplay, cinematography, editing, score and cast) and a directory of the critics whose work set the standard. It is built for people who take film seriously: critics and reviewers, programmers and filmmakers, performers, and readers who stay for the writing after the credits.";
 
 /// BCP 47 for <html lang> and schema.org inLanguage.
 export const SITE_LANG = "en";
@@ -33,12 +33,13 @@ export const SITE_FOUNDED = "2026";
 /// signal, but a handful of accurate topics helps answer engines classify us.
 export const SITE_KEYWORDS = [
   "film criticism",
-  "movie reviews",
   "film critics",
-  "star ratings",
-  "film fandom",
-  "movie ratings",
-  "long-form film writing",
+  "long-form film reviews",
+  "film analysis",
+  "directing and screenwriting",
+  "cinematography",
+  "performances on screen",
+  "film canon",
 ];
 
 /// Off-site profiles for schema.org sameAs. Add real handles as they exist —
