@@ -2,7 +2,7 @@ import { prisma } from "@cinepixo/db";
 import { paginationSchema } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ReviewCard } from "@/components/ReviewCard";
+import { ReviewIndex } from "@/components/ReviewIndex";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,8 @@ export default async function ReviewsPage(props: {
   searchParams: Promise<{ page?: string }>;
 }) {
   const sp = await props.searchParams;
-  const { page, pageSize } = paginationSchema.parse({ page: sp.page });
+  const { page } = paginationSchema.parse({ page: sp.page });
+  const pageSize = 20;
 
   const where = { status: "PUBLISHED" } as const;
   const [total, reviews] = await Promise.all([
@@ -25,11 +26,10 @@ export default async function ReviewsPage(props: {
       select: {
         slug: true,
         title: true,
-        excerpt: true,
         rating: true,
         publishedAt: true,
         author: { select: { username: true, displayName: true } },
-        movie: { select: { title: true, posterPath: true, director: true } },
+        movie: { select: { title: true, releaseDate: true } },
       },
     }),
   ]);
@@ -37,41 +37,42 @@ export default async function ReviewsPage(props: {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Reviews</h1>
-      <p className="mt-1 text-sm text-muted">
-        {total} published review{total === 1 ? "" : "s"}
-      </p>
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Reviews</h1>
+        <p className="font-mono text-xs text-muted">
+          {total} published · newest first
+        </p>
+      </div>
 
       {reviews.length === 0 ? (
-        <p className="mt-8 text-muted">Nothing here yet.</p>
+        <p className="mt-10 text-muted">Nothing here yet.</p>
       ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {reviews.map((r) => (
-            <ReviewCard key={r.slug} review={r} />
-          ))}
+        <div className="mt-8">
+          <ReviewIndex reviews={reviews} startAt={(page - 1) * pageSize + 1} />
         </div>
       )}
 
       {totalPages > 1 && (
-        <nav className="mt-8 flex justify-center gap-2 text-sm" aria-label="Pagination">
-          {page > 1 && (
-            <Link
-              href={`/reviews?page=${page - 1}`}
-              className="rounded border border-line px-3 py-1.5 hover:border-accent-dim"
-            >
+        <nav
+          className="mt-8 flex items-baseline justify-between font-mono text-sm"
+          aria-label="Pagination"
+        >
+          {page > 1 ? (
+            <Link href={`/reviews?page=${page - 1}`} className="text-muted hover:text-foreground">
               ← Previous
             </Link>
+          ) : (
+            <span />
           )}
-          <span className="px-3 py-1.5 text-muted">
-            Page {page} of {totalPages}
+          <span className="text-muted">
+            {page} / {totalPages}
           </span>
-          {page < totalPages && (
-            <Link
-              href={`/reviews?page=${page + 1}`}
-              className="rounded border border-line px-3 py-1.5 hover:border-accent-dim"
-            >
+          {page < totalPages ? (
+            <Link href={`/reviews?page=${page + 1}`} className="text-muted hover:text-foreground">
               Next →
             </Link>
+          ) : (
+            <span />
           )}
         </nav>
       )}

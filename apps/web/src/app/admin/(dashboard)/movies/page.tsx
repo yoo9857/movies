@@ -1,6 +1,7 @@
 import { prisma } from "@cinepixo/db";
 import { parseJsonArray } from "@cinepixo/shared";
 import { MovieImporter } from "@/components/admin/MovieImporter";
+import { RefreshMovieButton } from "@/components/admin/RefreshMovieButton";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export default async function AdminMoviesPage() {
                   <th className="px-4 py-3">Director</th>
                   <th className="px-4 py-3">Genres</th>
                   <th className="px-4 py-3">Reviews</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -68,6 +70,9 @@ export default async function AdminMoviesPage() {
                       {parseJsonArray(m.genres).join(", ") || "—"}
                     </td>
                     <td className="px-4 py-3 tabular-nums text-muted">{m._count.reviews}</td>
+                    <td className="px-4 py-3 text-right">
+                      {m.tmdbId != null && <RefreshMovieButton tmdbId={m.tmdbId} />}
+                    </td>
                   </tr>
                 ))}
               </tbody>

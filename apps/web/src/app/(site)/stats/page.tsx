@@ -1,0 +1,278 @@
+import { prisma } from "@cinepixo/db";
+import { parseJsonArray, toStarScale } from "@cinepixo/shared";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { RatingHistogram } from "@/components/RatingHistogram";
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Fandom stats",
+  description: "What the CinePixo fandom watches, how it rates, and where it disagrees with the world.",
+};
+
+const MIN_SAMPLE = 3; // below this, aggregates are shown as "low sample"
+
+export default async function StatsPage() {
+  const [reviews, movies, memberCount] = await Promise.all([
+    prisma.review.findMany({
+      where: { status: "PUBLISHED" },
+      select: {
+        rating: true,
+        publishedAt: true,
+        movie: { select: { id: true, title: true, genres: true, voteAverage: true } },
+      },
+    }),
+    prisma.movie.count(),
+    prisma.user.count(),
+  ]);
+
+  const ratings = reviews.map((r) => r.rating);
+  const avg = ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : null;
+
+  // ── Genre averages ──
+  const genreMap = new Map<string, number[]>();
+  for (const r of reviews) {
+    for (const g of parseJsonArray(r.movie.genres)) {
+      genreMap.set(g, [...(genreMap.get(g) ?? []), r.rating]);
+    }
+  }
+  const genreRows = Array.from(genreMap, ([genre, rs]) => ({
+    genre,
+    n: rs.length,
+    avg: rs.reduce((s, x) => s + x, 0) / rs.length,
+  })).sort((a, b) => b.avg - a.avg);
+
+  // ── Monthly activity (last 12 months) ──
+  const now = new Date();
+  const months: { label: string; count: number }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    months.push({
+      label: d.toLocaleDateString("en-US", { month: "short" }),
+      count: reviews.filter(
+        (r) => r.publishedAt && r.publishedAt >= d && r.publishedAt < next,
+      ).length,
+    });
+  }
+  const maxMonth = Math.max(1, ...months.map((m) => m.count));
+
+  // ── Fandom vs world divergence (movies with both scores) ──
+  const perMovie = new Map<string, { title: string; ratings: number[]; tmdb: number | null }>();
+  for (const r of reviews) {
+    const cur = perMovie.get(r.movie.id) ?? {
+      title: r.movie.title,
+      ratings: [],
+      tmdb: r.movie.voteAverage,
+    };
+    cur.ratings.push(r.rating);
+    perMovie.set(r.movie.id, cur);
+  }
+  const divergence = Array.from(perMovie.entries())
+    .filter(([, m]) => m.tmdb != null)
+    .map(([id, m]) => {
+      const fandom = m.ratings.reduce((s, x) => s + x, 0) / m.ratings.length;
+      return {
+        id,
+        title: m.title,
+        n: m.ratings.length,
+        delta: Math.round((toStarScale(fandom) - toStarScale(m.tmdb!)) * 100) / 100,
+      };
+    })
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 7);
+  const maxDelta = Math.max(0.5, ...divergence.map((d) => Math.abs(d.delta)));
+
+  const mostReviewed = [...perMovie.entries()].sort(
+    (a, b) => b[1].ratings.length - a[1].ratings.length,
+  )[0];
+
+  return (
+    <div className="space-y-14">
+      <header>
+        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">Fandom stats</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">How this fandom watches</h1>
+      </header>
+
+      {/* Headline band — typographic, hairlines */}
+      <section className="grid grid-cols-2 border-y border-line sm:grid-cols-4">
+        {[
+          { k: "Published reviews", v: String(reviews.length) },
+          { k: "Fandom average", v: avg != null ? `★ ${toStarScale(avg).toFixed(2)}` : "—" },
+          {
+            k: "Most reviewed",
+            v: mostReviewed ? mostReviewed[1].title : "—",
+            small: true,
+          },
+          { k: "Members", v: String(memberCount) },
+        ].map((s, i) => (
+          <div
+            key={s.k}
+            className={`py-6 pr-6 ${i > 0 ? "border-l border-line pl-6" : ""} ${i >= 2 ? "border-t sm:border-t-0" : ""}`}
+          >
+            <p
+              className={`font-bold tracking-tight text-accent ${s.small ? "truncate text-lg leading-8" : "text-3xl"} tabular-nums`}
+            >
+              {s.v}
+            </p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted">
+              {s.k}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      {reviews.length === 0 ? (
+        <p className="text-muted">
+          Stats appear once reviews are published.{" "}
+          <Link href="/write" className="text-accent hover:opacity-80">
+            Write the first →
+          </Link>
+        </p>
+      ) : (
+        <>
+          {/* Genre averages + overall distribution — 2:1 */}
+          <div className="grid gap-12 sm:grid-cols-[2fr_1fr]">
+            <section aria-label="Average rating by genre">
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+                Average ★ by genre
+              </h2>
+              <div className="mt-4 space-y-2.5">
+                {genreRows.map((g) => {
+                  const low = g.n < MIN_SAMPLE;
+                  return (
+                    <div
+                      key={g.genre}
+                      className="grid grid-cols-[7rem_1fr_6.5rem] items-center gap-3 text-sm"
+                    >
+                      <span className="truncate text-muted">{g.genre}</span>
+                      <div className="h-3.5 overflow-hidden rounded-r bg-surface-raised">
+                        <div
+                          className="h-full rounded-r"
+                          style={{
+                            width: `${(toStarScale(g.avg) / 5) * 100}%`,
+                            background: low ? "var(--border)" : "var(--chart-fandom)",
+                          }}
+                        />
+                      </div>
+                      <span className="text-right font-mono text-xs tabular-nums">
+                        {low ? (
+                          <span className="text-muted">★ {toStarScale(g.avg).toFixed(1)} · n={g.n}</span>
+                        ) : (
+                          <>
+                            <span className="text-accent">★ {toStarScale(g.avg).toFixed(1)}</span>
+                            <span className="text-muted"> · {g.n}</span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-3 font-mono text-[10px] text-muted">
+                gray = fewer than {MIN_SAMPLE} reviews (low sample)
+              </p>
+            </section>
+
+            <section aria-label="Overall rating distribution">
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+                All ratings
+              </h2>
+              <RatingHistogram ratings={ratings} height={110} className="mt-4" />
+            </section>
+          </div>
+
+          {/* Monthly activity */}
+          <section aria-label="Reviews per month">
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+              Reviews per month · last 12
+            </h2>
+            <div className="mt-4 flex items-end gap-1.5" style={{ height: 110 }}>
+              {months.map((m, i) => (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1.5 self-stretch justify-end">
+                  {m.count > 0 && i === months.length - 1 && (
+                    <span className="font-mono text-[11px] text-foreground">{m.count}</span>
+                  )}
+                  <div
+                    className="w-full rounded-t"
+                    style={{
+                      height: `${Math.max(3, (m.count / maxMonth) * 75)}%`,
+                      background: i === months.length - 1 ? "var(--chart-fandom)" : "var(--surface-raised)",
+                      border: m.count === 0 ? "1px dashed var(--border)" : "none",
+                    }}
+                    role="img"
+                    aria-label={`${m.label}: ${m.count} reviews`}
+                  />
+                  <span className="font-mono text-[9px] uppercase text-muted">{m.label}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Divergence — the signature chart */}
+          {divergence.length > 0 && (
+            <section aria-label="Fandom vs world divergence">
+              <div className="flex items-baseline justify-between">
+                <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+                  Where the fandom disagrees with the world
+                </h2>
+                <span className="font-mono text-[10px] text-muted">
+                  fandom ★ − TMDB ★ (5-star scale)
+                </span>
+              </div>
+              <div className="mt-5 space-y-2.5">
+                {divergence.map((d) => (
+                  <Link
+                    key={d.id}
+                    href={`/movies/${d.id}`}
+                    className="group grid grid-cols-[minmax(0,10rem)_1fr_3.5rem] items-center gap-3 text-sm"
+                  >
+                    <span className="truncate text-muted group-hover:text-foreground transition-colors">
+                      {d.title}
+                      {d.n < MIN_SAMPLE && <span className="font-mono text-[10px]"> n={d.n}</span>}
+                    </span>
+                    <div className="relative h-4">
+                      <div className="absolute inset-y-0 left-1/2 w-px bg-line" />
+                      <div
+                        className="absolute inset-y-0 rounded"
+                        style={{
+                          left: d.delta >= 0 ? "50%" : `${50 - (Math.abs(d.delta) / maxDelta) * 48}%`,
+                          width: `${Math.max(1, (Math.abs(d.delta) / maxDelta) * 48)}%`,
+                          background: d.delta >= 0 ? "var(--chart-fandom)" : "var(--chart-tmdb)",
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="text-right font-mono text-xs tabular-nums"
+                      style={{ color: d.delta >= 0 ? "var(--chart-fandom)" : "var(--chart-tmdb)" }}
+                    >
+                      {d.delta > 0 ? "+" : ""}
+                      {d.delta.toFixed(2)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              <div className="mt-4 flex gap-5 font-mono text-[10px] text-muted">
+                <span>
+                  <i
+                    className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-[-1px]"
+                    style={{ background: "var(--chart-fandom)" }}
+                  />
+                  fandom loves it more
+                </span>
+                <span>
+                  <i
+                    className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-[-1px]"
+                    style={{ background: "var(--chart-tmdb)" }}
+                  />
+                  the world loves it more
+                </span>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

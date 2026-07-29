@@ -41,8 +41,10 @@ model Critic {
 model Movie {
   id            String    @id @default(cuid())
   tmdbId        Int?      @unique
+  imdbId        String?
   title         String
   originalTitle String?
+  tagline       String?
   overview      String?
   posterPath    String?
   backdropPath  String?
@@ -51,11 +53,55 @@ model Movie {
   director      String?
   // JSON string: ["Drama", "Thriller"]
   genres        String?
+  // JSON string: ["class", "black comedy"]
+  keywords      String?
+  // JSON string: ["South Korea"]
+  countries     String?
+  // US certification, e.g. "R", "PG-13"
+  certification String?
+  // USD — Float so >2^31 revenues (Avatar) fit without BigInt JSON issues
+  budget        Float?
+  revenue       Float?
+  voteAverage   Float?
+  voteCount     Int?
+  popularity    Float?
+  // YouTube key of the primary trailer
+  trailerKey    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   reviews       Review[]
+  cast          MovieCast[]
+  crew          MovieCrew[]
 
   @@index([title])
+}
+
+// Top-billed cast, in TMDB billing order.
+model MovieCast {
+  id           String  @id @default(cuid())
+  movieId      String
+  movie        Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  tmdbPersonId Int
+  name         String
+  character    String?
+  profilePath  String?
+  order        Int
+
+  @@index([movieId, order])
+}
+
+// Key crew: Director, Screenplay, Director of Photography, Composer, Editor…
+model MovieCrew {
+  id           String  @id @default(cuid())
+  movieId      String
+  movie        Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  tmdbPersonId Int
+  name         String
+  job          String
+  department   String?
+  profilePath  String?
+
+  @@index([movieId])
 }
 
 // A fan-written review of a movie.

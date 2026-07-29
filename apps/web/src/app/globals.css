@@ -6,9 +6,14 @@
   --surface-raised: #1c1c26;
   --foreground: #ecebe8;
   --muted: #9b99a3;
-  --accent: #e8b34b; /* projector gold */
+  --accent: #e8b34b; /* projector gold — UI accent */
   --accent-dim: #b3873a;
   --border: #26262f;
+  /* chart series — CVD-validated against #14141b (ΔE 17.8) */
+  --chart-fandom: #b58322;
+  --chart-tmdb: #5b93e6;
+  --chart-alt: #c96f6f;
+  --positive: #7fbf7f;
 }
 
 @theme inline {
@@ -20,8 +25,86 @@
   --color-accent: var(--accent);
   --color-accent-dim: var(--accent-dim);
   --color-line: var(--border);
+  --color-chart-fandom: var(--chart-fandom);
+  --color-chart-tmdb: var(--chart-tmdb);
+  --color-chart-alt: var(--chart-alt);
+  --color-positive: var(--positive);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* ── Rating histogram (server-rendered, CSS-only tooltips) ── */
+.cx-hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.cx-hist .cx-bar {
+  flex: 1;
+  min-height: 2px;
+  background: var(--chart-fandom);
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  transition: filter 0.15s;
+}
+.cx-hist .cx-bar.cx-empty {
+  background: var(--border);
+}
+.cx-hist .cx-bar:hover {
+  filter: brightness(1.3);
+}
+.cx-hist .cx-bar:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  color: var(--foreground);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ── Horizontal snap rails ── */
+.cx-rail {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.cx-rail > * {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+/* ── Credits-roll index rows ── */
+.cx-index-row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto auto;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.9rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.cx-index-row:hover {
+  background: color-mix(in oklab, var(--surface) 60%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-hist .cx-bar,
+  .cx-index-row {
+    transition: none;
+  }
 }
 
 body {
