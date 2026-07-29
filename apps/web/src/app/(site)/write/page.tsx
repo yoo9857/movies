@@ -24,9 +24,14 @@ export default async function WritePage(props: {
   if (!user) redirect("/login");
 
   const sp = await props.searchParams;
-  const movies = await prisma.movie.findMany({
-    orderBy: { title: "asc" },
-    select: {
+
+  // Drafts already on the server. Autosave has been creating these all along and
+  // nothing ever offered them back — so leaving this page meant the piece was
+  // only findable by knowing to look under "My reviews".
+  const [movies, drafts] = await Promise.all([
+    prisma.movie.findMany({
+      orderBy: { title: "asc" },
+      select: {
         id: true,
         title: true,
         releaseDate: true,
@@ -34,7 +39,19 @@ export default async function WritePage(props: {
         trailerKey: true,
         images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" }, select: { path: true } },
       },
-  });
+    }),
+    prisma.review.findMany({
+      where: { authorId: user.id, status: "DRAFT" },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        movie: { select: { title: true } },
+      },
+    }),
+  ]);
 
   // /write?movie=<id> lets "review this film" links preselect the picker
   const preset = sp.movie && movies.some((m) => m.id === sp.movie) ? sp.movie : "";
@@ -43,14 +60,44 @@ export default async function WritePage(props: {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-3xl font-bold tracking-tight">Write a review</h1>
       <p className="mt-1.5 text-sm text-muted">
-        Publishing as {user.displayName ?? user.username}. Drafts save in this browser as you
-        type.{" "}
+        Publishing as {user.displayName ?? user.username}. Drafts save in this browser as you type,
+        and to your account once a film is chosen.{" "}
         {movies.length === 0 && (
           <Link href="/movies" className="text-accent hover:opacity-80">
             The library is empty — an admin needs to import a film first.
           </Link>
         )}
       </p>
+
+      {drafts.length > 0 && (
+        <section className="mt-6 rounded-xl border border-line bg-surface px-5 py-4">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted">
+            Pick up where you left off
+          </h2>
+          <ul className="mt-3 divide-y divide-line">
+            {drafts.map((d) => (
+              <li key={d.id}>
+                <Link
+                  href={`/me/reviews/${d.id}/edit`}
+                  className="group flex items-baseline justify-between gap-4 py-2 text-sm"
+                >
+                  <span className="min-w-0 flex-1 truncate transition-colors group-hover:text-accent">
+                    {d.title.trim() || "Untitled draft"}
+                    <span className="text-muted"> · {d.movie.title}</span>
+                  </span>
+                  <time
+                    dateTime={d.updatedAt.toISOString()}
+                    className="shrink-0 font-mono text-[11px] text-muted"
+                  >
+                    {d.updatedAt.toLocaleDateString("en-US", { dateStyle: "medium" })}
+                  </time>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="mt-7">
         <ReviewEditor
           initial={

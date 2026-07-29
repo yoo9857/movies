@@ -30,16 +30,15 @@ const TRAIL: Crumb[] = [{ name: "Stats" }];
 const MIN_SAMPLE = 3; // below this, aggregates are shown as "low sample"
 
 export default async function StatsPage() {
-  const [reviews, movies, memberCount] = await Promise.all([
+  const [reviews, memberCount] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       select: {
         rating: true,
         publishedAt: true,
-        movie: { select: { id: true, title: true, genres: true, voteAverage: true } },
+        movie: { select: { id: true, title: true, genres: true } },
       },
     }),
-    prisma.movie.count(),
     prisma.user.count(),
   ]);
 
@@ -74,31 +73,37 @@ export default async function StatsPage() {
   }
   const maxMonth = Math.max(1, ...months.map((m) => m.count));
 
-  // ── Fandom vs world divergence (movies with both scores) ──
-  const perMovie = new Map<string, { title: string; ratings: number[]; tmdb: number | null }>();
+  // ── Contested films: where the writers here disagree with each other ──
+  //
+  // This replaced a chart of fandom-average minus TMDB's public score. That one
+  // measured us against a crowd; this one measures the criticism against itself,
+  // which is the more interesting number on a site about criticism — and it needs
+  // no outside data to be true.
+  const perMovie = new Map<string, { title: string; ratings: number[] }>();
   for (const r of reviews) {
-    const cur = perMovie.get(r.movie.id) ?? {
-      title: r.movie.title,
-      ratings: [],
-      tmdb: r.movie.voteAverage,
-    };
+    const cur = perMovie.get(r.movie.id) ?? { title: r.movie.title, ratings: [] };
     cur.ratings.push(r.rating);
     perMovie.set(r.movie.id, cur);
   }
-  const divergence = Array.from(perMovie.entries())
-    .filter(([, m]) => m.tmdb != null)
+
+  // A spread needs at least two opinions to exist.
+  const contested = Array.from(perMovie.entries())
+    .filter(([, m]) => m.ratings.length >= 2)
     .map(([id, m]) => {
-      const fandom = m.ratings.reduce((s, x) => s + x, 0) / m.ratings.length;
+      const low = toStarScale(Math.min(...m.ratings));
+      const high = toStarScale(Math.max(...m.ratings));
       return {
         id,
         title: m.title,
         n: m.ratings.length,
-        delta: Math.round((toStarScale(fandom) - toStarScale(m.tmdb!)) * 100) / 100,
+        low,
+        high,
+        average: toStarScale(m.ratings.reduce((s, x) => s + x, 0) / m.ratings.length),
+        spread: Math.round((high - low) * 100) / 100,
       };
     })
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .sort((a, b) => b.spread - a.spread || b.n - a.n)
     .slice(0, 7);
-  const maxDelta = Math.max(0.5, ...divergence.map((d) => Math.abs(d.delta)));
 
   const mostReviewed = [...perMovie.entries()].sort(
     (a, b) => b[1].ratings.length - a[1].ratings.length,
@@ -130,6 +135,7 @@ export default async function StatsPage() {
         "Average rating by genre",
         "Reviews published per month over the last twelve months",
         "Most-reviewed film",
+        "Rating spread per film — lowest to highest star rating received",
       ],
     }),
   );
@@ -257,19 +263,21 @@ export default async function StatsPage() {
             </div>
           </section>
 
-          {/* Divergence — the signature chart */}
-          {divergence.length > 0 && (
-            <section aria-label="Fandom vs world divergence">
+          {/* Contested films — the signature chart. Each bar spans the lowest to
+              the highest star rating a film received here, with the average
+              marked, on a fixed 0–5 track so the bars are comparable. */}
+          {contested.length > 0 && (
+            <section aria-label="Films the writers disagree about">
               <div className="flex items-baseline justify-between">
                 <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-                  Where the fandom disagrees with the world
+                  Where the writers disagree
                 </h2>
                 <span className="font-mono text-[10px] text-muted">
-                  fandom ★ − TMDB ★ (5-star scale)
+                  lowest ★ to highest ★, average marked
                 </span>
               </div>
               <div className="mt-5 space-y-2.5">
-                {divergence.map((d) => (
+                {contested.map((d) => (
                   <Link
                     key={d.id}
                     href={`/movies/${d.id}`}
@@ -280,42 +288,46 @@ export default async function StatsPage() {
                       {d.n < MIN_SAMPLE && <span className="font-mono text-[10px]"> n={d.n}</span>}
                     </span>
                     <div className="relative h-4">
-                      <div className="absolute inset-y-0 left-1/2 w-px bg-line" />
+                      {/* quarter gridlines at 1★ intervals */}
+                      {[1, 2, 3, 4].map((tick) => (
+                        <div
+                          key={tick}
+                          className="absolute inset-y-0 w-px bg-line/60"
+                          style={{ left: `${(tick / 5) * 100}%` }}
+                        />
+                      ))}
                       <div
                         className="absolute inset-y-0 rounded"
                         style={{
-                          left: d.delta >= 0 ? "50%" : `${50 - (Math.abs(d.delta) / maxDelta) * 48}%`,
-                          width: `${Math.max(1, (Math.abs(d.delta) / maxDelta) * 48)}%`,
-                          background: d.delta >= 0 ? "var(--chart-fandom)" : "var(--chart-tmdb)",
+                          left: `${(d.low / 5) * 100}%`,
+                          width: `${Math.max(1.5, ((d.high - d.low) / 5) * 100)}%`,
+                          background: "var(--chart-fandom)",
+                          opacity: 0.45,
                         }}
+                      />
+                      <div
+                        className="absolute inset-y-0 w-0.5 rounded"
+                        style={{
+                          left: `${(d.average / 5) * 100}%`,
+                          background: "var(--chart-fandom)",
+                        }}
+                        role="img"
+                        aria-label={`${d.title}: ${d.low.toFixed(1)} to ${d.high.toFixed(1)} stars, average ${d.average.toFixed(1)}`}
                       />
                     </div>
                     <span
                       className="text-right font-mono text-xs tabular-nums"
-                      style={{ color: d.delta >= 0 ? "var(--chart-fandom)" : "var(--chart-tmdb)" }}
+                      style={{ color: "var(--chart-fandom)" }}
                     >
-                      {d.delta > 0 ? "+" : ""}
-                      {d.delta.toFixed(2)}
+                      ±{(d.spread / 2).toFixed(2)}
                     </span>
                   </Link>
                 ))}
               </div>
-              <div className="mt-4 flex gap-5 font-mono text-[10px] text-muted">
-                <span>
-                  <i
-                    className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-[-1px]"
-                    style={{ background: "var(--chart-fandom)" }}
-                  />
-                  fandom loves it more
-                </span>
-                <span>
-                  <i
-                    className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-[-1px]"
-                    style={{ background: "var(--chart-tmdb)" }}
-                  />
-                  the world loves it more
-                </span>
-              </div>
+              <p className="mt-4 font-mono text-[10px] text-muted">
+                A wide bar is an argument worth reading both sides of. The number is half the
+                spread — how far a typical review sits from the middle.
+              </p>
             </section>
           )}
         </>

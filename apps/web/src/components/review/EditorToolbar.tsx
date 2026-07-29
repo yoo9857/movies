@@ -9,6 +9,8 @@ export interface ToolAction {
   hint: string;
   glyph: React.ReactNode;
   run: () => void;
+  /** Greyed out and inert — a trailer button for a film with no trailer on file. */
+  disabled?: boolean;
 }
 
 export function EditorToolbar({ groups }: { groups: ToolAction[][] }) {
@@ -26,9 +28,14 @@ export function EditorToolbar({ groups }: { groups: ToolAction[][] }) {
               key={t.id}
               type="button"
               onClick={t.run}
+              disabled={t.disabled}
               title={`${t.label} — ${t.hint}`}
               aria-label={`${t.label} (${t.hint})`}
-              className="grid h-8 min-w-8 place-items-center rounded px-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
+              // The button must not take focus from the textarea: the caret
+              // position is the input to every one of these actions, and a
+              // focus change on mousedown would lose the selection.
+              onMouseDown={(e) => e.preventDefault()}
+              className="grid h-8 min-w-8 place-items-center rounded px-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted"
             >
               {t.glyph}
             </button>
@@ -105,6 +112,29 @@ export const Glyphs = {
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M3 15l4.5-4.5 3.5 3.5 3-3L21 16" />
       <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  strike: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M4 12h16" />
+      <path d="M16.5 7.5A4.5 4.5 0 0 0 12 6c-2.5 0-4 1.2-4 3s1.8 2.5 4 3c2.6.6 4.5 1.2 4.5 3.2S14.8 18 12 18a5 5 0 0 1-4.5-2" />
+    </svg>
+  ),
+  code: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+    </svg>
+  ),
+  // Two bars, tall then short: the shape of a heading above its subheading.
+  subheading: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M5 6v12M13 6v12M5 12h8M17 13v5M17 13h3" />
+    </svg>
+  ),
+  rule: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M3 12h18" />
+      <path d="M6 7h12M6 17h12" opacity="0.35" />
     </svg>
   ),
 };

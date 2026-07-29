@@ -92,6 +92,7 @@ curl -s http://127.0.0.1:3400/api/v1/health
   `packages/db/src/errors.ts` classifies by SQLSTATE: deadlocks and dropped
   sockets are retried with jittered backoff, a unique violation answers 409
   immediately.
-- **The SQLite database is still on the server** at
-  `packages/db/prisma/dev.db` as a rollback path for the migration. Delete it
-  once the Postgres data has a few verified backups behind it.
+- **There is no SQLite fallback any more.** The pre-migration file was removed
+  on 2026-07-30 after the row counts were confirmed identical and three verified
+  dumps existed. Postgres is the only source of truth; the dumps are the only
+  way back.

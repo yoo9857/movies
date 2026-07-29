@@ -11,7 +11,7 @@
 //   > line             pull quote (set large, used as a section beat)
 //
 import Image from "next/image";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { headingSlug } from "@cinepixo/shared";
@@ -75,26 +75,39 @@ function parse(source: string): Block[] {
   return blocks;
 }
 
-// ==highlight== → <mark>, applied to text nodes only.
+/**
+ * `==highlight==` → `<mark>`, on text only.
+ *
+ * The first version wrapped every child of a paragraph in a `<span>` to give it
+ * a key, which meant a sentence with one italic word came out as
+ * `<p><span>In </span><span><em>Parasite</em></span><span> the…</span></p>`:
+ * meaningless elements around every phrase, which bloats the document and
+ * defeats any CSS written against `p > em` or an adjacent sibling. Elements now
+ * pass through untouched and only strings are rewritten.
+ */
+function markUp(text: string): ReactNode {
+  const parts = text.split(/==([^=]+)==/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <mark key={i} className="rounded bg-accent/20 px-1 text-accent">
+        {part}
+      </mark>
+    ) : (
+      // A Fragment, not a span: it carries the key without entering the DOM.
+      <Fragment key={i}>{part}</Fragment>
+    ),
+  );
+}
+
 function withHighlights(children: ReactNode): ReactNode {
-  const walk = (node: ReactNode): ReactNode => {
-    if (typeof node === "string") {
-      const parts = node.split(/==([^=]+)==/g);
-      if (parts.length === 1) return node;
-      return parts.map((p, i) =>
-        i % 2 === 1 ? (
-          <mark key={i} className="rounded bg-accent/20 px-1 text-accent">
-            {p}
-          </mark>
-        ) : (
-          p
-        ),
-      );
-    }
-    if (Array.isArray(node)) return node.map((n, i) => <span key={i}>{walk(n)}</span>);
-    return node;
-  };
-  return walk(children);
+  if (typeof children === "string") return markUp(children);
+  if (Array.isArray(children)) {
+    return children.map((child, i) =>
+      typeof child === "string" ? <Fragment key={i}>{markUp(child)}</Fragment> : child,
+    );
+  }
+  return children;
 }
 
 function headingText(children: ReactNode): string {
