@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,12 +14,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "CinePixo — Film Critic Fandom",
-    template: "%s · CinePixo",
+    default: `${SITE_NAME} — Film Critic Fandom`,
+    template: `%s · ${SITE_NAME}`,
   },
-  description:
-    "CinePixo is a fandom home for lovers of film criticism — reviews, ratings, and tributes to the critics who taught us how to watch movies.",
+  description: SITE_DESCRIPTION,
+  alternates: {
+    types: { "application/rss+xml": "/feed.xml" },
+  },
+  openGraph: {
+    siteName: SITE_NAME,
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({

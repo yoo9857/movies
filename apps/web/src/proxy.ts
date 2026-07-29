@@ -7,18 +7,19 @@ const SESSION_COOKIE = "cinepixo_session";
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hasCookie = request.cookies.has(SESSION_COOKIE);
 
-  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    const hasCookie = request.cookies.has(SESSION_COOKIE);
-    if (!hasCookie) {
-      const login = new URL("/admin/login", request.url);
-      return NextResponse.redirect(login);
-    }
+  if (pathname.startsWith("/admin") && pathname !== "/admin/login" && !hasCookie) {
+    return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  if ((pathname.startsWith("/me") || pathname === "/write") && !hasCookie) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/me/:path*", "/write"],
 };

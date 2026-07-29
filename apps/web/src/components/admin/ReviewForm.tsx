@@ -42,10 +42,14 @@ export function ReviewForm({
   movies,
   initial,
   reviewId,
+  apiBase = "/api/v1/admin/reviews",
+  doneHref = "/admin/reviews",
 }: {
   movies: MovieOption[];
   initial?: ReviewFormValues;
   reviewId?: string;
+  apiBase?: string;
+  doneHref?: string;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<ReviewFormValues>(initial ?? EMPTY);
@@ -68,7 +72,7 @@ export function ReviewForm({
         rating: Number(values.rating),
       };
       const res = await fetch(
-        reviewId ? `/api/v1/admin/reviews/${reviewId}` : "/api/v1/admin/reviews",
+        reviewId ? `${apiBase}/${reviewId}` : apiBase,
         {
           method: reviewId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -81,7 +85,7 @@ export function ReviewForm({
         setError(detail ? `${detail.path}: ${detail.message}` : (data.error ?? "Save failed"));
         return;
       }
-      router.push("/admin/reviews");
+      router.push(doneHref);
       router.refresh();
     } catch {
       setError("Network error — try again");
@@ -207,7 +211,7 @@ export function ReviewForm({
         </button>
         <button
           type="button"
-          onClick={() => router.push("/admin/reviews")}
+          onClick={() => router.push(doneHref)}
           className="rounded-lg border border-line px-5 py-2 text-sm hover:border-accent-dim"
         >
           Cancel
