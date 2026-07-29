@@ -32,6 +32,7 @@ export function TrailerEmbed({ youtubeKey, title }: { youtubeKey: string; title:
               src={`https://i.ytimg.com/vi/${youtubeKey}/hqdefault.jpg`}
               alt=""
               fill
+              sizes="(max-width: 768px) 100vw, 768px"
               className="object-cover opacity-70 transition-opacity group-hover:opacity-90"
             />
             <span className="absolute inset-0 grid place-items-center">

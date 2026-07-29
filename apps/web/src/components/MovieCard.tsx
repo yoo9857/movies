@@ -26,6 +26,7 @@ export function MovieCard({ movie, rank }: { movie: MovieCardData; rank?: number
         <Poster
           path={movie.posterPath}
           title={movie.title}
+          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 190px"
           className="aspect-2/3 w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
         />
 

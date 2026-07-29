@@ -759,9 +759,39 @@ export interface PageMetaInput {
 }
 
 /**
+ * Crawl directives for a page we do want indexed. Spelled out rather than left
+ * to the defaults because the previews are the point: `max-image-preview:large`
+ * is what lets a poster run full width in a result, and `max-snippet:-1` lets an
+ * answer engine quote as much of a review as it needs to make the citation
+ * worth following.
+ */
+export const INDEXABLE = {
+  index: true,
+  follow: true,
+  googleBot: {
+    index: true,
+    follow: true,
+    "max-image-preview": "large",
+    "max-snippet": -1,
+    "max-video-preview": -1,
+  },
+} as const;
+
+/** Excluded from the index, but still passing link equity outward. */
+export const NOT_INDEXABLE = {
+  index: false,
+  follow: true,
+  googleBot: { index: false, follow: true },
+} as const;
+
+/**
  * One place that decides canonical URL, Open Graph and Twitter card for every
  * page. Per-page objects drifted apart when this was done inline — a page would
  * get an `og:title` and no canonical, or a canonical and no image.
+ *
+ * Metadata merges *shallowly* in Next, one whole key at a time, so a page that
+ * sets `alternates` at all replaces the layout's. That is why the feed links are
+ * repeated here instead of being declared once in the root layout.
  */
 export function pageMetadata(input: PageMetaInput): Metadata {
   const url = absUrl(input.path);
@@ -774,18 +804,13 @@ export function pageMetadata(input: PageMetaInput): Metadata {
     keywords: input.keywords?.length ? [...input.keywords] : undefined,
     alternates: {
       canonical: url,
-      types: input.markdownPath
-        ? {
-            "text/markdown": absUrl(input.markdownPath),
-            "application/rss+xml": absUrl("/feed.xml"),
-            "application/feed+json": absUrl("/feed.json"),
-          }
-        : undefined,
+      types: {
+        "application/rss+xml": absUrl("/feed.xml"),
+        "application/feed+json": absUrl("/feed.json"),
+        ...(input.markdownPath ? { "text/markdown": absUrl(input.markdownPath) } : {}),
+      },
     },
-    robots: input.noIndex
-      ? // follow, so link equity still flows out of a page we don't want indexed
-        { index: false, follow: true, googleBot: { index: false, follow: true } }
-      : undefined,
+    robots: input.noIndex ? NOT_INDEXABLE : INDEXABLE,
     openGraph: {
       type: input.ogType ?? "website",
       url,
@@ -805,7 +830,9 @@ export function pageMetadata(input: PageMetaInput): Metadata {
         : {}),
     },
     twitter: {
-      card: images.length > 0 ? "summary_large_image" : "summary",
+      // Always the large card: a page with no image of its own still falls back
+      // to app/opengraph-image.png via the file convention.
+      card: "summary_large_image",
       title: input.title,
       description,
       images: images.length > 0 ? images.map((i) => i.url) : undefined,

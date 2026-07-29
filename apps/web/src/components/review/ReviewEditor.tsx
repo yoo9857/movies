@@ -3,8 +3,9 @@
 import { countWords, readingMinutes } from "@cinepixo/shared";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ReviewBody, type ReviewMedia } from "./ReviewBody";
+import { EditorToolbar, Glyphs, type ToolAction } from "./EditorToolbar";
 import { MoviePicker, type PickerMovie } from "./MoviePicker";
+import { ReviewBody, type ReviewMedia } from "./ReviewBody";
 import { StarPicker } from "./StarPicker";
 
 export interface ReviewDraft {
@@ -191,6 +192,90 @@ export function ReviewEditor({
     });
   }, []);
 
+  // Shortcuts are the primary interface once the piece is long: reaching for
+  // the mouse to bold a word breaks the sentence you were in the middle of.
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const mod = e.metaKey || e.ctrlKey;
+
+    if (mod && !e.shiftKey && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === "b") {
+        e.preventDefault();
+        wrap("**", "**", "bold");
+        return;
+      }
+      if (k === "i") {
+        e.preventDefault();
+        wrap("*", "*", "italic");
+        return;
+      }
+      if (k === "k") {
+        e.preventDefault();
+        wrap("[", "](https://)", "link text");
+        return;
+      }
+      if (k === "s") {
+        // The browser's Save Page is never what someone writing a review wants.
+        e.preventDefault();
+        void saveDraftNow();
+        return;
+      }
+    }
+
+    // Continue a list on Enter; a second Enter on an empty item ends it.
+    if (e.key === "Enter" && !e.shiftKey && !mod) {
+      const el = e.currentTarget;
+      const upto = el.value.slice(0, el.selectionStart);
+      const line = upto.slice(upto.lastIndexOf("\n") + 1);
+      const m = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(line);
+      if (!m) return;
+      e.preventDefault();
+      const [, indent, marker, rest] = m;
+      if (rest.trim() === "") {
+        // empty item: drop the marker instead of making another one
+        const start = el.selectionStart - line.length;
+        const next = el.value.slice(0, start) + el.value.slice(el.selectionStart);
+        dirty.current = true;
+        setV((prev) => ({ ...prev, content: next }));
+        requestAnimationFrame(() => el.setSelectionRange(start, start));
+        return;
+      }
+      const nextMarker = /^\d+\.$/.test(marker)
+        ? `${Number.parseInt(marker, 10) + 1}.`
+        : marker;
+      const insert = `\n${indent}${nextMarker} `;
+      const at = el.selectionStart;
+      const next = el.value.slice(0, at) + insert + el.value.slice(at);
+      dirty.current = true;
+      setV((prev) => ({ ...prev, content: next }));
+      requestAnimationFrame(() => el.setSelectionRange(at + insert.length, at + insert.length));
+    }
+  }
+
+  // Ctrl+S and the autosave timer share one path, so "saved" always means the
+  // same thing.
+  async function saveDraftNow() {
+    if (!serverDrafts || !v.movieId) return;
+    setServerState("saving");
+    try {
+      const res = await fetch("/api/v1/my/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...v, id: draftId.current ?? undefined }),
+      });
+      if (!res.ok) {
+        setServerState("local");
+        return;
+      }
+      const data = await res.json();
+      draftId.current = data.id;
+      setSavedAt(new Date().toLocaleTimeString("en-US", { timeStyle: "short" }));
+      setServerState("saved");
+    } catch {
+      setServerState("local");
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -227,12 +312,98 @@ export function ReviewEditor({
     }
   }
 
-  const media: ReviewMedia = { title: "This film", trailerKey: null, stills: [] };
+  // Preview with the chosen film's real media, so :::trailer and :::still show
+  // what the published page will show rather than a placeholder.
+  const chosen = movies.find((m) => m.id === v.movieId);
+  const media: ReviewMedia = {
+    title: chosen?.title ?? "This film",
+    trailerKey: chosen?.trailerKey ?? null,
+    stills: chosen?.stills ?? [],
+  };
   const words = countWords(v.content);
   const minutes = readingMinutes(v.content);
 
-  const tool =
-    "rounded border border-line px-2 py-1 font-mono text-[11px] text-muted transition-colors hover:border-accent-dim hover:text-foreground";
+  const mod = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
+  const toolGroups: ToolAction[][] = [
+    [
+      {
+        id: "bold",
+        label: "Bold",
+        hint: `${mod}+B`,
+        glyph: Glyphs.bold,
+        run: () => wrap("**", "**", "bold"),
+      },
+      {
+        id: "italic",
+        label: "Italic",
+        hint: `${mod}+I`,
+        glyph: Glyphs.italic,
+        run: () => wrap("*", "*", "italic"),
+      },
+      {
+        id: "highlight",
+        label: "Highlight",
+        hint: "==text==",
+        glyph: Glyphs.highlight,
+        run: () => wrap("==", "==", "highlight"),
+      },
+      {
+        id: "link",
+        label: "Link",
+        hint: `${mod}+K`,
+        glyph: Glyphs.link,
+        run: () => wrap("[", "](https://)", "link text"),
+      },
+    ],
+    [
+      {
+        id: "h2",
+        label: "Section heading",
+        hint: "## — becomes a contents entry",
+        glyph: Glyphs.heading,
+        run: () => block("## Section\n\n"),
+      },
+      {
+        id: "quote",
+        label: "Pull quote",
+        hint: "> — set large as a section beat",
+        glyph: Glyphs.quote,
+        run: () => block("> A line worth pulling out\n\n"),
+      },
+      {
+        id: "list",
+        label: "List",
+        hint: "- — Enter continues it",
+        glyph: Glyphs.list,
+        run: () => block("- point\n- point\n\n"),
+      },
+    ],
+    [
+      {
+        id: "spoiler",
+        label: "Spoiler block",
+        hint: "hidden until the reader reveals it",
+        glyph: Glyphs.spoiler,
+        run: () => block(":::spoiler\nWhat happens in the third act…\n:::\n\n"),
+      },
+      {
+        id: "trailer",
+        label: "Trailer",
+        hint: chosen?.trailerKey ? "this film's trailer, inline" : "no trailer on file for this film",
+        glyph: Glyphs.play,
+        run: () => block(":::trailer\n\n"),
+      },
+      {
+        id: "still",
+        label: "Still",
+        hint: media.stills.length
+          ? `still 1 of ${media.stills.length}`
+          : "no stills on file for this film",
+        glyph: Glyphs.image,
+        run: () => block(":::still 1\n\n"),
+      },
+    ],
+  ];
 
   return (
     <form onSubmit={submit} className="space-y-6">
@@ -382,42 +553,8 @@ export function ReviewEditor({
 
         {tab === "write" ? (
           <>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <button type="button" className={tool} onClick={() => wrap("**", "**", "bold")}>
-                B
-              </button>
-              <button type="button" className={`${tool} italic`} onClick={() => wrap("*", "*", "italic")}>
-                I
-              </button>
-              <button type="button" className={tool} onClick={() => wrap("==", "==", "highlight")}>
-                highlight
-              </button>
-              <button type="button" className={tool} onClick={() => block("## Section\n\n")}>
-                H2
-              </button>
-              <button type="button" className={tool} onClick={() => block("> A line worth pulling out\n\n")}>
-                pull quote
-              </button>
-              <button type="button" className={tool} onClick={() => block("- point\n- point\n\n")}>
-                list
-              </button>
-              <button type="button" className={tool} onClick={() => wrap("[", "](https://)", "link text")}>
-                link
-              </button>
-              <span className="mx-1 w-px bg-line" aria-hidden="true" />
-              <button
-                type="button"
-                className={tool}
-                onClick={() => block(":::spoiler\nWhat happens in the third act…\n:::\n\n")}
-              >
-                spoiler block
-              </button>
-              <button type="button" className={tool} onClick={() => block(":::trailer\n\n")}>
-                trailer
-              </button>
-              <button type="button" className={tool} onClick={() => block(":::still 1\n\n")}>
-                still
-              </button>
+            <div className="mt-3">
+              <EditorToolbar groups={toolGroups} />
             </div>
 
             <textarea
@@ -426,6 +563,8 @@ export function ReviewEditor({
               rows={22}
               value={v.content}
               onChange={(e) => set("content", e.target.value)}
+              onKeyDown={onKeyDown}
+              spellCheck
               placeholder={"## Space is class\n\nIn *Parasite* the camera never stops moving vertically…\n\n> The film never explains class through dialogue. You feel it.\n\n:::trailer\n\n:::spoiler\nThe basement reveal changes everything about the first hour.\n:::"}
               className={`${input} font-mono leading-relaxed`}
             />
@@ -433,6 +572,7 @@ export function ReviewEditor({
             <details className="mt-2 text-xs text-muted">
               <summary className="cursor-pointer">Formatting reference</summary>
               <ul className="mt-2 space-y-1 font-mono">
+                <li>{mod}+B bold · {mod}+I italic · {mod}+K link · {mod}+S save draft</li>
                 <li>## Section · ### Subsection — become the table of contents</li>
                 <li>&gt; line — a pull quote, set large</li>
                 <li>==text== — highlighted phrase</li>

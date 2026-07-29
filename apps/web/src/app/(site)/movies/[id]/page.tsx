@@ -3,9 +3,12 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { BoxOfficeBand } from "@/components/BoxOfficeBand";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CastRail } from "@/components/CastRail";
 import { CrewList } from "@/components/CrewList";
+import { JsonLd } from "@/components/JsonLd";
 import { Poster } from "@/components/Poster";
 import { PosterGallery } from "@/components/PosterGallery";
 import { ReelDivider, SectionHead } from "@/components/ReelDivider";
@@ -13,10 +16,25 @@ import { ReviewIndex } from "@/components/ReviewIndex";
 import { ScoreBand } from "@/components/ScoreBand";
 import { TrailerEmbed } from "@/components/TrailerEmbed";
 import { VideoGallery } from "@/components/VideoGallery";
+import {
+  backdropUrl,
+  breadcrumbNode,
+  type Crumb,
+  graph,
+  itemListNode,
+  movieEntityId,
+  movieNode,
+  pageMetadata,
+  posterUrl,
+  reviewEntityId,
+  reviewNode,
+  webPageNode,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-async function getMovie(id: string) {
+// `cache` so the metadata pass and the render share one query instead of two.
+const getMovie = cache(async (id: string) => {
   if (!/^[a-z0-9]{1,64}$/i.test(id)) return null;
   return prisma.movie.findUnique({
     where: { id },
@@ -38,21 +56,50 @@ async function getMovie(id: string) {
       },
     },
   });
-}
+});
 
 export async function generateMetadata(props: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await props.params;
   const movie = await getMovie(id);
-  if (!movie) return { title: "Movie not found" };
-  return {
-    title: movie.title,
-    description: movie.overview ?? undefined,
-    openGraph: movie.backdropPath
-      ? { images: [`https://image.tmdb.org/t/p/w780${movie.backdropPath}`] }
-      : undefined,
-  };
+  if (!movie) return { title: "Movie not found", robots: { index: false, follow: false } };
+
+  const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
+  const director = movie.crew.find((c) => c.job === "Director")?.name ?? movie.director;
+  const reviewCount = movie.reviews.length;
+
+  // Title carries the year, because "Nosferatu" alone is four different films.
+  const title = year ? `${movie.title} (${year})` : movie.title;
+
+  // Lead with what this page adds over a database entry: the criticism on it.
+  const description =
+    movie.overview ??
+    [
+      director ? `${movie.title}, directed by ${director}.` : `${movie.title}.`,
+      reviewCount > 0
+        ? `${reviewCount} review${reviewCount === 1 ? "" : "s"} on CinePixo, with full credits.`
+        : "Full credits, and the first review is open.",
+    ].join(" ");
+
+  const backdrop = backdropUrl(movie.backdropPath, "w1280");
+  const poster = posterUrl(movie.posterPath, "w780");
+
+  return pageMetadata({
+    path: `/movies/${movie.id}`,
+    title,
+    description,
+    images: [
+      backdrop
+        ? { url: backdrop, width: 1280, height: 720, alt: `${movie.title} — still` }
+        : undefined,
+      poster ? { url: poster, width: 780, height: 1170, alt: `${movie.title} — poster` } : undefined,
+    ].filter((i): i is { url: string; width: number; height: number; alt: string } => Boolean(i)),
+    keywords: [movie.title, `${movie.title} review`, ...movie.genres, director ?? ""].filter(
+      Boolean,
+    ),
+    markdownPath: `/movies/${movie.id}.md`,
+  });
 }
 
 export default async function MoviePage(props: { params: Promise<{ id: string }> }) {
@@ -124,8 +171,72 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
     .filter(Boolean)
     .join("  |  ");
 
+  const path = `/movies/${movie.id}`;
+  const trail: Crumb[] = [
+    { name: "Movies", path: "/movies" },
+    { name: year ? `${movie.title} (${year})` : movie.title },
+  ];
+
+  // The film, its criticism, and the index of that criticism — one graph.
+  //
+  // `aggregateRating` is emitted here and only here, because this is the page
+  // that renders the aggregate. It is the fandom average on the same 0–5 scale
+  // the score band shows; nothing is inferred and nothing external is claimed.
+  const fandom =
+    ratings.length > 0
+      ? {
+          averageStars: ratings.reduce((s, r) => s + r, 0) / ratings.length / 2,
+          reviewCount: ratings.length,
+        }
+      : null;
+
+  const jsonLd = graph(
+    webPageNode({
+      path,
+      name: year ? `${movie.title} (${year})` : movie.title,
+      description: movie.overview ?? movie.tagline,
+      kind: "ItemPage",
+      image: backdropUrl(movie.backdropPath, "w1280") ?? posterUrl(movie.posterPath, "w780"),
+      dateModified: movie.updatedAt,
+      hasBreadcrumb: true,
+      aboutId: movieEntityId(movie.id),
+      mainEntityId: movieEntityId(movie.id),
+      keywords: [movie.title, ...genres],
+      markdownUrl: `${path}.md`,
+    }),
+    breadcrumbNode(path, trail),
+    movieNode(movie, {
+      cast: movie.cast,
+      crew: movie.crew,
+      companies,
+      videos: movie.videos,
+      fandom,
+      reviewIds: movie.reviews.map((r) => reviewEntityId(r.slug)),
+    }),
+    // Each review as its own node: identity, author and score, but no body —
+    // the body belongs to the review's own page, and duplicating it here would
+    // put the same text at two URLs.
+    ...movie.reviews.map((r) =>
+      reviewNode(
+        { ...r, content: "", updatedAt: r.publishedAt },
+        { author: r.author, movie, movieById: true },
+      ),
+    ),
+    movie.reviews.length > 0 &&
+      itemListNode({
+        path,
+        name: `Reviews of ${movie.title}`,
+        entries: movie.reviews.map((r) => ({
+          path: `/reviews/${r.slug}`,
+          name: r.title,
+          entityId: reviewEntityId(r.slug),
+        })),
+      }),
+  );
+
   return (
     <article className="space-y-12">
+      <JsonLd data={jsonLd} />
       {/* ① Backdrop hero — full bleed, rises behind the nav, lit like a screen */}
       <header className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
         <div className="cx-beam relative min-h-[22rem] overflow-hidden sm:min-h-[28rem]">
@@ -135,6 +246,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
               alt=""
               fill
               priority
+              sizes="100vw"
               className="object-cover opacity-40"
             />
           ) : movie.posterPath ? (
@@ -143,6 +255,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
               alt=""
               fill
               priority
+              sizes="100vw"
               className="scale-125 object-cover opacity-25 blur-2xl"
             />
           ) : (
@@ -153,6 +266,9 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
           <div className="cx-perf absolute inset-x-0 bottom-0 z-[1]" aria-hidden="true" />
           {/* sm:pl-48 keeps the hero copy clear of the poster layered below-left */}
           <div className="relative mx-auto flex min-h-[22rem] max-w-5xl flex-col justify-end px-4 pb-8 sm:min-h-[28rem] sm:pl-48">
+            <div className="mb-3">
+              <Breadcrumbs trail={trail} />
+            </div>
             <h1 className="text-balance text-[clamp(1.9rem,6vw,3.25rem)] font-bold leading-[1.1] tracking-tight">
               {movie.title}
             </h1>

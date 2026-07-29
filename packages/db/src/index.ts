@@ -8,13 +8,17 @@ import { PrismaClient } from "./generated/client";
  * has failure modes a local file never had: the pool can be exhausted, the
  * server can be restarting, a query can hang, and a request can arrive during
  * any of it. The settings below bound each of those.
+ *
+ * The client is built on first use, not on import. Importing this module must
+ * stay free of side effects: `next build` loads every route to collect its
+ * metadata, and a build machine has no business needing database credentials.
  */
 
 function required(name: string): string {
   const v = process.env[name];
   if (!v) {
-    // Fail loudly at startup rather than at the first query, when the stack
-    // trace would point at some unrelated page.
+    // Thrown at first query rather than at import, so the message arrives with
+    // a stack that points at the query instead of at a build step.
     throw new Error(
       `${name} is not set. Copy .env.example to apps/web/.env.local and fill it in.`,
     );
@@ -22,7 +26,7 @@ function required(name: string): string {
   return v;
 }
 
-function createClient() {
+function createClient(): PrismaClient {
   const adapter = new PrismaPg({
     connectionString: required("DATABASE_URL"),
     // The app runs as a single pm2 process; keep well under the server's 60.
@@ -49,10 +53,31 @@ function createClient() {
 // A hot reload in development must not open a new pool each time.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+function client(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    const c = createClient();
+    // In production the module instance is stable, so the cache is only really
+    // needed for dev reloads — but caching in both keeps one code path.
+    globalForPrisma.prisma = c;
+  }
+  return globalForPrisma.prisma;
 }
+
+/**
+ * The Prisma client, created on first property access.
+ *
+ * A Proxy rather than a `getPrisma()` function so every existing call site —
+ * `prisma.review.findMany(...)` — keeps working unchanged, and so nothing can
+ * accidentally hold a stale instance across a dev reload.
+ */
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const value = Reflect.get(client(), prop, receiver);
+    return typeof value === "function" ? value.bind(client()) : value;
+  },
+  has(_target, prop) {
+    return Reflect.has(client(), prop);
+  },
+});
 
 export * from "./generated/client";

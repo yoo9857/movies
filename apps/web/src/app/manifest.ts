@@ -1,12 +1,16 @@
 import type { MetadataRoute } from "next";
-import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `${SITE_NAME} — Film Critic Fandom`,
+    name: `${SITE_NAME} — ${SITE_TAGLINE}`,
     short_name: SITE_NAME,
     description: SITE_DESCRIPTION,
     start_url: "/",
+    scope: "/",
+    lang: "en",
+    dir: "ltr",
+    categories: ["entertainment", "news", "books"],
     display: "standalone",
     background_color: "#0b0b0f",
     theme_color: "#0b0b0f",

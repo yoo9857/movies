@@ -3,13 +3,23 @@ import { toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { JsonLd } from "@/components/JsonLd";
 import { MovieCard } from "@/components/MovieCard";
 import { Poster } from "@/components/Poster";
 import { RatingHistogram } from "@/components/RatingHistogram";
+import {
+  breadcrumbNode,
+  type Crumb,
+  graph,
+  itemListNode,
+  movieEntityId,
+  pageMetadata,
+  posterUrl,
+  webPageNode,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = { title: "Movies" };
 
 const SORTS = {
   fandom: "Fandom rating",
@@ -18,6 +28,61 @@ const SORTS = {
   year: "Release year",
 } as const;
 type SortKey = keyof typeof SORTS;
+
+/**
+ * Canonical path for a browse state.
+ *
+ * Genre, decade and page change *which* films are listed, so each earns its own
+ * indexable URL. Sort order and grid-vs-index only rearrange the same films, so
+ * they canonicalise away — otherwise every genre would present as eight
+ * near-identical pages competing with one another.
+ */
+function canonicalPath(genre: string, decade: number | null, page: number): string {
+  const params = new URLSearchParams();
+  if (genre) params.set("genre", genre);
+  if (decade != null) params.set("decade", String(decade));
+  if (page > 1) params.set("page", String(page));
+  const q = params.toString();
+  return q ? `/movies?${q}` : "/movies";
+}
+
+function listTitle(genre: string, decade: number | null): string {
+  if (genre && decade != null) return `${genre} films of the ${decade}s`;
+  if (genre) return `${genre} films`;
+  if (decade != null) return `Films of the ${decade}s`;
+  return "Movies";
+}
+
+function readParams(sp: {
+  genre?: string;
+  decade?: string;
+  page?: string;
+}): { genre: string; decade: number | null; page: number } {
+  return {
+    genre: (sp.genre ?? "").slice(0, 40),
+    decade: /^\d{4}$/.test(sp.decade ?? "") ? Number(sp.decade) : null,
+    page: Math.max(1, Math.min(500, Number(sp.page) || 1)),
+  };
+}
+
+export async function generateMetadata(props: {
+  searchParams: Promise<{ genre?: string; decade?: string; page?: string }>;
+}): Promise<Metadata> {
+  const { genre, decade, page } = readParams(await props.searchParams);
+  const base = listTitle(genre, decade);
+  const scope = [genre ? genre.toLowerCase() : null, decade != null ? `the ${decade}s` : null]
+    .filter(Boolean)
+    .join(" from ");
+
+  return pageMetadata({
+    path: canonicalPath(genre, decade, page),
+    title: page > 1 ? `${base} — page ${page}` : base,
+    description: scope
+      ? `Films ${scope} in the CinePixo library — full credits, and the criticism written about each one.`
+      : "The CinePixo film library — full credits for every film, and the criticism written about it.",
+    keywords: [genre, decade != null ? `${decade}s films` : "", "film library"].filter(Boolean),
+  });
+}
 
 export default async function MoviesPage(props: {
   searchParams: Promise<{
@@ -158,10 +223,48 @@ export default async function MoviesPage(props: {
     reviewCount: m.count,
   });
 
+  const path = canonicalPath(genre, decade, page);
+  const heading = listTitle(genre, decade);
+  const trail: Crumb[] = [
+    { name: "Movies", path: "/movies" },
+    ...(genre || decade != null ? [{ name: heading }] : []),
+  ];
+
+  const jsonLd = graph(
+    webPageNode({
+      path,
+      name: page > 1 ? `${heading} — page ${page}` : heading,
+      description: "Films in the CinePixo library, with the criticism written about each one.",
+      kind: "CollectionPage",
+      hasBreadcrumb: true,
+      keywords: [genre, decade != null ? `${decade}s` : ""].filter(Boolean),
+    }),
+    breadcrumbNode(path, trail),
+    listed.length > 0 &&
+      itemListNode({
+        path,
+        name: heading,
+        startAt: (page - 1) * PER_PAGE + 1,
+        totalItems: total,
+        entries: listed.map((m) => ({
+          path: `/movies/${m.id}`,
+          name: m.title,
+          image: posterUrl(m.posterPath, "w342"),
+          entityId: movieEntityId(m.id),
+        })),
+      }),
+  );
+
   return (
     <div>
+      <JsonLd data={jsonLd} />
+      {trail.length > 1 && (
+        <div className="mb-4">
+          <Breadcrumbs trail={trail} />
+        </div>
+      )}
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">Movies</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{heading}</h1>
         <p className="font-mono text-xs text-muted">
           {total} film{total === 1 ? "" : "s"}
           {genre ? ` · ${genre}` : ""}
@@ -244,6 +347,7 @@ export default async function MoviesPage(props: {
                 src={`https://image.tmdb.org/t/p/w780${featured.backdropPath}`}
                 alt=""
                 fill
+                sizes="(max-width: 1024px) 100vw, 1024px"
                 className="object-cover opacity-30 transition-opacity group-hover:opacity-40"
               />
             ) : (

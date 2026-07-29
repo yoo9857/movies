@@ -22,6 +22,7 @@ export function CastRail({ cast }: { cast: CastEntry[] }) {
                 alt={c.name}
                 width={185}
                 height={278}
+                sizes="96px"
                 className="aspect-2/3 w-full rounded-lg object-cover"
               />
             ) : (

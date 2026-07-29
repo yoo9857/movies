@@ -4,10 +4,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MyReviewActions } from "@/components/MyReviewActions";
 import { getCurrentUser } from "@/lib/auth";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "My reviews" };
+// Behind a login or a redirect, so it is kept out of the index — `follow`
+// stays on so the public pages it links to are still discovered.
+export const metadata: Metadata = pageMetadata({
+  path: "/me/reviews",
+  title: "My reviews",
+  description: "Your drafts and published reviews.",
+  noIndex: true,
+});
 
 export default async function MyReviewsPage() {
   const user = await getCurrentUser();

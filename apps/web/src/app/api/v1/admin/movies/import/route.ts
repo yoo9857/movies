@@ -94,8 +94,18 @@ export const POST = handle(async (request: Request) => {
       });
     }
     const artwork = [
-      ...posters.map((p, i) => ({ kind: "poster", path: p.file_path, lang: p.iso_639_1, sort: i })),
-      ...backdrops.map((b, i) => ({ kind: "backdrop", path: b.file_path, lang: b.iso_639_1, sort: i })),
+      ...posters.map((p, i) => ({
+        kind: "poster" as const,
+        path: p.file_path,
+        lang: p.iso_639_1,
+        sort: i,
+      })),
+      ...backdrops.map((b, i) => ({
+        kind: "backdrop" as const,
+        path: b.file_path,
+        lang: b.iso_639_1,
+        sort: i,
+      })),
     ];
     if (artwork.length > 0) {
       await tx.movieImage.createMany({

@@ -4,10 +4,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ReviewEditor } from "@/components/review/ReviewEditor";
 import { getCurrentUser } from "@/lib/auth";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Write a review" };
+// Behind a login or a redirect, so it is kept out of the index — `follow`
+// stays on so the public pages it links to are still discovered.
+export const metadata: Metadata = pageMetadata({
+  path: "/write",
+  title: "Write a review",
+  description: "Write and publish a review on CinePixo.",
+  noIndex: true,
+});
 
 export default async function WritePage(props: {
   searchParams: Promise<{ movie?: string }>;
@@ -18,7 +26,14 @@ export default async function WritePage(props: {
   const sp = await props.searchParams;
   const movies = await prisma.movie.findMany({
     orderBy: { title: "asc" },
-    select: { id: true, title: true, releaseDate: true, director: true },
+    select: {
+        id: true,
+        title: true,
+        releaseDate: true,
+        director: true,
+        trailerKey: true,
+        images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" }, select: { path: true } },
+      },
   });
 
   // /write?movie=<id> lets "review this film" links preselect the picker
@@ -58,6 +73,8 @@ export default async function WritePage(props: {
             title: m.title,
             year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
             director: m.director,
+            trailerKey: m.trailerKey,
+            stills: m.images.map((i) => i.path),
           }))}
         />
       </div>

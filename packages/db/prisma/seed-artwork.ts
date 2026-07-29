@@ -67,10 +67,13 @@ async function main() {
   });
   let art = 0;
   for (const m of movies) {
+    // kind is an enum column now; keep the literal types so createMany accepts it
     const rows = [
-      m.posterPath && { kind: "poster", path: m.posterPath, sort: 0 },
-      m.backdropPath && { kind: "backdrop", path: m.backdropPath, sort: 0 },
-    ].filter((r): r is { kind: string; path: string; sort: number } => Boolean(r));
+      m.posterPath && { kind: "poster" as const, path: m.posterPath, sort: 0 },
+      m.backdropPath && { kind: "backdrop" as const, path: m.backdropPath, sort: 0 },
+    ].filter(
+      (r): r is { kind: "poster" | "backdrop"; path: string; sort: number } => Boolean(r),
+    );
 
     for (const r of rows) {
       await prisma.movieImage.upsert({

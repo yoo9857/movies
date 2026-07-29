@@ -9,6 +9,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { JsonLd } from "@/components/JsonLd";
 import { Poster } from "@/components/Poster";
 import { ReelDivider, SectionHead } from "@/components/ReelDivider";
 import { FilmSpecCard } from "@/components/review/FilmSpecCard";
@@ -18,11 +21,25 @@ import { ShareRow } from "@/components/review/ShareRow";
 import { VerdictBlock } from "@/components/review/VerdictBlock";
 import { StarRating } from "@/components/StarRating";
 import { getCurrentUser } from "@/lib/auth";
-import { SITE_NAME, SITE_URL } from "@/lib/site";
+import {
+  absUrl,
+  backdropUrl,
+  breadcrumbNode,
+  type Crumb,
+  graph,
+  movieEntityId,
+  movieNode,
+  pageMetadata,
+  posterUrl,
+  reviewEntityId,
+  reviewNode,
+  webPageNode,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-async function getReview(rawSlug: string) {
+// `cache` so the metadata pass and the render share one query instead of two.
+const getReview = cache(async (rawSlug: string) => {
   const parsed = slugSchema.safeParse(rawSlug);
   if (!parsed.success) return null;
   return prisma.review.findFirst({
@@ -32,6 +49,18 @@ async function getReview(rawSlug: string) {
       movie: { include: { images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" } } } },
     },
   });
+});
+
+/** Trail shared by the visible breadcrumbs and the BreadcrumbList node. */
+function trailFor(review: {
+  title: string;
+  movie: { id: string; title: string };
+}): Crumb[] {
+  return [
+    { name: "Reviews", path: "/reviews" },
+    { name: review.movie.title, path: `/movies/${review.movie.id}` },
+    { name: review.title },
+  ];
 }
 
 export async function generateMetadata(props: {
@@ -39,26 +68,40 @@ export async function generateMetadata(props: {
 }): Promise<Metadata> {
   const { slug } = await props.params;
   const review = await getReview(slug);
-  if (!review) return { title: "Review not found" };
-  const image = review.movie.backdropPath
-    ? `https://image.tmdb.org/t/p/w780${review.movie.backdropPath}`
-    : review.movie.posterPath
-      ? `https://image.tmdb.org/t/p/w342${review.movie.posterPath}`
-      : undefined;
-  const description = review.verdict ?? review.excerpt ?? undefined;
-  return {
+  if (!review) return { title: "Review not found", robots: { index: false, follow: false } };
+
+  const movie = review.movie;
+  const author = review.author.displayName ?? review.author.username;
+  const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
+
+  // The verdict is the sharpest sentence in the piece, so it is the one that
+  // goes to search results and social cards.
+  const description =
+    review.verdict ??
+    review.excerpt ??
+    `${author} reviews ${movie.title}${year ? ` (${year})` : ""} for CinePixo.`;
+
+  const backdrop = backdropUrl(movie.backdropPath, "w1280");
+  const poster = posterUrl(movie.posterPath, "w780");
+
+  return pageMetadata({
+    path: `/reviews/${review.slug}`,
     title: review.title,
     description,
-    alternates: { canonical: `/reviews/${review.slug}` },
-    openGraph: {
-      title: review.title,
-      description,
-      type: "article",
-      publishedTime: review.publishedAt?.toISOString(),
-      authors: [review.author.displayName ?? review.author.username],
-      images: image ? [image] : undefined,
-    },
-  };
+    ogType: "article",
+    images: backdrop
+      ? [{ url: backdrop, width: 1280, height: 720, alt: `${movie.title} — still` }]
+      : poster
+        ? [{ url: poster, width: 780, height: 1170, alt: `${movie.title} — poster` }]
+        : [],
+    publishedTime: review.publishedAt,
+    modifiedTime: review.updatedAt,
+    authors: [author],
+    section: movie.genres[0] ?? "Film criticism",
+    tags: [movie.title, ...movie.genres, ...movie.keywords.slice(0, 6)],
+    keywords: [movie.title, `${movie.title} review`, ...movie.genres],
+    markdownPath: `/reviews/${review.slug}.md`,
+  });
 }
 
 export default async function ReviewPage(props: { params: Promise<{ slug: string }> }) {
@@ -72,11 +115,11 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
     .catch(() => {});
 
   const movie = review.movie;
-  const stars = toStarScale(review.rating);
   const minutes = readingMinutes(review.content);
   const headings = extractHeadings(review.content);
   const date = review.publishedAt ? new Date(review.publishedAt) : null;
-  const url = `${SITE_URL}/reviews/${review.slug}`;
+  const path = `/reviews/${review.slug}`;
+  const url = absUrl(path);
 
   const [voted, otherOnFilm, moreByAuthor] = await Promise.all([
     viewer
@@ -112,46 +155,48 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
   ]);
 
   const authorName = review.author.displayName ?? review.author.username;
+  const trail = trailFor(review);
 
-  // Review structured data — the single biggest SEO lever for a review site.
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Review",
-    headline: review.title,
-    reviewBody: review.content.slice(0, 5000),
-    datePublished: review.publishedAt?.toISOString(),
-    dateModified: review.updatedAt.toISOString(),
-    url,
-    author: { "@type": "Person", name: authorName },
-    publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
-    itemReviewed: {
-      "@type": "Movie",
-      name: movie.title,
-      ...(movie.director ? { director: { "@type": "Person", name: movie.director } } : {}),
-      ...(movie.releaseDate
-        ? { dateCreated: new Date(movie.releaseDate).toISOString().slice(0, 10) }
-        : {}),
-      ...(movie.posterPath
-        ? { image: `https://image.tmdb.org/t/p/w342${movie.posterPath}` }
-        : {}),
-    },
-    reviewRating: {
-      "@type": "Rating",
-      ratingValue: stars,
-      bestRating: 5,
-      worstRating: 0,
-    },
-  };
+  // The page graph: the review, the film it reviews, where the page sits, and
+  // what the page itself is. Cross-referenced by `@id` so a crawler resolves one
+  // film and one review rather than four unrelated blobs.
+  //
+  // Deliberately absent: an `aggregateRating` for the film. This page shows one
+  // critic's score, not the aggregate — claiming the aggregate here would be a
+  // rating with nothing on screen to back it.
+  const jsonLd = graph(
+    webPageNode({
+      path,
+      name: review.title,
+      description: review.verdict ?? review.excerpt,
+      kind: "ItemPage",
+      image: backdropUrl(movie.backdropPath, "w1280") ?? posterUrl(movie.posterPath, "w780"),
+      datePublished: review.publishedAt,
+      dateModified: review.updatedAt,
+      hasBreadcrumb: true,
+      // The page *is* the review and is *about* the film — two different claims,
+      // and answer engines use both: one to attribute, one to retrieve.
+      aboutId: movieEntityId(movie.id),
+      mainEntityId: reviewEntityId(review.slug),
+      keywords: [movie.title, ...movie.genres],
+      // The verdict, and nothing else — an assistant reading this page aloud
+      // should give the judgment, not the navigation.
+      speakableSelectors: ["[data-speakable]"],
+      markdownUrl: absUrl(`${path}.md`),
+    }),
+    breadcrumbNode(path, trail),
+    reviewNode(review, {
+      author: review.author,
+      movie,
+      includeBody: true,
+      movieById: true,
+    }),
+    movieNode(movie, { reviewIds: [reviewEntityId(review.slug)] }),
+  );
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        // JSON.stringify output is escaped for the </script> case below
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
-        }}
-      />
+      <JsonLd data={jsonLd} />
 
       {/* ── Backdrop hero ── */}
       {movie.backdropPath && (
@@ -162,6 +207,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
               alt=""
               fill
               priority
+              sizes="100vw"
               className="object-cover opacity-30"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-black/20" />
@@ -173,17 +219,14 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
       <article className="mx-auto max-w-3xl">
         {/* ── Masthead ── */}
         <header>
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
-            <Link href={`/movies/${movie.id}`} className="transition-colors hover:text-accent">
-              {movie.title}
-              {movie.releaseDate ? ` (${new Date(movie.releaseDate).getFullYear()})` : ""}
-            </Link>
-          </p>
+          <Breadcrumbs trail={trail} />
           <h1 className="mt-2.5 text-balance text-[clamp(1.8rem,5vw,2.9rem)] font-bold leading-[1.12] tracking-tight">
             {review.title}
           </h1>
           {review.excerpt && (
-            <p className="mt-3 text-lg leading-relaxed text-muted">{review.excerpt}</p>
+            <p data-speakable className="mt-3 text-lg leading-relaxed text-muted">
+              {review.excerpt}
+            </p>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs text-muted">
             <StarRating rating={review.rating} />
@@ -202,7 +245,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
         </header>
 
         {/* ── Verdict, conclusion first ── */}
-        <div className="mt-7">
+        <div className="mt-7" data-speakable>
           <VerdictBlock
             rating={review.rating}
             verdict={review.verdict}

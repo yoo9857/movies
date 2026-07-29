@@ -2,14 +2,30 @@ import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/components/JsonLd";
 import { RatingHistogram } from "@/components/RatingHistogram";
+import {
+  breadcrumbNode,
+  type Crumb,
+  datasetNode,
+  graph,
+  pageMetadata,
+  webPageNode,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+const DESCRIPTION =
+  "How this community rates: the distribution of every published rating, averages by genre, and twelve months of publishing activity.";
+
+export const metadata: Metadata = pageMetadata({
+  path: "/stats",
   title: "Fandom stats",
-  description: "What the CinePixo fandom watches, how it rates, and where it disagrees with the world.",
-};
+  description: DESCRIPTION,
+  keywords: ["film rating statistics", "genre averages", "rating distribution"],
+});
+
+const TRAIL: Crumb[] = [{ name: "Stats" }];
 
 const MIN_SAMPLE = 3; // below this, aggregates are shown as "low sample"
 
@@ -88,8 +104,39 @@ export default async function StatsPage() {
     (a, b) => b[1].ratings.length - a[1].ratings.length,
   )[0];
 
+  // Declared as a Dataset, not decoration: these are published aggregates with
+  // stated methods, and saying so is what makes them citable rather than merely
+  // crawlable. Only measures this page actually renders are listed.
+  const jsonLd = graph(
+    webPageNode({
+      path: "/stats",
+      name: "Fandom stats",
+      description: DESCRIPTION,
+      hasBreadcrumb: true,
+      dateModified: reviews.reduce<Date | null>(
+        (latest, r) =>
+          r.publishedAt && (!latest || r.publishedAt > latest) ? r.publishedAt : latest,
+        null,
+      ),
+    }),
+    breadcrumbNode("/stats", TRAIL),
+    datasetNode({
+      path: "/stats",
+      name: "CinePixo rating statistics",
+      description: DESCRIPTION,
+      variables: [
+        "Average rating across all published reviews",
+        "Distribution of ratings on the 0–10 half-point scale",
+        "Average rating by genre",
+        "Reviews published per month over the last twelve months",
+        "Most-reviewed film",
+      ],
+    }),
+  );
+
   return (
     <div className="space-y-14">
+      <JsonLd data={jsonLd} />
       <header>
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">Fandom stats</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">How this fandom watches</h1>

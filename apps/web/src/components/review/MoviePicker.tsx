@@ -10,6 +10,9 @@ export interface PickerMovie {
   title: string;
   year: number | null;
   director: string | null;
+  /** carried so the editor preview can render :::trailer and :::still for real */
+  trailerKey?: string | null;
+  stills?: string[];
 }
 
 export function MoviePicker({

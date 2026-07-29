@@ -2,18 +2,51 @@ import { prisma } from "@cinepixo/db";
 import { paginationSchema } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { JsonLd } from "@/components/JsonLd";
 import { ReviewIndex } from "@/components/ReviewIndex";
+import {
+  breadcrumbNode,
+  type Crumb,
+  graph,
+  itemListNode,
+  pageMetadata,
+  posterUrl,
+  reviewEntityId,
+  webPageNode,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Reviews" };
+const PAGE_SIZE = 20;
+
+/** Page 1 is `/reviews`; page 2+ carry the query, and each self-canonicalises. */
+function pathFor(page: number): string {
+  return page > 1 ? `/reviews?page=${page}` : "/reviews";
+}
+
+export async function generateMetadata(props: {
+  searchParams: Promise<{ page?: string }>;
+}): Promise<Metadata> {
+  const sp = await props.searchParams;
+  const { page } = paginationSchema.parse({ page: sp.page });
+
+  return pageMetadata({
+    // Self-canonical, not a canonical back to page 1: page 3 holds reviews that
+    // exist nowhere else, and pointing it at page 1 would drop them.
+    path: pathFor(page),
+    title: page > 1 ? `Reviews — page ${page}` : "Reviews",
+    description:
+      "Every review published on CinePixo, newest first — long-form criticism of individual films, signed and scored in half-stars.",
+  });
+}
 
 export default async function ReviewsPage(props: {
   searchParams: Promise<{ page?: string }>;
 }) {
   const sp = await props.searchParams;
   const { page } = paginationSchema.parse({ page: sp.page });
-  const pageSize = 20;
+  const pageSize = PAGE_SIZE;
 
   const where = { status: "PUBLISHED" } as const;
   const [total, reviews] = await Promise.all([
@@ -29,14 +62,53 @@ export default async function ReviewsPage(props: {
         rating: true,
         publishedAt: true,
         author: { select: { username: true, displayName: true } },
-        movie: { select: { title: true, releaseDate: true } },
+        movie: { select: { title: true, releaseDate: true, posterPath: true } },
       },
     }),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const path = pathFor(page);
+  const trail: Crumb[] = [
+    { name: "Reviews", path: "/reviews" },
+    ...(page > 1 ? [{ name: `Page ${page}` }] : []),
+  ];
+
+  const jsonLd = graph(
+    webPageNode({
+      path,
+      name: page > 1 ? `Reviews — page ${page}` : "Reviews",
+      description: "Long-form film criticism published on CinePixo, newest first.",
+      kind: "CollectionPage",
+      dateModified: reviews[0]?.publishedAt,
+      hasBreadcrumb: true,
+    }),
+    breadcrumbNode(path, trail),
+    reviews.length > 0 &&
+      itemListNode({
+        path,
+        name: "Reviews",
+        // `startAt` keeps positions continuous across pages, so position 21 on
+        // page 2 is genuinely the 21st review and not the 1st again.
+        startAt: (page - 1) * pageSize + 1,
+        totalItems: total,
+        entries: reviews.map((r) => ({
+          path: `/reviews/${r.slug}`,
+          name: r.title,
+          image: posterUrl(r.movie.posterPath, "w342"),
+          entityId: reviewEntityId(r.slug),
+        })),
+      }),
+  );
+
   return (
     <div>
+      <JsonLd data={jsonLd} />
+      {page > 1 && (
+        <div className="mb-4">
+          <Breadcrumbs trail={trail} />
+        </div>
+      )}
       <div className="flex items-baseline justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Reviews</h1>
         <p className="font-mono text-xs text-muted">

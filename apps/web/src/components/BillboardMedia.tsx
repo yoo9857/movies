@@ -65,6 +65,7 @@ export function BillboardMedia({
           alt=""
           fill
           priority
+          sizes="100vw"
           style={{ opacity: ready ? 0 : still.blur ? 0.3 : 0.62 }}
           className={`object-cover transition-opacity duration-1000 ${
             still.blur ? "scale-125 blur-2xl" : ""

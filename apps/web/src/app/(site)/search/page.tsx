@@ -3,10 +3,27 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Poster } from "@/components/Poster";
 import { StarRating } from "@/components/StarRating";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Search" };
+export async function generateMetadata(props: {
+  searchParams: Promise<{ q?: string }>;
+}): Promise<Metadata> {
+  const sp = await props.searchParams;
+  const q = (sp.q ?? "").trim().slice(0, 100);
+
+  return pageMetadata({
+    // Canonical to the bare /search: one query string per visitor would
+    // otherwise mint an unbounded number of thin, near-duplicate URLs.
+    path: "/search",
+    title: q ? `Search — ${q}` : "Search",
+    description: "Search reviews, films and critics on CinePixo.",
+    // Results pages are excluded from the index but still followed, so the
+    // reviews and films they link to keep being discovered through them.
+    noIndex: true,
+  });
+}
 
 export default async function SearchPage(props: {
   searchParams: Promise<{ q?: string }>;

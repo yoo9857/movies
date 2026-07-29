@@ -2,10 +2,18 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
 import { getCurrentUser } from "@/lib/auth";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Sign in" };
+// Behind a login or a redirect, so it is kept out of the index — `follow`
+// stays on so the public pages it links to are still discovered.
+export const metadata: Metadata = pageMetadata({
+  path: "/login",
+  title: "Sign in",
+  description: "Sign in to your CinePixo account.",
+  noIndex: true,
+});
 
 export default async function LoginPage() {
   const user = await getCurrentUser();

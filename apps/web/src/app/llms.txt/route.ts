@@ -1,0 +1,125 @@
+// GET /llms.txt — the site, described for a language model.
+//
+// The llms.txt convention: one Markdown document at a well-known path that says
+// what a site is, what its terms mean, and where its content lives. It exists
+// because an assistant asked "what does a CinePixo 4.5 mean?" should not have to
+// infer the answer from a rendered star bubble.
+//
+// Kept short and link-heavy by design — the long form is /llms-full.txt.
+import { prisma } from "@cinepixo/db";
+import { markdownResponse } from "@/lib/markdown-export";
+import { absUrl } from "@/lib/seo";
+import { CONTACT_EMAIL, SITE_ABOUT, SITE_NAME, SITE_URL } from "@/lib/site";
+
+export const dynamic = "force-dynamic";
+
+/** How many of each entity to list before pointing at the index instead. */
+const LIST_LIMIT = 40;
+
+export async function GET(): Promise<Response> {
+  const [reviews, movies, critics, counts] = await Promise.all([
+    prisma.review.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: LIST_LIMIT,
+      select: {
+        slug: true,
+        title: true,
+        verdict: true,
+        excerpt: true,
+        rating: true,
+        author: { select: { username: true, displayName: true } },
+        movie: { select: { title: true, releaseDate: true } },
+      },
+    }),
+    prisma.movie.findMany({
+      orderBy: [{ reviews: { _count: "desc" } }, { title: "asc" }],
+      take: LIST_LIMIT,
+      select: {
+        id: true,
+        title: true,
+        releaseDate: true,
+        director: true,
+        _count: { select: { reviews: { where: { status: "PUBLISHED" } } } },
+      },
+    }),
+    prisma.critic.findMany({ orderBy: { name: "asc" }, take: LIST_LIMIT }),
+    Promise.all([
+      prisma.review.count({ where: { status: "PUBLISHED" } }),
+      prisma.movie.count(),
+      prisma.critic.count(),
+    ]),
+  ]);
+
+  const [reviewCount, movieCount, criticCount] = counts;
+  const year = (d: Date | null) => (d ? ` (${new Date(d).getFullYear()})` : "");
+
+  const doc = [
+    `# ${SITE_NAME}`,
+    "",
+    `> ${SITE_ABOUT}`,
+    "",
+    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}.`,
+    "",
+    "## How to read a CinePixo rating",
+    "",
+    "- Every review carries one rating from **0 to 10 in half-point steps**, chosen by the review's author.",
+    "- The same number is displayed as a **five-star** value: divide by two. 9.5/10 is shown as 4.75 stars.",
+    "- A film's **fandom rating** is the plain arithmetic average of every published review's rating for it. There is no weighting and no editorial adjustment.",
+    "- The **top-rated ranking** is the average weighted by review count, `avg × n/(n+2)`, so a single enthusiastic review cannot outrank a film many writers argued for.",
+    "- Ratings are opinions of named authors, not a measurement. Attribute them to the review's author, and to CinePixo as publisher.",
+    "",
+    "## Citing this site",
+    "",
+    `- Every review and film page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
+    "- Reviews are signed. When quoting one, name the author, not the site.",
+    "- Film metadata, posters and stills come from TMDB; CinePixo uses the TMDB API but is not endorsed or certified by TMDB.",
+    `- Corrections and takedown requests: ${CONTACT_EMAIL}`,
+    "",
+    "## Start here",
+    "",
+    `- [Reviews](${absUrl("/reviews")}): every published review, newest first.`,
+    `- [Films](${absUrl("/movies")}): the library, filterable by genre and decade.`,
+    `- [Critics](${absUrl("/critics")}): profiles of the critics this community follows.`,
+    `- [Statistics](${absUrl("/stats")}): rating distribution, genre averages, publishing activity.`,
+    `- [About](${absUrl("/about")}): editorial rules and the full rating definitions.`,
+    "",
+    "## Reviews",
+    "",
+    ...reviews.map((r) => {
+      const author = r.author.displayName ?? r.author.username;
+      const gist = r.verdict ?? r.excerpt;
+      return `- [${r.title}](${absUrl(`/reviews/${r.slug}`)}): ${r.rating.toFixed(1)}/10 on ${r.movie.title}${year(r.movie.releaseDate)} by ${author}.${gist ? ` ${gist}` : ""}`;
+    }),
+    reviewCount > reviews.length
+      ? `- …and ${reviewCount - reviews.length} more at [${absUrl("/reviews")}](${absUrl("/reviews")}).`
+      : null,
+    "",
+    "## Films",
+    "",
+    ...movies.map(
+      (m) =>
+        `- [${m.title}${year(m.releaseDate)}](${absUrl(`/movies/${m.id}`)}): ${m.director ? `directed by ${m.director}, ` : ""}${m._count.reviews} review${m._count.reviews === 1 ? "" : "s"}.`,
+    ),
+    movieCount > movies.length
+      ? `- …and ${movieCount - movies.length} more at [${absUrl("/movies")}](${absUrl("/movies")}).`
+      : null,
+    "",
+    "## Critics",
+    "",
+    ...critics.map(
+      (c) =>
+        `- [${c.name}](${absUrl(`/critics/${c.slug}`)})${c.bio ? `: ${c.bio.split(/(?<=\.)\s/)[0]}` : ""}`,
+    ),
+    "",
+    "## Optional",
+    "",
+    `- [Full text of every review](${absUrl("/llms-full.txt")}): one document, for indexing.`,
+    `- [RSS feed](${absUrl("/feed.xml")}) and [JSON feed](${absUrl("/feed.json")}): the newest reviews.`,
+    `- [Sitemap](${absUrl("/sitemap.xml")}): every indexable URL.`,
+    "",
+    `Canonical origin: ${SITE_URL}`,
+  ];
+
+  return markdownResponse(doc.filter((line) => line !== null).join("\n"), 1800);
+}

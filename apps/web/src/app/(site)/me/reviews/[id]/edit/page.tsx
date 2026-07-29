@@ -3,10 +3,18 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { ReviewEditor } from "@/components/review/ReviewEditor";
 import { getCurrentUser } from "@/lib/auth";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Edit review" };
+// Behind a login or a redirect, so it is kept out of the index — `follow`
+// stays on so the public pages it links to are still discovered.
+export const metadata: Metadata = pageMetadata({
+  path: "/me/reviews",
+  title: "Edit review",
+  description: "Edit one of your reviews.",
+  noIndex: true,
+});
 
 export default async function EditMyReviewPage(props: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -17,7 +25,14 @@ export default async function EditMyReviewPage(props: { params: Promise<{ id: st
     prisma.review.findUnique({ where: { id } }),
     prisma.movie.findMany({
       orderBy: { title: "asc" },
-      select: { id: true, title: true, releaseDate: true, director: true },
+      select: {
+        id: true,
+        title: true,
+        releaseDate: true,
+        director: true,
+        trailerKey: true,
+        images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" }, select: { path: true } },
+      },
     }),
   ]);
   // ownership enforced here AND in the API layer
@@ -46,6 +61,8 @@ export default async function EditMyReviewPage(props: { params: Promise<{ id: st
             title: m.title,
             year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
             director: m.director,
+            trailerKey: m.trailerKey,
+            stills: m.images.map((i) => i.path),
           }))}
         />
       </div>

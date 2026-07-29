@@ -40,6 +40,7 @@ export function FilmSpecCard({ film }: { film: FilmSpec }) {
         <Poster
           path={film.posterPath}
           title={film.title}
+          size="thumb"
           className="h-36 w-24 rounded-lg border border-line object-cover transition-opacity hover:opacity-90"
         />
       </Link>

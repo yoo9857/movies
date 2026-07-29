@@ -1,13 +1,35 @@
 import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { BillboardMedia } from "@/components/BillboardMedia";
+import { JsonLd } from "@/components/JsonLd";
 import { Poster } from "@/components/Poster";
 import { Rail } from "@/components/Rail";
 import { StarRating } from "@/components/StarRating";
+import {
+  graph,
+  itemListNode,
+  pageMetadata,
+  posterUrl,
+  reviewEntityId,
+  webPageNode,
+} from "@/lib/seo";
+import { SITE_ABOUT, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = pageMetadata({
+  path: "/",
+  // The home page names itself rather than taking the `%s · CinePixo` template.
+  title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+  absoluteTitle: true,
+  description:
+    "Long-form film criticism, written and signed: reviews scored in half-stars, films with full credits, and the critics whose work set the standard.",
+  // No `images`: app/opengraph-image.png is picked up by the file convention,
+  // which generates the absolute URL and dimensions itself.
+});
 
 const reviewSelect = {
   slug: true,
@@ -78,8 +100,35 @@ export default async function HomePage() {
 
   const [reviewCount, movieCount, criticCount, memberCount] = counts;
 
+  // The home page's job in the graph is to be the front door: it states what the
+  // site is, then hands over an ordered list of the newest criticism so a crawler
+  // has somewhere to go next. No breadcrumb — Home is the root of every trail.
+  const jsonLd = graph(
+    webPageNode({
+      path: "/",
+      name: `${SITE_NAME} — ${SITE_TAGLINE}`,
+      description: SITE_ABOUT,
+      kind: "CollectionPage",
+      dateModified: latest[0]?.publishedAt,
+    }),
+    latest.length > 0 &&
+      itemListNode({
+        path: "/",
+        name: "Latest reviews",
+        description: "The most recently published reviews on CinePixo.",
+        totalItems: reviewCount,
+        entries: latest.map((r) => ({
+          path: `/reviews/${r.slug}`,
+          name: r.title,
+          image: posterUrl(r.movie.posterPath, "w342"),
+          entityId: reviewEntityId(r.slug),
+        })),
+      }),
+  );
+
   return (
     <div className="space-y-16">
+      <JsonLd data={jsonLd} />
       {/* ── ② Billboard — trailer playing behind the nav.
              Height is capped so the rail below always peeks above the fold:
              cinema atmosphere AND a visible "there's more down there". ── */}
@@ -252,6 +301,7 @@ export default async function HomePage() {
                       }`}
                       alt=""
                       fill
+                      sizes="(max-width: 640px) 88vw, 512px"
                       className="object-cover opacity-60 transition-all group-hover:scale-[1.04] group-hover:opacity-75"
                     />
                   ) : (

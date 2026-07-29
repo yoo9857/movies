@@ -11,7 +11,14 @@ export default async function EditReviewPage(props: { params: Promise<{ id: stri
     prisma.review.findUnique({ where: { id } }),
     prisma.movie.findMany({
       orderBy: { title: "asc" },
-      select: { id: true, title: true, releaseDate: true, director: true },
+      select: {
+        id: true,
+        title: true,
+        releaseDate: true,
+        director: true,
+        trailerKey: true,
+        images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" }, select: { path: true } },
+      },
     }),
   ]);
   if (!review) notFound();
@@ -41,6 +48,8 @@ export default async function EditReviewPage(props: { params: Promise<{ id: stri
             title: m.title,
             year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
             director: m.director,
+            trailerKey: m.trailerKey,
+            stills: m.images.map((i) => i.path),
           }))}
         />
       </div>
