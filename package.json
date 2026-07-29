@@ -1,0 +1,29 @@
+{
+  "name": "cinepixo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CinePixo — 영화평론가 팬사이트",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start": "npm run start -w web",
+    "lint": "npm run lint -w web",
+    "db:generate": "npm run generate -w @cinepixo/db",
+    "db:migrate": "npm run migrate -w @cinepixo/db",
+    "db:seed": "npm run seed -w @cinepixo/db",
+    "db:studio": "npm run studio -w @cinepixo/db"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "postcss": "^8.5.24",
+    "sharp": "^0.35.3",
+    "brace-expansion": "^5.0.8",
+    "minimatch": "^10.2.6"
+  }
+}

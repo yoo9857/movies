@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// Fan account. Reviews are written by users; the site owner is role=ADMIN.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  // scrypt hash, format: scrypt$N$r$p$salt$hash (never store plaintext)
+  passwordHash String
+  // "ADMIN" | "MEMBER" (SQLite has no enums — validated with zod at the app layer)
+  role         String   @default("MEMBER")
+  displayName  String?
+  bio          String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  reviews      Review[]
+}
+
+// A professional film critic the fandom follows — profile directory.
+model Critic {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  bio       String?
+  avatarUrl String?
+  // JSON string: [{ "label": "YouTube", "url": "..." }]
+  links     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A film — imported from TMDB or added manually.
+model Movie {
+  id            String    @id @default(cuid())
+  tmdbId        Int?      @unique
+  title         String
+  originalTitle String?
+  overview      String?
+  posterPath    String?
+  backdropPath  String?
+  releaseDate   DateTime?
+  runtime       Int?
+  director      String?
+  // JSON string: ["Drama", "Thriller"]
+  genres        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  reviews       Review[]
+
+  @@index([title])
+}
+
+// A fan-written review of a movie.
+model Review {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  excerpt     String?
+  // Markdown body — rendered with raw HTML disabled (XSS prevention)
+  content     String
+  // 0.0–10.0 in 0.5 steps — displayed as a 5-star scale
+  rating      Float
+  // "DRAFT" | "PUBLISHED" (validated with zod at the app layer)
+  status      String    @default("DRAFT")
+  publishedAt DateTime?
+  viewCount   Int       @default(0)
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  movieId     String
+  movie       Movie     @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([authorId])
+  @@index([movieId])
+}
