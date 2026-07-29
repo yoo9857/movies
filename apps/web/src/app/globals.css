@@ -107,10 +107,34 @@
   }
 }
 
+html {
+  /* full-bleed sections use w-screen — clip the phantom horizontal scroll */
+  overflow-x: clip;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Slow cinematic drift for billboard backdrops (Netflix-style motion) */
+@keyframes cx-kenburns {
+  from {
+    transform: scale(1) translateX(0);
+  }
+  to {
+    transform: scale(1.12) translateX(-2%);
+  }
+}
+.cx-kenburns {
+  animation: cx-kenburns 32s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-kenburns {
+    animation: none;
+  }
 }
 
 ::selection {

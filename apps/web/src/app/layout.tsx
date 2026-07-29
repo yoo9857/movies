@@ -31,6 +31,13 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
   },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { title: SITE_NAME, statusBarStyle: "black-translucent" },
+};
+
+export const viewport = {
+  themeColor: "#0b0b0f",
+  colorScheme: "dark" as const,
 };
 
 export default function RootLayout({

@@ -2,7 +2,9 @@ import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
 import Image from "next/image";
 import Link from "next/link";
+import { BillboardMedia } from "@/components/BillboardMedia";
 import { Poster } from "@/components/Poster";
+import { Rail } from "@/components/Rail";
 import { StarRating } from "@/components/StarRating";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,7 @@ const reviewSelect = {
       backdropPath: true,
       releaseDate: true,
       director: true,
+      trailerKey: true,
     },
   },
 } as const;
@@ -40,6 +43,7 @@ export default async function HomePage() {
         title: true,
         posterPath: true,
         releaseDate: true,
+        createdAt: true,
         reviews: { where: { status: "PUBLISHED" }, select: { rating: true } },
       },
     }),
@@ -52,8 +56,12 @@ export default async function HomePage() {
     ]),
   ]);
 
-  // Billboard: newest review with a backdrop; Lead: the next one with an excerpt.
-  const billboard = latest.find((r) => r.movie.backdropPath) ?? latest[0] ?? null;
+  // Billboard: newest review with a backdrop (falls back to blurred poster art).
+  const billboard =
+    latest.find((r) => r.movie.backdropPath) ??
+    latest.find((r) => r.movie.posterPath) ??
+    latest[0] ??
+    null;
   const lead = latest.find((r) => r !== billboard && r.excerpt) ?? null;
   const railReviews = latest.filter((r) => r !== billboard && r !== lead).slice(0, 10);
 
@@ -72,28 +80,27 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-16">
-      {/* ── ② Billboard ── */}
+      {/* ── ② Billboard — trailer playing behind the nav.
+             Height is capped so the rail below always peeks above the fold:
+             cinema atmosphere AND a visible "there's more down there". ── */}
       {billboard ? (
-        <section className="relative -mt-8 left-1/2 w-screen -translate-x-1/2">
-          <div className="relative flex min-h-[72vh] flex-col justify-end overflow-hidden">
-            {billboard.movie.backdropPath ? (
-              <Image
-                src={`https://image.tmdb.org/t/p/w780${billboard.movie.backdropPath}`}
-                alt=""
-                fill
-                priority
-                className="object-cover opacity-40"
-              />
-            ) : (
-              <div className="absolute inset-0 bg-surface" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/10" />
-            <div className="relative mx-auto w-full max-w-5xl px-4 pb-14">
+        <section className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
+          <div className="relative flex min-h-[clamp(30rem,68vh,40rem)] flex-col justify-end overflow-hidden">
+            <BillboardMedia
+              backdropPath={billboard.movie.backdropPath}
+              posterPath={billboard.movie.posterPath}
+              trailerKey={billboard.movie.trailerKey}
+            />
+            {/* Two-axis scrim: dark enough to read type over, light enough that
+                the film still reads as a film. */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/35 to-black/10" />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/65 via-background/10 to-transparent" />
+            <div className="relative mx-auto w-full max-w-5xl px-4 pb-12">
               <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
                 Featured review
               </p>
               <Link href={`/reviews/${billboard.slug}`} className="group mt-3 block max-w-2xl">
-                <h1 className="text-4xl font-bold leading-[1.1] tracking-tight group-hover:text-accent transition-colors sm:text-6xl">
+                <h1 className="text-balance text-[clamp(1.9rem,7vw,3.75rem)] font-bold leading-[1.08] tracking-tight group-hover:text-accent transition-colors">
                   {billboard.title}
                 </h1>
               </Link>
@@ -129,6 +136,32 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+      ) : movies.length > 0 ? (
+        /* No reviews yet, but films are in — lead with the library so the page
+           is never an empty stage. */
+        <section className="pt-10">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            For the love of <span className="text-accent">film criticism</span>
+          </h1>
+          <p className="mt-4 max-w-2xl text-muted">
+            {movies.length} films are on the shelf and nobody has written about them yet. That is
+            an opportunity.
+          </p>
+          <div className="mt-6 flex gap-3">
+            <Link
+              href="/write"
+              className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-black hover:opacity-90"
+            >
+              Write the first review
+            </Link>
+            <Link
+              href="/movies"
+              className="rounded-lg border border-line px-5 py-2.5 text-sm font-semibold hover:border-accent-dim"
+            >
+              Browse the library
+            </Link>
+          </div>
+        </section>
       ) : (
         <section className="pt-16 text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
@@ -148,56 +181,64 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── ③ Editorial spread — this week's read ── */}
-      {lead && (
-        <section className="grid items-center gap-8 sm:grid-cols-[1fr_auto]">
-          <div className="min-w-0">
-            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-              The week&apos;s read
-            </p>
-            <blockquote className="mt-4 border-l-2 border-accent pl-5 text-2xl font-medium leading-snug text-foreground/90 sm:text-[1.7rem]">
-              “{lead.excerpt}”
-            </blockquote>
-            <p className="mt-4 text-sm text-muted">
-              from{" "}
-              <Link
-                href={`/reviews/${lead.slug}`}
-                className="font-semibold text-foreground underline decoration-accent underline-offset-4 hover:text-accent"
-              >
-                {lead.title}
-              </Link>{" "}
-              · {lead.movie.title} · by {lead.author.displayName ?? lead.author.username} ·{" "}
-              <StarRating rating={lead.rating} showNumber={false} />
-            </p>
-          </div>
-          <Link href={`/movies/${lead.movie.id}`} className="hidden sm:block">
-            <Poster
-              path={lead.movie.posterPath}
-              title={lead.movie.title}
-              className="w-36 rotate-2 rounded-xl border border-line shadow-2xl transition-transform hover:rotate-0"
-            />
-          </Link>
-        </section>
+      {/* ── ③ In the library — posters directly under the billboard.
+             Pulled up so the cards break the fold: the page announces
+             "keep scrolling" by itself, and it leads with films, not text. ── */}
+      {movies.length > 0 && (
+        <Rail
+          title="In the library"
+          className="relative z-[1] -mt-4"
+          action={
+            <Link href="/movies" className="text-sm text-muted hover:text-foreground">
+              All movies →
+            </Link>
+          }
+        >
+          {[...movies]
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .slice(0, 12)
+            .map((m) => {
+              const n = m.reviews.length;
+              const avgR = n > 0 ? m.reviews.reduce((s, r) => s + r.rating, 0) / n : null;
+              return (
+                <Link key={m.id} href={`/movies/${m.id}`} className="group w-40">
+                  <Poster
+                    path={m.posterPath}
+                    title={m.title}
+                    className="aspect-2/3 w-full rounded-lg border border-line shadow-lg transition-transform group-hover:scale-[1.03]"
+                  />
+                  <p className="mt-2 truncate text-sm group-hover:text-accent transition-colors">
+                    {m.title}
+                  </p>
+                  <p className="font-mono text-xs text-muted">
+                    {m.releaseDate ? new Date(m.releaseDate).getFullYear() : ""}
+                    {avgR != null && (
+                      <span className="ml-2 text-accent">★ {toStarScale(avgR).toFixed(1)}</span>
+                    )}
+                    {n === 0 && <span className="ml-1 text-accent/70">· review it first</span>}
+                  </p>
+                </Link>
+              );
+            })}
+        </Rail>
       )}
 
       {/* ── ④ Latest reviews — mixed-density rail ── */}
       {railReviews.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-              Latest reviews
-            </h2>
+        <Rail
+          title="Latest reviews"
+          action={
             <Link href="/reviews" className="text-sm text-muted hover:text-foreground">
               All reviews →
             </Link>
-          </div>
-          <div className="cx-rail mt-4">
-            {railReviews.map((r, i) => (
+          }
+        >
+          {railReviews.map((r, i) => (
               <Link
                 key={r.slug}
                 href={`/reviews/${r.slug}`}
                 className={`group relative overflow-hidden rounded-xl border border-line ${
-                  i === 0 ? "w-[26rem] max-w-[85vw]" : "w-56"
+                  i === 0 ? "w-[32rem] max-w-[88vw]" : "w-64"
                 }`}
               >
                 <div className={`relative ${i === 0 ? "aspect-video" : "aspect-[4/5]"}`}>
@@ -236,28 +277,57 @@ export default async function HomePage() {
                 </div>
               </Link>
             ))}
+        </Rail>
+      )}
+
+      {/* ── ④ Editorial spread — this week's read ── */}
+      {lead && (
+        <section className="grid items-center gap-8 border-y border-line py-10 sm:grid-cols-[1fr_auto]">
+          <div className="min-w-0">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
+              The week&apos;s read
+            </p>
+            <blockquote className="mt-4 border-l-2 border-accent pl-5 text-2xl font-medium leading-snug text-foreground/90 sm:text-[1.7rem]">
+              “{lead.excerpt}”
+            </blockquote>
+            <p className="mt-4 text-sm text-muted">
+              from{" "}
+              <Link
+                href={`/reviews/${lead.slug}`}
+                className="font-semibold text-foreground underline decoration-accent underline-offset-4 hover:text-accent"
+              >
+                {lead.title}
+              </Link>{" "}
+              · {lead.movie.title} · by {lead.author.displayName ?? lead.author.username} ·{" "}
+              <StarRating rating={lead.rating} showNumber={false} />
+            </p>
           </div>
+          <Link href={`/movies/${lead.movie.id}`} className="hidden sm:block">
+            <Poster
+              path={lead.movie.posterPath}
+              title={lead.movie.title}
+              className="w-36 rotate-2 rounded-xl border border-line shadow-2xl transition-transform hover:rotate-0"
+            />
+          </Link>
         </section>
       )}
 
       {/* ── ⑤a Top rated — rank numerals layered behind posters ── */}
       {topRated.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-              Top rated by the fandom
-            </h2>
-            <span className="font-mono text-[10px] text-muted">
+        <Rail
+          title="Top rated by the fandom"
+          action={
+            <span className="hidden font-mono text-[10px] text-muted sm:inline">
               avg ★ weighted by review count
             </span>
-          </div>
-          <div className="cx-rail mt-4 pl-6">
-            {topRated.map((m, i) => (
-              <Link key={m.id} href={`/movies/${m.id}`} className="group relative w-32 pl-7">
+          }
+        >
+          {topRated.map((m, i) => (
+              <Link key={m.id} href={`/movies/${m.id}`} className="group relative w-44 pl-10">
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute -left-1 bottom-0 z-0 select-none font-mono text-[5.5rem] font-extrabold leading-none text-transparent"
-                  style={{ WebkitTextStroke: "2px var(--border)" }}
+                  className="pointer-events-none absolute -left-2 bottom-4 z-0 select-none text-[7rem] font-black leading-none tracking-tighter text-transparent"
+                  style={{ WebkitTextStroke: "3px color-mix(in oklab, var(--muted) 55%, transparent)" }}
                 >
                   {i + 1}
                 </span>
@@ -277,11 +347,10 @@ export default async function HomePage() {
                 </div>
               </Link>
             ))}
-          </div>
-        </section>
+        </Rail>
       )}
 
-      {/* ── ⑤b Critics spotlight — typographic rail ── */}
+      {/* ── ⑥ Critics spotlight — typographic rail ── */}
       {critics.length > 0 && (
         <section>
           <div className="flex items-baseline justify-between">

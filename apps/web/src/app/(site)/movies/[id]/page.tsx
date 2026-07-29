@@ -8,9 +8,11 @@ import { BoxOfficeBand } from "@/components/BoxOfficeBand";
 import { CastRail } from "@/components/CastRail";
 import { CrewList } from "@/components/CrewList";
 import { Poster } from "@/components/Poster";
+import { PosterGallery } from "@/components/PosterGallery";
 import { ReviewIndex } from "@/components/ReviewIndex";
 import { ScoreBand } from "@/components/ScoreBand";
 import { TrailerEmbed } from "@/components/TrailerEmbed";
+import { VideoGallery } from "@/components/VideoGallery";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,8 @@ async function getMovie(id: string) {
     include: {
       cast: { orderBy: { order: "asc" } },
       crew: true,
+      videos: { orderBy: { sort: "asc" } },
+      images: { orderBy: [{ kind: "asc" }, { sort: "asc" }] },
       reviews: {
         where: { status: "PUBLISHED" },
         orderBy: { publishedAt: "desc" },
@@ -62,6 +66,37 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
   const ratings = movie.reviews.map((r) => r.rating);
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
 
+  // Production companies are stored as JSON; render only well-formed entries.
+  let companies: { name: string; logoPath: string | null }[] = [];
+  try {
+    const parsed = JSON.parse(movie.companies ?? "[]");
+    if (Array.isArray(parsed)) {
+      companies = parsed.filter((c) => typeof c?.name === "string").slice(0, 8);
+    }
+  } catch {
+    companies = [];
+  }
+
+  // Other films in the same franchise, if the library has any.
+  const seriesEntries = movie.collectionId
+    ? await prisma.movie.findMany({
+        where: { collectionId: movie.collectionId, NOT: { id: movie.id } },
+        orderBy: { releaseDate: "asc" },
+        select: { id: true, title: true, posterPath: true, releaseDate: true },
+      })
+    : [];
+
+  const socials = [
+    movie.homepage && { label: "Official site", href: movie.homepage },
+    movie.instagram && {
+      label: "Instagram",
+      href: `https://www.instagram.com/${movie.instagram}/`,
+    },
+    movie.facebook && { label: "Facebook", href: `https://www.facebook.com/${movie.facebook}/` },
+    movie.twitter && { label: "X / Twitter", href: `https://twitter.com/${movie.twitter}` },
+    movie.imdbId && { label: "IMDb", href: `https://www.imdb.com/title/${movie.imdbId}/` },
+  ].filter((s): s is { label: string; href: string } => Boolean(s));
+
   // Similar: genre overlap within the library, most-reviewed first.
   const similar =
     genres.length > 0
@@ -99,23 +134,32 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
 
   return (
     <article className="space-y-12">
-      {/* ① Backdrop hero — full bleed */}
-      <header className="relative -mt-8 left-1/2 w-screen -translate-x-1/2">
-        <div className="relative min-h-[19rem] overflow-hidden sm:min-h-[24rem]">
+      {/* ① Backdrop hero — full bleed, rises behind the nav */}
+      <header className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
+        <div className="relative min-h-[22rem] overflow-hidden sm:min-h-[28rem]">
           {movie.backdropPath ? (
             <Image
-              src={`https://image.tmdb.org/t/p/w780${movie.backdropPath}`}
+              src={`https://image.tmdb.org/t/p/w1280${movie.backdropPath}`}
               alt=""
               fill
               priority
-              className="object-cover opacity-35"
+              className="object-cover opacity-40"
+            />
+          ) : movie.posterPath ? (
+            <Image
+              src={`https://image.tmdb.org/t/p/w780${movie.posterPath}`}
+              alt=""
+              fill
+              priority
+              className="scale-125 object-cover opacity-25 blur-2xl"
             />
           ) : (
             <div className="absolute inset-0 bg-surface" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-transparent" />
-          <div className="relative mx-auto flex min-h-[19rem] max-w-5xl flex-col justify-end px-4 pb-8 sm:min-h-[24rem]">
-            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-black/20" />
+          {/* sm:pl-48 keeps the hero copy clear of the poster layered below-left */}
+          <div className="relative mx-auto flex min-h-[22rem] max-w-5xl flex-col justify-end px-4 pb-8 sm:min-h-[28rem] sm:pl-48">
+            <h1 className="text-balance text-[clamp(1.9rem,6vw,3.25rem)] font-bold leading-[1.1] tracking-tight">
               {movie.title}
             </h1>
             {movie.tagline && (
@@ -127,22 +171,17 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
                 : ""}
               {metaLine}
             </p>
-            <div className="mt-5 flex gap-3">
+            <div className="mt-5 flex flex-wrap gap-3">
               <Link
                 href={`/write`}
                 className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-black hover:opacity-90"
               >
                 ✚ Write a review
               </Link>
-              {movie.imdbId && (
-                <a
-                  href={`https://www.imdb.com/title/${movie.imdbId}/`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg border border-line bg-background/50 px-5 py-2.5 text-sm font-semibold backdrop-blur hover:border-accent-dim"
-                >
-                  IMDb ↗
-                </a>
+              {movie.collectionName && (
+                <span className="rounded-lg border border-line bg-background/50 px-5 py-2.5 text-sm font-semibold backdrop-blur">
+                  {movie.collectionName}
+                </span>
               )}
             </div>
           </div>
@@ -197,8 +236,36 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
                 ? [{ label: "Director", value: movie.director }]
                 : []),
               ...(countries.length > 0 ? [{ label: "Country", value: countries.join(", ") }] : []),
+              ...(companies.length > 0
+                ? [{ label: "Studios", value: companies.map((c) => c.name).join(", ") }]
+                : []),
+              ...(movie.collectionName
+                ? [{ label: "Series", value: movie.collectionName }]
+                : []),
             ]}
           />
+
+          {socials.length > 0 && (
+            <>
+              <h2 className="mb-3 mt-8 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+                Official
+              </h2>
+              <ul className="flex flex-wrap gap-2">
+                {socials.map((s) => (
+                  <li key={s.href}>
+                    <a
+                      href={s.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent-dim hover:text-foreground"
+                    >
+                      {s.label} ↗
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       </div>
 
@@ -215,8 +282,53 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
         }))}
       />
 
-      {/* ⑦ Trailer */}
-      {movie.trailerKey && <TrailerEmbed youtubeKey={movie.trailerKey} title={movie.title} />}
+      {/* ⑦ Videos — picker when a film has several */}
+      {movie.videos.length > 0 ? (
+        <VideoGallery
+          title={movie.title}
+          videos={movie.videos.map((v) => ({
+            id: v.id,
+            youtubeKey: v.youtubeKey,
+            name: v.name,
+            type: v.type,
+            official: v.official,
+          }))}
+        />
+      ) : (
+        movie.trailerKey && <TrailerEmbed youtubeKey={movie.trailerKey} title={movie.title} />
+      )}
+
+      {/* ⑧ Artwork gallery */}
+      <PosterGallery
+        title={movie.title}
+        artwork={movie.images.map((i) => ({ id: i.id, path: i.path, kind: i.kind }))}
+      />
+
+      {/* ⑨ The series this film belongs to */}
+      {seriesEntries.length > 0 && (
+        <section>
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            {movie.collectionName ?? "Series"}
+          </h2>
+          <div className="cx-rail mt-3">
+            {seriesEntries.map((s) => (
+              <Link key={s.id} href={`/movies/${s.id}`} className="group w-28">
+                <Poster
+                  path={s.posterPath}
+                  title={s.title}
+                  className="aspect-2/3 w-full rounded-lg border border-line transition-transform group-hover:scale-[1.03]"
+                />
+                <p className="mt-1.5 truncate text-xs group-hover:text-accent transition-colors">
+                  {s.title}
+                </p>
+                <p className="font-mono text-[11px] text-muted">
+                  {s.releaseDate ? new Date(s.releaseDate).getFullYear() : ""}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ⑨ Fandom reviews — credits-roll index */}
       <section>

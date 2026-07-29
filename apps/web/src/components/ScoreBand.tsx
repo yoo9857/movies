@@ -20,20 +20,35 @@ export function ScoreBand({
       ? Math.round((fandomStars - tmdbStars) * 100) / 100
       : null;
 
+  // With no fandom reviews yet, the TMDB score takes the display slot
+  // instead of a dangling dash.
+  const heroValue = fandomStars ?? tmdbStars;
+  const heroIsFandom = fandomStars != null;
+
   return (
     <div className="flex flex-wrap items-end gap-x-8 gap-y-4 border-y border-line py-5">
       <div className="flex items-baseline gap-4">
         <span
-          className="text-6xl font-extrabold leading-none tracking-tight text-accent tabular-nums"
-          aria-label={fandomStars != null ? `Fandom score ${fandomStars} out of 5` : "Not yet rated"}
+          className={`text-6xl font-extrabold leading-none tracking-tight tabular-nums ${
+            heroIsFandom ? "text-accent" : "text-foreground/80"
+          }`}
+          aria-label={
+            heroValue != null
+              ? `${heroIsFandom ? "Fandom" : "TMDB"} score ${heroValue} out of 5`
+              : "Not yet rated"
+          }
         >
-          {fandomStars != null ? fandomStars.toFixed(1) : "—"}
+          {heroValue != null ? heroValue.toFixed(1) : "N/A"}
         </span>
         <div className="flex flex-col gap-0.5">
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            Fandom score · {count} review{count === 1 ? "" : "s"}
+            {heroIsFandom
+              ? `Fandom score · ${count} review${count === 1 ? "" : "s"}`
+              : heroValue != null
+                ? "TMDB score · awaiting fandom reviews"
+                : "Unrated"}
           </span>
-          {tmdbStars != null ? (
+          {heroIsFandom && tmdbStars != null ? (
             <span className="text-sm">
               TMDB {tmdbScore!.toFixed(1)}
               <span className="text-muted">/10</span>
@@ -61,7 +76,11 @@ export function ScoreBand({
             </span>
           ) : (
             <span className="text-sm text-muted">
-              {count === 0 ? "Be the first to rate it." : "No TMDB score on file."}
+              {count === 0
+                ? `Be the first to rate it${
+                    tmdbVotes != null ? ` — ${tmdbVotes.toLocaleString("en-US")} TMDB votes so far` : ""
+                  }.`
+                : "No TMDB score on file."}
             </span>
           )}
         </div>

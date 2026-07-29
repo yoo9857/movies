@@ -15,6 +15,7 @@
     "db:generate": "npm run generate -w @cinepixo/db",
     "db:migrate": "npm run migrate -w @cinepixo/db",
     "db:seed": "npm run seed -w @cinepixo/db",
+    "db:seed:library": "npm run seed:library -w @cinepixo/db",
     "db:studio": "npm run studio -w @cinepixo/db"
   },
   "engines": {

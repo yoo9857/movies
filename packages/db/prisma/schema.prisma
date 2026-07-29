@@ -65,15 +65,60 @@ model Movie {
   voteAverage   Float?
   voteCount     Int?
   popularity    Float?
-  // YouTube key of the primary trailer
+  // YouTube key of the primary trailer (the rest live in MovieVideo)
   trailerKey    String?
+  // Franchise / series this film belongs to
+  collectionId   Int?
+  collectionName String?
+  // JSON string: [{ "name": "Barunson E&A", "logoPath": "/x.png" }]
+  companies      String?
+  // Official presence
+  homepage       String?
+  instagram      String?
+  facebook       String?
+  twitter        String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   reviews       Review[]
   cast          MovieCast[]
   crew          MovieCrew[]
+  videos        MovieVideo[]
+  images        MovieImage[]
 
   @@index([title])
+  @@index([collectionId])
+}
+
+// Trailers, teasers and clips — so a film with several gets a picker.
+model MovieVideo {
+  id          String   @id @default(cuid())
+  movieId     String
+  movie       Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  youtubeKey  String
+  name        String
+  type        String   // "Trailer" | "Teaser" | "Clip" | "Featurette"
+  official    Boolean  @default(false)
+  publishedAt DateTime?
+  sort        Int      @default(0)
+
+  @@unique([movieId, youtubeKey])
+  @@index([movieId, sort])
+}
+
+// Alternate posters and stills for the gallery.
+model MovieImage {
+  id      String  @id @default(cuid())
+  movieId String
+  movie   Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  // "poster" | "backdrop"
+  kind    String
+  path    String
+  // ISO 639-1 language of any burned-in title text, when TMDB reports one
+  lang    String?
+  sort    Int     @default(0)
+
+  @@unique([movieId, path])
+  @@index([movieId, kind, sort])
 }
 
 // Top-billed cast, in TMDB billing order.

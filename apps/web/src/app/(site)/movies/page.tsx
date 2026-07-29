@@ -81,10 +81,11 @@ export default async function MoviesPage(props: {
     }
   });
 
-  // Editor's pick: most reviewed among the current filter
+  // Editor's pick: most reviewed — only once the library is big enough
+  // that pulling one film out doesn't empty the index.
   const featured =
-    view === "index" && !genre && decade == null
-      ? [...movies].sort((a, b) => b.count - a.count)[0]
+    view === "index" && !genre && decade == null && movies.length >= 5
+      ? ([...movies].sort((a, b) => b.count - a.count).find((m) => m.count > 0) ?? null)
       : null;
   const listed = featured ? movies.filter((m) => m.id !== featured.id) : movies;
 

@@ -6,11 +6,22 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import {
   extractCast,
   extractCertification,
+  extractCompanies,
   extractDirector,
+  extractImages,
   extractKeyCrew,
   extractTrailerKey,
+  extractVideos,
   getMovieDetail,
 } from "@/lib/tmdb";
+
+// TMDB gives bare handles; store nothing that isn't a plain handle/slug.
+function socialHandle(v: string | null | undefined): string | null {
+  return v && /^[A-Za-z0-9._-]{1,60}$/.test(v) ? v : null;
+}
+function httpUrl(v: string | null | undefined): string | null {
+  return v && /^https?:\/\//.test(v) ? v.slice(0, 500) : null;
+}
 
 const importSchema = z.object({ tmdbId: z.number().int().positive() });
 
@@ -44,10 +55,19 @@ export const POST = handle(async (request: Request) => {
     voteCount: d.vote_count > 0 ? d.vote_count : null,
     popularity: d.popularity > 0 ? d.popularity : null,
     trailerKey: extractTrailerKey(d) ?? null,
+    collectionId: d.belongs_to_collection?.id ?? null,
+    collectionName: d.belongs_to_collection?.name ?? null,
+    companies: JSON.stringify(extractCompanies(d)),
+    homepage: httpUrl(d.homepage),
+    instagram: socialHandle(d.external_ids?.instagram_id),
+    facebook: socialHandle(d.external_ids?.facebook_id),
+    twitter: socialHandle(d.external_ids?.twitter_id),
   };
 
   const cast = extractCast(d);
   const crew = extractKeyCrew(d);
+  const videos = extractVideos(d);
+  const { posters, backdrops } = extractImages(d);
 
   // Idempotent refresh: replace cast/crew atomically with the movie upsert.
   const movie = await prisma.$transaction(async (tx) => {
@@ -58,6 +78,30 @@ export const POST = handle(async (request: Request) => {
     });
     await tx.movieCast.deleteMany({ where: { movieId: m.id } });
     await tx.movieCrew.deleteMany({ where: { movieId: m.id } });
+    await tx.movieVideo.deleteMany({ where: { movieId: m.id } });
+    await tx.movieImage.deleteMany({ where: { movieId: m.id } });
+    if (videos.length > 0) {
+      await tx.movieVideo.createMany({
+        data: videos.map((v, i) => ({
+          movieId: m.id,
+          youtubeKey: v.key,
+          name: v.name ?? v.type,
+          type: v.type,
+          official: v.official,
+          publishedAt: v.published_at ? new Date(v.published_at) : null,
+          sort: i,
+        })),
+      });
+    }
+    const artwork = [
+      ...posters.map((p, i) => ({ kind: "poster", path: p.file_path, lang: p.iso_639_1, sort: i })),
+      ...backdrops.map((b, i) => ({ kind: "backdrop", path: b.file_path, lang: b.iso_639_1, sort: i })),
+    ];
+    if (artwork.length > 0) {
+      await tx.movieImage.createMany({
+        data: artwork.map((a) => ({ movieId: m.id, ...a })),
+      });
+    }
     if (cast.length > 0) {
       await tx.movieCast.createMany({
         data: cast.map((c) => ({

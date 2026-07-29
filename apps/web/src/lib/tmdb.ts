@@ -18,6 +18,7 @@ export interface TmdbMovieSummary {
 export interface TmdbMovieDetail extends TmdbMovieSummary {
   imdb_id: string | null;
   tagline: string | null;
+  homepage: string | null;
   runtime: number | null;
   budget: number;
   revenue: number;
@@ -25,6 +26,17 @@ export interface TmdbMovieDetail extends TmdbMovieSummary {
   popularity: number;
   genres: { id: number; name: string }[];
   production_countries: { iso_3166_1: string; name: string }[];
+  production_companies: { id: number; name: string; logo_path: string | null }[];
+  belongs_to_collection: { id: number; name: string; poster_path: string | null } | null;
+  external_ids?: {
+    instagram_id: string | null;
+    facebook_id: string | null;
+    twitter_id: string | null;
+  };
+  images?: {
+    posters: { file_path: string; iso_639_1: string | null; vote_average: number }[];
+    backdrops: { file_path: string; iso_639_1: string | null; vote_average: number }[];
+  };
   credits?: {
     cast: {
       id: number;
@@ -45,6 +57,7 @@ export interface TmdbMovieDetail extends TmdbMovieSummary {
   videos?: {
     results: {
       key: string;
+      name: string;
       site: string;
       type: string;
       official: boolean;
@@ -91,7 +104,9 @@ export async function searchMovies(query: string): Promise<TmdbMovieSummary[]> {
 export async function getMovieDetail(tmdbId: number): Promise<TmdbMovieDetail> {
   return tmdbFetch<TmdbMovieDetail>(`/movie/${tmdbId}`, {
     language: "en-US",
-    append_to_response: "credits,keywords,videos,release_dates",
+    append_to_response: "credits,keywords,videos,release_dates,external_ids,images",
+    // keep English-titled and text-free artwork in the gallery
+    include_image_language: "en,null",
   });
 }
 
@@ -133,14 +148,43 @@ export function extractCertification(d: TmdbMovieDetail): string | undefined {
   return us?.release_dates.find((rd) => rd.certification)?.certification || undefined;
 }
 
-// Prefer official YouTube trailers, newest first.
+const VIDEO_TYPES = new Set(["Trailer", "Teaser", "Clip", "Featurette"]);
+
+// Watchable videos, best first: official trailers ahead of teasers and clips.
+export function extractVideos(d: TmdbMovieDetail) {
+  const rank = (type: string, official: boolean) =>
+    (type === "Trailer" ? 3 : type === "Teaser" ? 2 : type === "Clip" ? 1 : 0) + (official ? 1 : 0);
+
+  const seen = new Set<string>();
+  return (d.videos?.results ?? [])
+    .filter((v) => v.site === "YouTube" && VIDEO_TYPES.has(v.type))
+    .filter((v) => (seen.has(v.key) ? false : (seen.add(v.key), true)))
+    .sort(
+      (a, b) =>
+        rank(b.type, b.official) - rank(a.type, a.official) ||
+        (b.published_at ?? "").localeCompare(a.published_at ?? ""),
+    )
+    .slice(0, 8);
+}
+
 export function extractTrailerKey(d: TmdbMovieDetail): string | undefined {
-  const vids = (d.videos?.results ?? []).filter((v) => v.site === "YouTube");
-  const rank = (v: (typeof vids)[number]) =>
-    (v.type === "Trailer" ? 2 : v.type === "Teaser" ? 1 : 0) + (v.official ? 1 : 0);
-  return vids.sort(
-    (a, b) => rank(b) - rank(a) || b.published_at.localeCompare(a.published_at),
-  )[0]?.key;
+  return extractVideos(d)[0]?.key;
+}
+
+// Highest-rated artwork first; posters and stills capped so imports stay light.
+export function extractImages(d: TmdbMovieDetail) {
+  const pick = (list: { file_path: string; iso_639_1: string | null; vote_average: number }[] | undefined, n: number) =>
+    (list ?? []).slice().sort((a, b) => b.vote_average - a.vote_average).slice(0, n);
+  return {
+    posters: pick(d.images?.posters, 10),
+    backdrops: pick(d.images?.backdrops, 8),
+  };
+}
+
+export function extractCompanies(d: TmdbMovieDetail) {
+  return d.production_companies
+    .slice(0, 8)
+    .map((c) => ({ name: c.name, logoPath: c.logo_path }));
 }
 
 export function tmdbImageUrl(path: string | null, size: "w185" | "w342" | "w780" = "w342"): string | null {

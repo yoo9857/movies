@@ -63,16 +63,16 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
   return (
     <article className="mx-auto max-w-3xl">
       {movie.backdropPath && (
-        <div className="relative -mt-8 left-1/2 mb-8 w-screen -translate-x-1/2">
-          <div className="relative h-44 overflow-hidden sm:h-60">
+        <div className="relative -mt-[8.25rem] left-1/2 mb-8 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
+          <div className="relative h-56 overflow-hidden sm:h-72">
             <Image
-              src={`https://image.tmdb.org/t/p/w780${movie.backdropPath}`}
+              src={`https://image.tmdb.org/t/p/w1280${movie.backdropPath}`}
               alt=""
               fill
               priority
               className="object-cover opacity-35"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-black/20" />
           </div>
         </div>
       )}
