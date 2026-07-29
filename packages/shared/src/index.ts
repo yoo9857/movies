@@ -43,16 +43,81 @@ export const slugSchema = z
 // 0–10 in half-point steps
 export const ratingSchema = z.number().min(0).max(10).multipleOf(0.5);
 
+export const spoilerLevelSchema = z.enum(["NONE", "MILD", "FULL"]);
+export type SpoilerLevel = z.infer<typeof spoilerLevelSchema>;
+
+export const SPOILER_LABELS: Record<SpoilerLevel, string> = {
+  NONE: "Spoiler-free",
+  MILD: "Minor spoilers",
+  FULL: "Full spoilers",
+};
+
 export const reviewInputSchema = z.object({
   slug: slugSchema,
   title: z.string().trim().min(1).max(200),
   excerpt: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  // conclusion-first one-liner, shown above the body
+  verdict: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
   content: z.string().min(1).max(100_000),
   rating: ratingSchema,
   status: reviewStatusSchema,
+  spoilers: spoilerLevelSchema.default("NONE"),
   movieId: z.string().min(1).max(64),
 });
 export type ReviewInput = z.infer<typeof reviewInputSchema>;
+
+// ── Reading helpers ──────────────────────────────────────────────
+
+// Words per minute for prose; deliberately conservative for criticism.
+const WPM = 220;
+
+export function readingMinutes(markdown: string): number {
+  const words = markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#>*_`~\[\]()!|:-]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+  // CJK has no spaces — count characters and treat ~500/min
+  const cjk = (markdown.match(/[ㄱ-힝一-鿿぀-ヿ]/g) ?? []).length;
+  const minutes = words / WPM + cjk / 500;
+  return Math.max(1, Math.round(minutes));
+}
+
+export function countWords(markdown: string): number {
+  const latin = markdown.trim().split(/\s+/).filter(Boolean).length;
+  const cjk = (markdown.match(/[ㄱ-힝一-鿿぀-ヿ]/g) ?? []).length;
+  return cjk > latin ? cjk : latin;
+}
+
+// Section headings (## / ###) for the table of contents. Slugs match the ids
+// the renderer assigns, so anchors line up.
+export function headingSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+}
+
+export function extractHeadings(markdown: string): { level: 2 | 3; text: string; id: string }[] {
+  const out: { level: 2 | 3; text: string; id: string }[] = [];
+  const seen = new Map<string, number>();
+  // ignore headings inside fenced code
+  const body = markdown.replace(/```[\s\S]*?```/g, "");
+  for (const line of body.split("\n")) {
+    const m = /^(##|###)\s+(.+?)\s*$/.exec(line);
+    if (!m) continue;
+    const text = m[2].replace(/[*_`]/g, "").trim();
+    let id = headingSlug(text) || "section";
+    const n = seen.get(id) ?? 0;
+    seen.set(id, n + 1);
+    if (n > 0) id = `${id}-${n + 1}`;
+    out.push({ level: m[1] === "##" ? 2 : 3, text, id });
+  }
+  return out;
+}
 
 // ── Critics ──────────────────────────────────────────────────────
 

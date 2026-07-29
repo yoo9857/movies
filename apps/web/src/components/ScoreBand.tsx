@@ -2,6 +2,7 @@
 // the logo's reel dots — the site's most important number wears the mark.
 import { toStarScale } from "@cinepixo/shared";
 import { RatingHistogram } from "./RatingHistogram";
+import { ScoreMark } from "./ScoreMark";
 
 export function ScoreBand({
   ratings,
@@ -28,33 +29,18 @@ export function ScoreBand({
 
   return (
     <div className="flex flex-wrap items-center gap-x-8 gap-y-6">
-      {/* Score bubble */}
-      <div
-        className={`cx-bubble flex shrink-0 flex-col items-center px-6 pb-4 pt-3 ${
-          heroIsFandom ? "" : "opacity-80"
-        }`}
-      >
-        <span className="cx-reel-dots mb-1.5" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        <span
-          className={`text-[3.25rem] font-extrabold leading-none tracking-tight tabular-nums ${
-            heroIsFandom ? "text-accent" : "text-foreground/75"
-          }`}
-          aria-label={
-            heroValue != null
-              ? `${heroIsFandom ? "Fandom" : "TMDB"} score ${heroValue} out of 5`
-              : "Not yet rated"
-          }
-        >
-          {heroValue != null ? heroValue.toFixed(1) : "N/A"}
-        </span>
-        <span className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-muted">
-          {heroIsFandom ? "fandom" : "tmdb"} · out of 5
-        </span>
-      </div>
+      {heroValue != null ? (
+        <ScoreMark
+          value={heroValue}
+          tone={heroIsFandom ? "fandom" : "world"}
+          label={heroIsFandom ? "fandom score" : "TMDB score"}
+          size={104}
+        />
+      ) : (
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-dashed border-line font-mono text-[10px] uppercase tracking-widest text-muted">
+          unrated
+        </div>
+      )}
 
       <div className="flex min-w-0 flex-col gap-1">
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">

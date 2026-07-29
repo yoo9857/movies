@@ -39,9 +39,11 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
       slug: input.slug,
       title: input.title,
       excerpt: input.excerpt ?? null,
+      verdict: input.verdict ?? null,
       content: input.content,
       rating: input.rating,
       status: input.status,
+      spoilers: input.spoilers,
       // keep the original publish date on re-saves; stamp on first publish
       publishedAt:
         input.status === "PUBLISHED" ? (current.publishedAt ?? new Date()) : null,

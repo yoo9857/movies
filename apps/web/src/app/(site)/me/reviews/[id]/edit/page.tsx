@@ -1,7 +1,7 @@
 import { prisma } from "@cinepixo/db";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { ReviewForm } from "@/components/admin/ReviewForm";
+import { ReviewEditor } from "@/components/review/ReviewEditor";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -17,33 +17,35 @@ export default async function EditMyReviewPage(props: { params: Promise<{ id: st
     prisma.review.findUnique({ where: { id } }),
     prisma.movie.findMany({
       orderBy: { title: "asc" },
-      select: { id: true, title: true, releaseDate: true },
+      select: { id: true, title: true, releaseDate: true, director: true },
     }),
   ]);
   // ownership enforced here AND in the API layer
   if (!review || review.authorId !== user.id) notFound();
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-bold">Edit review</h1>
-      <div className="mt-6">
-        <ReviewForm
+    <div className="mx-auto max-w-3xl">
+      <h1 className="text-3xl font-bold tracking-tight">Edit review</h1>
+      <div className="mt-7">
+        <ReviewEditor
           reviewId={review.id}
-          apiBase="/api/v1/my/reviews"
-          doneHref="/me/reviews"
           initial={{
             slug: review.slug,
             title: review.title,
             excerpt: review.excerpt ?? "",
+            verdict: review.verdict ?? "",
             content: review.content,
             rating: review.rating,
             status: review.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT",
+            spoilers:
+              review.spoilers === "FULL" ? "FULL" : review.spoilers === "MILD" ? "MILD" : "NONE",
             movieId: review.movieId,
           }}
           movies={movies.map((m) => ({
             id: m.id,
             title: m.title,
-            releaseDate: m.releaseDate?.toISOString() ?? null,
+            year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
+            director: m.director,
           }))}
         />
       </div>

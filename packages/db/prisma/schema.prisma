@@ -22,6 +22,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   reviews      Review[]
+  votes        ReviewVote[]
 }
 
 // A professional film critic the fandom follows — profile directory.
@@ -155,6 +156,10 @@ model Review {
   slug        String    @unique
   title       String
   excerpt     String?
+  // Conclusion-first: the one-line takeaway, shown before the body
+  verdict     String?
+  // "NONE" | "MILD" | "FULL" — warns readers before they start
+  spoilers    String    @default("NONE")
   // Markdown body — rendered with raw HTML disabled (XSS prevention)
   content     String
   // 0.0–10.0 in 0.5 steps — displayed as a 5-star scale
@@ -167,10 +172,27 @@ model Review {
   author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   movieId     String
   movie       Movie     @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  helpfulCount Int      @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  votes       ReviewVote[]
 
   @@index([status, publishedAt(sort: Desc)])
   @@index([authorId])
   @@index([movieId])
+  @@index([status, helpfulCount(sort: Desc)])
+}
+
+// "This review was useful" — one per member per review. The denormalised
+// counter on Review keeps list sorting cheap.
+model ReviewVote {
+  id        String   @id @default(cuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([reviewId, userId])
+  @@index([userId])
 }

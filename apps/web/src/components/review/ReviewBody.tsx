@@ -1,0 +1,180 @@
+// Renders a review's markdown with CinePixo's authoring primitives.
+//
+// Raw HTML is never enabled — every extension below is implemented by
+// splitting the source into blocks and handing each block to react-markdown,
+// so nothing an author types can inject markup.
+//
+//   :::spoiler … :::   a region covered until the reader reveals it
+//   :::trailer         the linked film's trailer, inline in the argument
+//   :::still 2         still #2 from the film, full width
+//   ==text==           highlighted phrase
+//   > line             pull quote (set large, used as a section beat)
+//
+import Image from "next/image";
+import type { ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { headingSlug } from "@cinepixo/shared";
+import { TrailerEmbed } from "../TrailerEmbed";
+import { Spoiler } from "./Spoiler";
+
+export interface ReviewMedia {
+  title: string;
+  trailerKey: string | null;
+  stills: string[];
+}
+
+type Block =
+  | { kind: "md"; text: string }
+  | { kind: "spoiler"; text: string }
+  | { kind: "trailer" }
+  | { kind: "still"; index: number };
+
+// Split on ::: directives at the start of a line.
+function parse(source: string): Block[] {
+  const lines = source.split("\n");
+  const blocks: Block[] = [];
+  let buf: string[] = [];
+  let spoiler: string[] | null = null;
+
+  const flush = () => {
+    if (buf.join("").trim()) blocks.push({ kind: "md", text: buf.join("\n") });
+    buf = [];
+  };
+
+  for (const line of lines) {
+    const open = /^:::\s*(spoiler|trailer|still)\s*(\d+)?\s*$/i.exec(line.trim());
+
+    if (spoiler !== null) {
+      if (line.trim() === ":::") {
+        blocks.push({ kind: "spoiler", text: spoiler.join("\n") });
+        spoiler = null;
+      } else {
+        spoiler.push(line);
+      }
+      continue;
+    }
+
+    if (open) {
+      const kind = open[1].toLowerCase();
+      flush();
+      if (kind === "spoiler") spoiler = [];
+      else if (kind === "trailer") blocks.push({ kind: "trailer" });
+      else blocks.push({ kind: "still", index: Math.max(1, Number(open[2] ?? 1)) - 1 });
+      continue;
+    }
+
+    buf.push(line);
+  }
+
+  // an unterminated spoiler still gets covered rather than leaking
+  if (spoiler !== null && spoiler.join("").trim()) {
+    blocks.push({ kind: "spoiler", text: spoiler.join("\n") });
+  }
+  flush();
+  return blocks;
+}
+
+// ==highlight== → <mark>, applied to text nodes only.
+function withHighlights(children: ReactNode): ReactNode {
+  const walk = (node: ReactNode): ReactNode => {
+    if (typeof node === "string") {
+      const parts = node.split(/==([^=]+)==/g);
+      if (parts.length === 1) return node;
+      return parts.map((p, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="rounded bg-accent/20 px-1 text-accent">
+            {p}
+          </mark>
+        ) : (
+          p
+        ),
+      );
+    }
+    if (Array.isArray(node)) return node.map((n, i) => <span key={i}>{walk(n)}</span>);
+    return node;
+  };
+  return walk(children);
+}
+
+function headingText(children: ReactNode): string {
+  if (typeof children === "string") return children;
+  if (Array.isArray(children)) return children.map(headingText).join("");
+  return "";
+}
+
+const components: Components = {
+  h2: ({ children }) => (
+    <h2 id={headingSlug(headingText(children))} className="scroll-mt-24">
+      {withHighlights(children)}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 id={headingSlug(headingText(children))} className="scroll-mt-24">
+      {withHighlights(children)}
+    </h3>
+  ),
+  p: ({ children }) => <p>{withHighlights(children)}</p>,
+  li: ({ children }) => <li>{withHighlights(children)}</li>,
+  // Blockquotes are the review's section beats — set large, not indented prose.
+  blockquote: ({ children }) => (
+    <blockquote className="cx-pullquote">{withHighlights(children)}</blockquote>
+  ),
+  a: ({ href, children }) => {
+    const external = !!href && /^https?:\/\//.test(href);
+    return (
+      <a
+        href={href}
+        {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      >
+        {children}
+      </a>
+    );
+  },
+};
+
+function Md({ text }: { text: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {text}
+    </ReactMarkdown>
+  );
+}
+
+export function ReviewBody({ content, media }: { content: string; media: ReviewMedia }) {
+  const blocks = parse(content);
+
+  return (
+    <div className="prose-review">
+      {blocks.map((b, i) => {
+        if (b.kind === "md") return <Md key={i} text={b.text} />;
+        if (b.kind === "spoiler")
+          return (
+            <Spoiler key={i}>
+              <div className="prose-review">
+                <Md text={b.text} />
+              </div>
+            </Spoiler>
+          );
+        if (b.kind === "trailer")
+          return media.trailerKey ? (
+            <div key={i} className="my-8 not-prose">
+              <TrailerEmbed youtubeKey={media.trailerKey} title={media.title} />
+            </div>
+          ) : null;
+        const still = media.stills[b.index];
+        return still ? (
+          <figure key={i} className="my-8">
+            <Image
+              src={`https://image.tmdb.org/t/p/w780${still}`}
+              alt={`${media.title} still`}
+              width={780}
+              height={439}
+              className="w-full rounded-xl border border-line"
+            />
+          </figure>
+        ) : null;
+      })}
+    </div>
+  );
+}

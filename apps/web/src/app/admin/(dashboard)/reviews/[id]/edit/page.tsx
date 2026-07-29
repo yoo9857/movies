@@ -1,6 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import { notFound } from "next/navigation";
-import { ReviewForm } from "@/components/admin/ReviewForm";
+import { ReviewEditor } from "@/components/review/ReviewEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export default async function EditReviewPage(props: { params: Promise<{ id: stri
     prisma.review.findUnique({ where: { id } }),
     prisma.movie.findMany({
       orderBy: { title: "asc" },
-      select: { id: true, title: true, releaseDate: true },
+      select: { id: true, title: true, releaseDate: true, director: true },
     }),
   ]);
   if (!review) notFound();
@@ -20,21 +20,27 @@ export default async function EditReviewPage(props: { params: Promise<{ id: stri
     <div>
       <h1 className="text-2xl font-bold">Edit review</h1>
       <div className="mt-6">
-        <ReviewForm
+        <ReviewEditor
           reviewId={review.id}
+          apiBase="/api/v1/admin/reviews"
+          doneHref="/admin/reviews"
           initial={{
             slug: review.slug,
             title: review.title,
             excerpt: review.excerpt ?? "",
+            verdict: review.verdict ?? "",
             content: review.content,
             rating: review.rating,
             status: review.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT",
+            spoilers:
+              review.spoilers === "FULL" ? "FULL" : review.spoilers === "MILD" ? "MILD" : "NONE",
             movieId: review.movieId,
           }}
           movies={movies.map((m) => ({
             id: m.id,
             title: m.title,
-            releaseDate: m.releaseDate?.toISOString() ?? null,
+            year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
+            director: m.director,
           }))}
         />
       </div>

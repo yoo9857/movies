@@ -227,7 +227,45 @@ body {
 
 /* Markdown body inside review pages */
 .prose-review {
-  line-height: 1.75;
+  line-height: 1.8;
+  font-size: 1.06rem;
+}
+/* lead paragraph — the opening sets the voice */
+.prose-review > p:first-of-type {
+  font-size: 1.18rem;
+  line-height: 1.7;
+  color: var(--foreground);
+}
+/* Pull quote: a section beat, not indented prose */
+.prose-review .cx-pullquote {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2.5rem 0;
+  padding: 1.5rem 0 1.5rem 2.75rem;
+  font-style: normal;
+  font-size: 1.4rem;
+  line-height: 1.45;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  position: relative;
+}
+.prose-review .cx-pullquote::before {
+  content: "“";
+  position: absolute;
+  left: 0;
+  top: 0.9rem;
+  font-size: 3.4rem;
+  line-height: 1;
+  color: var(--accent);
+}
+.prose-review .cx-pullquote p {
+  margin: 0;
+}
+.prose-review .not-prose {
+  font-size: 1rem;
+  line-height: 1.5;
 }
 .prose-review h2 {
   font-size: 1.35rem;
