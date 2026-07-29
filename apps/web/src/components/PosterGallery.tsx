@@ -4,6 +4,7 @@
 // no library, keyboard reachable.
 import Image from "next/image";
 import { useState } from "react";
+import { SectionHead } from "./ReelDivider";
 
 export interface ArtworkEntry {
   id: string;
@@ -17,15 +18,15 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
   const [poster, setPoster] = useState(0);
   const [still, setStill] = useState(0);
 
-  if (posters.length < 2 && stills.length === 0) return null;
+  if (posters.length === 0 && stills.length === 0) return null;
 
   return (
     <section aria-label="Artwork" className="grid gap-8 sm:grid-cols-[auto_1fr]">
-      {posters.length > 1 && (
+      {posters.length > 0 && (
         <div>
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            Posters · {posters.length}
-          </h2>
+          <SectionHead>
+            {posters.length > 1 ? `Posters · ${posters.length}` : "Poster"}
+          </SectionHead>
           <div className="mt-3 flex gap-4">
             <Image
               key={posters[poster].path}
@@ -33,9 +34,10 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
               alt={`${title} poster`}
               width={342}
               height={513}
-              className="h-56 w-auto rounded-lg border border-line object-contain"
+              className="h-64 w-auto rounded-lg border border-line object-contain"
             />
-            <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+            {posters.length > 1 && (
+            <div className="flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
               {posters.map((p, i) => (
                 <button
                   key={p.id}
@@ -56,15 +58,14 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
                 </button>
               ))}
             </div>
+            )}
           </div>
         </div>
       )}
 
       {stills.length > 0 && (
         <div className="min-w-0">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            Stills · {stills.length}
-          </h2>
+          <SectionHead>{stills.length > 1 ? `Stills · ${stills.length}` : "Still"}</SectionHead>
           <div className="mt-3 space-y-2">
             <Image
               key={stills[still].path}

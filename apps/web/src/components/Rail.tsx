@@ -50,8 +50,15 @@ export function Rail({
 
   return (
     <section className={className}>
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">{title}</h2>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+          <span className="cx-reel-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          {title}
+        </h2>
         <div className="flex items-center gap-3">
           {action}
           <div className="hidden gap-1.5 sm:flex">

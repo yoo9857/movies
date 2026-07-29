@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { HeaderChrome } from "./HeaderChrome";
@@ -17,8 +18,20 @@ export async function SiteHeader() {
     <HeaderChrome>
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
         <div className="flex min-w-0 items-center gap-6">
-          <Link href="/" className="shrink-0 text-lg font-bold tracking-tight">
-            Cine<span className="text-accent">Pixo</span>
+          <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="CinePixo home">
+            {/* The mark is an emblem here — its own knockout type is far too
+                small to read at this size, so the wordmark carries the name. */}
+            <Image
+              src="/logo.png"
+              alt=""
+              width={64}
+              height={64}
+              priority
+              className="h-7 w-7 object-contain"
+            />
+            <span className="text-lg font-bold tracking-tight">
+              Cine<span className="text-accent">Pixo</span>
+            </span>
           </Link>
           {/* On phones these move to the second row so nothing gets squeezed */}
           <nav className="hidden items-center gap-5 text-sm text-muted sm:flex">

@@ -3,6 +3,7 @@ import { parseJsonArray, toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { MovieCard } from "@/components/MovieCard";
 import { Poster } from "@/components/Poster";
 import { RatingHistogram } from "@/components/RatingHistogram";
 
@@ -27,7 +28,9 @@ export default async function MoviesPage(props: {
   const sort: SortKey = (Object.keys(SORTS) as SortKey[]).includes(sp.sort as SortKey)
     ? (sp.sort as SortKey)
     : "fandom";
-  const view = sp.view === "grid" ? "grid" : "index";
+  // Posters are the default: a film library is browsed by sight. The dense
+  // index stays available for anyone comparing numbers.
+  const view = sp.view === "index" ? "index" : "grid";
 
   const rows = await prisma.movie.findMany({
     select: {
@@ -81,10 +84,10 @@ export default async function MoviesPage(props: {
     }
   });
 
-  // Editor's pick: most reviewed — only once the library is big enough
-  // that pulling one film out doesn't empty the index.
+  // Editor's pick banner: unfiltered views only, and only once the library is
+  // big enough that pulling one film out doesn't thin the grid.
   const featured =
-    view === "index" && !genre && decade == null && movies.length >= 5
+    !genre && decade == null && movies.length >= 6
       ? ([...movies].sort((a, b) => b.count - a.count).find((m) => m.count > 0) ?? null)
       : null;
   const listed = featured ? movies.filter((m) => m.id !== featured.id) : movies;
@@ -93,12 +96,24 @@ export default async function MoviesPage(props: {
     const params = new URLSearchParams();
     const merged = { genre, decade: decade?.toString(), sort, view, ...patch };
     for (const [k, v] of Object.entries(merged)) {
-      if (v && !(k === "sort" && v === "fandom") && !(k === "view" && v === "index"))
+      if (v && !(k === "sort" && v === "fandom") && !(k === "view" && v === "grid"))
         params.set(k, v);
     }
     const s = params.toString();
     return s ? `/movies?${s}` : "/movies";
   };
+
+  const cardData = (m: (typeof listed)[number]) => ({
+    id: m.id,
+    title: m.title,
+    posterPath: m.posterPath,
+    releaseDate: m.releaseDate,
+    director: m.director,
+    genres: parseJsonArray(m.genres),
+    voteAverage: m.voteAverage,
+    fandomAvg: m.avg,
+    reviewCount: m.count,
+  });
 
   return (
     <div>
@@ -157,11 +172,11 @@ export default async function MoviesPage(props: {
             </Link>
           ))}
           <Link
-            href={qs({ view: view === "grid" ? undefined : "grid" })}
+            href={qs({ view: view === "grid" ? "index" : undefined })}
             className="font-mono text-xs uppercase tracking-wide text-muted hover:text-foreground"
             aria-label="Toggle view"
           >
-            {view === "grid" ? "⊟ Index" : "⊞ Grid"}
+            {view === "grid" ? "⊟ Compare" : "⊞ Posters"}
           </Link>
         </span>
       </nav>
@@ -220,26 +235,14 @@ export default async function MoviesPage(props: {
       {listed.length === 0 ? (
         <p className="mt-10 text-muted">Nothing matches this filter.</p>
       ) : view === "grid" ? (
-        /* Poster grid — secondary view */
-        <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {listed.map((m) => (
-            <Link key={m.id} href={`/movies/${m.id}`} className="group">
-              <Poster
-                path={m.posterPath}
-                title={m.title}
-                className="aspect-2/3 w-full rounded-lg border border-line transition-transform group-hover:scale-[1.02]"
-              />
-              <h2 className="mt-2 truncate text-sm font-medium group-hover:text-accent transition-colors">
-                {m.title}
-              </h2>
-              <p className="font-mono text-xs text-muted">
-                {m.releaseDate ? m.releaseDate.getFullYear() : ""}
-                {m.avg != null && (
-                  <span className="ml-2 text-accent">★ {toStarScale(m.avg).toFixed(1)}</span>
-                )}
-                {m.count > 0 && <span className="ml-1">({m.count})</span>}
-              </p>
-            </Link>
+        /* Poster grid — the default way to browse */
+        <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {listed.map((m, i) => (
+            <MovieCard
+              key={m.id}
+              movie={cardData(m)}
+              rank={sort === "fandom" && m.count > 0 ? i + 1 : undefined}
+            />
           ))}
         </div>
       ) : (

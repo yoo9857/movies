@@ -1,3 +1,4 @@
+import { SectionHead } from "./ReelDivider";
 // Budget vs revenue — two bars, one scale, no distortion. Full-bleed band.
 function money(n: number): string {
   if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
@@ -24,9 +25,9 @@ export function BoxOfficeBand({
   return (
     <section className="border-y border-line py-6" aria-label="Box office">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-          Box office <span className="normal-case">· USD, worldwide</span>
-        </h2>
+        <SectionHead>
+          Box office <span className="normal-case tracking-normal">· USD, worldwide</span>
+        </SectionHead>
         {roi != null && (
           <p className="text-2xl font-bold leading-none tabular-nums">
             ×{roi >= 10 ? roi.toFixed(1) : roi.toFixed(2)}

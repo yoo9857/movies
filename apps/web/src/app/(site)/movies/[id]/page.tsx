@@ -9,6 +9,7 @@ import { CastRail } from "@/components/CastRail";
 import { CrewList } from "@/components/CrewList";
 import { Poster } from "@/components/Poster";
 import { PosterGallery } from "@/components/PosterGallery";
+import { ReelDivider, SectionHead } from "@/components/ReelDivider";
 import { ReviewIndex } from "@/components/ReviewIndex";
 import { ScoreBand } from "@/components/ScoreBand";
 import { TrailerEmbed } from "@/components/TrailerEmbed";
@@ -134,9 +135,9 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
 
   return (
     <article className="space-y-12">
-      {/* ① Backdrop hero — full bleed, rises behind the nav */}
+      {/* ① Backdrop hero — full bleed, rises behind the nav, lit like a screen */}
       <header className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
-        <div className="relative min-h-[22rem] overflow-hidden sm:min-h-[28rem]">
+        <div className="cx-beam relative min-h-[22rem] overflow-hidden sm:min-h-[28rem]">
           {movie.backdropPath ? (
             <Image
               src={`https://image.tmdb.org/t/p/w1280${movie.backdropPath}`}
@@ -157,6 +158,8 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
             <div className="absolute inset-0 bg-surface" />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-black/20" />
+          {/* the house rule, run along the foot of the screen */}
+          <div className="cx-perf absolute inset-x-0 bottom-0 z-[1]" aria-hidden="true" />
           {/* sm:pl-48 keeps the hero copy clear of the poster layered below-left */}
           <div className="relative mx-auto flex min-h-[22rem] max-w-5xl flex-col justify-end px-4 pb-8 sm:min-h-[28rem] sm:pl-48">
             <h1 className="text-balance text-[clamp(1.9rem,6vw,3.25rem)] font-bold leading-[1.1] tracking-tight">
@@ -211,9 +214,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
         <div className="min-w-0">
           {movie.overview && (
             <>
-              <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-                Synopsis
-              </h2>
+              <SectionHead>Synopsis</SectionHead>
               <p className="mt-3 max-w-[65ch] text-[1.06rem] leading-relaxed text-foreground/95">
                 {movie.overview}
               </p>
@@ -226,9 +227,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
           )}
         </div>
         <div>
-          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            Credits
-          </h2>
+          <div className="mb-3"><SectionHead>Credits</SectionHead></div>
           <CrewList
             crew={movie.crew.map((c) => ({ id: c.id, name: c.name, job: c.job }))}
             extra={[
@@ -247,9 +246,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
 
           {socials.length > 0 && (
             <>
-              <h2 className="mb-3 mt-8 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-                Official
-              </h2>
+              <div className="mb-3 mt-8"><SectionHead>Official</SectionHead></div>
               <ul className="flex flex-wrap gap-2">
                 {socials.map((s) => (
                   <li key={s.href}>
@@ -268,6 +265,8 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
           )}
         </div>
       </div>
+
+      <ReelDivider />
 
       {/* ⑤ Box office */}
       <BoxOfficeBand budget={movie.budget} revenue={movie.revenue} />
@@ -307,9 +306,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
       {/* ⑨ The series this film belongs to */}
       {seriesEntries.length > 0 && (
         <section>
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            {movie.collectionName ?? "Series"}
-          </h2>
+          <SectionHead>{movie.collectionName ?? "Series"}</SectionHead>
           <div className="cx-rail mt-3">
             {seriesEntries.map((s) => (
               <Link key={s.id} href={`/movies/${s.id}`} className="group w-28">
@@ -332,14 +329,15 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
 
       {/* ⑨ Fandom reviews — credits-roll index */}
       <section>
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            Fandom reviews · {movie.reviews.length}
-          </h2>
-          <Link href="/write" className="text-sm text-accent hover:opacity-80">
-            Write yours →
-          </Link>
-        </div>
+        <SectionHead
+          action={
+            <Link href="/write" className="text-sm text-accent hover:opacity-80">
+              Write yours →
+            </Link>
+          }
+        >
+          Fandom reviews · {movie.reviews.length}
+        </SectionHead>
         {movie.reviews.length === 0 ? (
           <p className="mt-4 text-muted">No reviews yet — be the first.</p>
         ) : (
@@ -352,9 +350,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
       {/* ⑩ Similar movies */}
       {similar.length > 0 && (
         <section>
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            More like this
-          </h2>
+          <SectionHead>More like this</SectionHead>
           <div className="cx-rail mt-3">
             {similar.map((m) => (
               <Link key={m.id} href={`/movies/${m.id}`} className="group w-28">

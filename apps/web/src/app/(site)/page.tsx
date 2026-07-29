@@ -85,7 +85,7 @@ export default async function HomePage() {
              cinema atmosphere AND a visible "there's more down there". ── */}
       {billboard ? (
         <section className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
-          <div className="relative flex min-h-[clamp(30rem,68vh,40rem)] flex-col justify-end overflow-hidden">
+          <div className="cx-beam relative flex min-h-[clamp(30rem,68vh,40rem)] flex-col justify-end overflow-hidden">
             <BillboardMedia
               backdropPath={billboard.movie.backdropPath}
               posterPath={billboard.movie.posterPath}
@@ -95,7 +95,8 @@ export default async function HomePage() {
                 the film still reads as a film. */}
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/35 to-black/10" />
             <div className="absolute inset-0 bg-gradient-to-r from-background/65 via-background/10 to-transparent" />
-            <div className="relative mx-auto w-full max-w-5xl px-4 pb-12">
+            <div className="cx-perf absolute inset-x-0 bottom-0 z-[1]" aria-hidden="true" />
+            <div className="relative mx-auto w-full max-w-5xl px-4 pb-14">
               <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
                 Featured review
               </p>

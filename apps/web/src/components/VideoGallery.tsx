@@ -4,6 +4,7 @@
 // until a viewer presses play — the default state is a static thumbnail.
 import Image from "next/image";
 import { useState } from "react";
+import { SectionHead } from "./ReelDivider";
 
 export interface VideoEntry {
   id: string;
@@ -22,12 +23,10 @@ export function VideoGallery({ videos, title }: { videos: VideoEntry[]; title: s
 
   return (
     <section aria-label="Videos">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-          Videos · {videos.length}
-        </h2>
-        {videos.length > 1 && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <SectionHead
+        action={
+          videos.length > 1 ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {videos.map((v, i) => (
               <button
                 key={v.id}
@@ -50,9 +49,12 @@ export function VideoGallery({ videos, title }: { videos: VideoEntry[]; title: s
                 )}
               </button>
             ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ) : null
+        }
+      >
+        Videos · {videos.length}
+      </SectionHead>
 
       <div className="relative mt-3 aspect-video w-full overflow-hidden rounded-xl border border-line bg-black">
         {playing ? (

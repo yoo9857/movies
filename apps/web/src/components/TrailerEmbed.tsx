@@ -5,13 +5,14 @@
 // network activity on page load.
 import Image from "next/image";
 import { useState } from "react";
+import { SectionHead } from "./ReelDivider";
 
 export function TrailerEmbed({ youtubeKey, title }: { youtubeKey: string; title: string }) {
   const [playing, setPlaying] = useState(false);
 
   return (
     <section aria-label="Trailer">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Trailer</h2>
+      <SectionHead>Trailer</SectionHead>
       <div className="relative mt-3 aspect-video w-full overflow-hidden rounded-xl border border-line bg-black">
         {playing ? (
           <iframe

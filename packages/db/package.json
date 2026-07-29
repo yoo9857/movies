@@ -12,7 +12,7 @@
     "migrate": "prisma migrate dev",
     "deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
-    "seed:library": "tsx prisma/seed-movies.ts && tsx prisma/seed-details.ts",
+    "seed:library": "tsx prisma/seed-movies.ts && tsx prisma/seed-details.ts && tsx prisma/seed-artwork.ts",
     "studio": "prisma studio"
   },
   "dependencies": {

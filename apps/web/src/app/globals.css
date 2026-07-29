@@ -118,6 +118,89 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   CinePixo identity devices
+   The logo is a film reel shaped like a speech bubble — cinema being
+   talked about. These two devices carry that idea into the layout:
+   perforated film-strip rules, and scores that live inside a bubble.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Film-strip rule — sprocket holes instead of a plain hairline.
+   Pure gradients: no images, no extra requests. */
+.cx-perf {
+  height: 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background-color: color-mix(in oklab, var(--surface) 70%, transparent);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0 10px,
+    var(--background) 10px 20px
+  );
+  background-position: center;
+  background-size: 30px 6px;
+  background-repeat: repeat-x;
+}
+
+/* Projector beam — a faint cone of light from the top of a hero. */
+.cx-beam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 70% at 50% -10%,
+    color-mix(in oklab, var(--accent) 14%, transparent) 0%,
+    transparent 60%
+  );
+}
+
+/* Score bubble — the mark's silhouette, holding the site's key number. */
+.cx-bubble {
+  position: relative;
+  border: 2px solid var(--accent);
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.cx-bubble::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  bottom: -11px;
+  width: 16px;
+  height: 16px;
+  background: inherit;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-bottom-right-radius: 3px;
+  transform: rotate(45deg) skew(-8deg, -8deg);
+  clip-path: polygon(-30% -30%, 130% 130%, -30% 130%);
+}
+/* the three reel holes, echoing the logo */
+.cx-reel-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.cx-reel-dots i {
+  display: block;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.cx-reel-dots i:nth-child(1) {
+  width: 7px;
+  height: 7px;
+}
+.cx-reel-dots i:nth-child(2) {
+  width: 4px;
+  height: 4px;
+}
+.cx-reel-dots i:nth-child(3) {
+  width: 7px;
+  height: 7px;
+}
+
 /* Slow cinematic drift for billboard backdrops (Netflix-style motion) */
 @keyframes cx-kenburns {
   from {

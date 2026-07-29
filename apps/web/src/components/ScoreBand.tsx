@@ -1,4 +1,5 @@
-// Typographic score band — the "judgment layer". No cards: hairlines + display type.
+// The judgment layer. The fandom score sits inside a speech bubble carrying
+// the logo's reel dots — the site's most important number wears the mark.
 import { toStarScale } from "@cinepixo/shared";
 import { RatingHistogram } from "./RatingHistogram";
 
@@ -20,17 +21,27 @@ export function ScoreBand({
       ? Math.round((fandomStars - tmdbStars) * 100) / 100
       : null;
 
-  // With no fandom reviews yet, the TMDB score takes the display slot
-  // instead of a dangling dash.
+  // With no fandom reviews yet, the world's number takes the slot rather than
+  // leaving a dash where the site's headline figure should be.
   const heroValue = fandomStars ?? tmdbStars;
   const heroIsFandom = fandomStars != null;
 
   return (
-    <div className="flex flex-wrap items-end gap-x-8 gap-y-4 border-y border-line py-5">
-      <div className="flex items-baseline gap-4">
+    <div className="flex flex-wrap items-center gap-x-8 gap-y-6">
+      {/* Score bubble */}
+      <div
+        className={`cx-bubble flex shrink-0 flex-col items-center px-6 pb-4 pt-3 ${
+          heroIsFandom ? "" : "opacity-80"
+        }`}
+      >
+        <span className="cx-reel-dots mb-1.5" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
         <span
-          className={`text-6xl font-extrabold leading-none tracking-tight tabular-nums ${
-            heroIsFandom ? "text-accent" : "text-foreground/80"
+          className={`text-[3.25rem] font-extrabold leading-none tracking-tight tabular-nums ${
+            heroIsFandom ? "text-accent" : "text-foreground/75"
           }`}
           aria-label={
             heroValue != null
@@ -40,54 +51,71 @@ export function ScoreBand({
         >
           {heroValue != null ? heroValue.toFixed(1) : "N/A"}
         </span>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            {heroIsFandom
-              ? `Fandom score · ${count} review${count === 1 ? "" : "s"}`
-              : heroValue != null
-                ? "TMDB score · awaiting fandom reviews"
-                : "Unrated"}
-          </span>
-          {heroIsFandom && tmdbStars != null ? (
-            <span className="text-sm">
-              TMDB {tmdbScore!.toFixed(1)}
+        <span className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-muted">
+          {heroIsFandom ? "fandom" : "tmdb"} · out of 5
+        </span>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+          {heroIsFandom
+            ? `${count} fandom review${count === 1 ? "" : "s"}`
+            : heroValue != null
+              ? "awaiting fandom reviews"
+              : "unrated"}
+        </span>
+
+        {heroIsFandom && tmdbStars != null ? (
+          <p className="text-sm">
+            The world says{" "}
+            <span className="font-semibold">
+              {tmdbScore!.toFixed(1)}
               <span className="text-muted">/10</span>
-              {delta != null && (
-                <>
-                  {" "}
-                  <span
-                    className={`font-mono ${delta > 0 ? "text-positive" : delta < 0 ? "text-chart-alt" : "text-muted"}`}
-                  >
-                    {delta > 0 ? "+" : ""}
-                    {delta.toFixed(2)}
-                  </span>{" "}
-                  <span className="text-muted">
-                    {delta > 0
-                      ? "— the fandom rates it higher"
-                      : delta < 0
-                        ? "— the world rates it higher"
-                        : "— in agreement"}
-                  </span>
-                </>
-              )}
-              {tmdbVotes != null && (
-                <span className="text-muted"> · {tmdbVotes.toLocaleString("en-US")} votes</span>
-              )}
             </span>
-          ) : (
-            <span className="text-sm text-muted">
-              {count === 0
-                ? `Be the first to rate it${
-                    tmdbVotes != null ? ` — ${tmdbVotes.toLocaleString("en-US")} TMDB votes so far` : ""
-                  }.`
-                : "No TMDB score on file."}
-            </span>
-          )}
-        </div>
+            {delta != null && (
+              <>
+                {" — "}
+                <span
+                  className={`font-mono font-semibold ${
+                    delta > 0 ? "text-positive" : delta < 0 ? "text-chart-alt" : "text-muted"
+                  }`}
+                >
+                  {delta > 0 ? "+" : ""}
+                  {delta.toFixed(2)}
+                </span>{" "}
+                <span className="text-muted">
+                  {delta > 0
+                    ? "in the fandom's favour"
+                    : delta < 0
+                      ? "against the fandom"
+                      : "dead even"}
+                </span>
+              </>
+            )}
+            {tmdbVotes != null && (
+              <span className="text-muted"> · {tmdbVotes.toLocaleString("en-US")} votes</span>
+            )}
+          </p>
+        ) : (
+          <p className="text-sm text-muted">
+            {count === 0
+              ? `Nobody here has weighed in yet${
+                  tmdbVotes != null
+                    ? ` — the world has cast ${tmdbVotes.toLocaleString("en-US")} votes`
+                    : ""
+                }.`
+              : "No TMDB score on file."}
+          </p>
+        )}
       </div>
 
       {count > 0 && (
-        <RatingHistogram ratings={ratings} height={56} className="ml-auto w-44 self-end" />
+        <div className="ml-auto w-full max-w-44">
+          <p className="mb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-muted">
+            How the fandom split
+          </p>
+          <RatingHistogram ratings={ratings} height={52} />
+        </div>
       )}
     </div>
   );

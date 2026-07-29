@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { SectionHead } from "./ReelDivider";
 
 export interface CastEntry {
   id: string;
@@ -11,7 +12,7 @@ export function CastRail({ cast }: { cast: CastEntry[] }) {
   if (cast.length === 0) return null;
   return (
     <section aria-label="Cast">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Cast</h2>
+      <SectionHead>Cast · {cast.length}</SectionHead>
       <div className="cx-rail mt-3">
         {cast.map((c) => (
           <figure key={c.id} className="w-24">
