@@ -1,4 +1,5 @@
 import { prisma } from "@cinepixo/db";
+import { linkCreditsToPeople } from "@cinepixo/db/people-link";
 import { movieSlug } from "@cinepixo/shared";
 import { z } from "zod";
 import { handle, json, parseJson, requireSameOrigin } from "@/lib/api";
@@ -148,6 +149,11 @@ export const POST = handle(async (request: Request) => {
         })),
       });
     }
+    // Recreating the credit rows severed their person links; restore them in
+    // the same transaction, claiming enriched name-derived rows rather than
+    // duplicating them. Without this, one Refresh orphaned every portrait and
+    // source an admin had attached.
+    await linkCreditsToPeople(tx, m.id);
     return m;
   });
 

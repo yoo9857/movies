@@ -17,6 +17,8 @@
  *  · **sharp runs one job at a time** and a flood of uploads queues briefly and
  *    then sheds load, instead of every request racing for the same heap
  */
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import sharp, { type Metadata, type OutputInfo } from "sharp";
 import { ApiError } from "@/lib/api";
 
@@ -198,18 +200,106 @@ export async function processImage(
  * `processImage`, the bytes land on our storage, stripped and re-encoded, and
  * the page serves our object.
  *
- * Only http(s), and the size is capped before the body is read — a redirect to
+ * Only https, and the size is capped before the body is read — a redirect to
  * something enormous must not be able to exhaust the process.
+ *
+ * It is also the one place the server fetches a caller-supplied URL, which is
+ * the classic SSRF shape: without a guard, an admin form field can be aimed at
+ * 127.0.0.1, the LAN, or a cloud metadata endpoint. Every hop — the URL itself
+ * and each redirect target, since a public host can bounce to a private one —
+ * must resolve to a public address before it is fetched. (A DNS answer that
+ * changes between our lookup and fetch's own could still slip through; closing
+ * that needs a pinned-IP dispatcher, more than this admin-only path warrants.)
  */
-export async function fetchRemoteImage(url: string): Promise<Buffer> {
-  if (!/^https:\/\//i.test(url)) throw new ApiError(400, "Only https image URLs can be imported");
 
-  let res: Response;
-  try {
-    res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
-  } catch {
-    throw new ApiError(502, "Could not reach that image");
+/** True for addresses that must never be fetched: loopback, LAN, link-local, metadata. */
+export function isPrivateAddress(ip: string): boolean {
+  const family = isIP(ip);
+  if (family === 4) {
+    const o = ip.split(".").map(Number);
+    return (
+      o[0] === 0 || // "this network"
+      o[0] === 10 ||
+      o[0] === 127 || // loopback
+      (o[0] === 100 && o[1] >= 64 && o[1] <= 127) || // CGNAT
+      (o[0] === 169 && o[1] === 254) || // link-local / cloud metadata
+      (o[0] === 172 && o[1] >= 16 && o[1] <= 31) ||
+      (o[0] === 192 && o[1] === 0 && o[2] === 0) || // IETF protocol assignments
+      (o[0] === 192 && o[1] === 168) ||
+      (o[0] === 198 && (o[1] === 18 || o[1] === 19)) || // benchmarking
+      o[0] >= 224 // multicast + reserved
+    );
   }
+  if (family === 6) {
+    const lower = ip.toLowerCase();
+    // IPv4 embedded in IPv6 (::ffff:10.0.0.1, NAT64) — judge the inner address.
+    const embedded = lower.match(/(\d+\.\d+\.\d+\.\d+)$/);
+    if (embedded) return isPrivateAddress(embedded[1]);
+    return (
+      lower === "::" ||
+      lower === "::1" || // loopback
+      lower.startsWith("fc") || lower.startsWith("fd") || // unique local
+      lower.startsWith("fe8") || lower.startsWith("fe9") ||
+      lower.startsWith("fea") || lower.startsWith("feb") || // link-local
+      lower.startsWith("ff") // multicast
+    );
+  }
+  return true; // not an IP at all — refuse rather than guess
+}
+
+async function assertPublicHost(url: URL): Promise<void> {
+  // URL brackets IPv6 literals; strip them so isIP recognises the form.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host)) {
+    if (isPrivateAddress(host)) throw new ApiError(400, "That URL points at a private address");
+    return;
+  }
+  let addrs: { address: string }[];
+  try {
+    addrs = await lookup(host, { all: true });
+  } catch {
+    throw new ApiError(502, "Could not resolve that host");
+  }
+  if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) {
+    throw new ApiError(400, "That URL points at a private address");
+  }
+}
+
+const MAX_REDIRECTS = 5;
+
+export async function fetchRemoteImage(url: string): Promise<Buffer> {
+  let current: URL;
+  try {
+    current = new URL(url);
+  } catch {
+    throw new ApiError(400, "That is not a valid URL");
+  }
+
+  // Redirects are followed by hand so each hop faces the same two checks:
+  // https only, public address only.
+  let res: Response | null = null;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (current.protocol !== "https:") {
+      throw new ApiError(400, "Only https image URLs can be imported");
+    }
+    await assertPublicHost(current);
+
+    try {
+      res = await fetch(current, { redirect: "manual", signal: AbortSignal.timeout(15_000) });
+    } catch {
+      throw new ApiError(502, "Could not reach that image");
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (!location) throw new ApiError(502, "Source redirected nowhere");
+      current = new URL(location, current);
+      res = null;
+      continue;
+    }
+    break;
+  }
+  if (!res) throw new ApiError(502, "Source redirected too many times");
   if (!res.ok) throw new ApiError(502, `Source returned ${res.status}`);
 
   const declared = Number(res.headers.get("content-length") ?? 0);

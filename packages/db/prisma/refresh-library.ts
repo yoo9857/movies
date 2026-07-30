@@ -13,6 +13,7 @@
 // where they are currently empty — curation survives a refresh.
 import "./env";
 import { prisma } from "../src/index";
+import { linkCreditsToPeople } from "../src/people-link";
 
 // Either TMDB credential works: the v4 Read Access Token (Bearer, their
 // current default) or the older v3 api_key. Same data either way.
@@ -142,6 +143,10 @@ async function main() {
           backdropPath: m.backdropPath ?? d.backdrop_path,
         },
       });
+      // The recreate above severed the credit→person links; restore them
+      // before the transaction commits, claiming enriched rows by name rather
+      // than duplicating them.
+      await linkCreditsToPeople(tx, m.id);
     });
 
     const withPhoto = cast.filter((c) => c.profile_path).length;

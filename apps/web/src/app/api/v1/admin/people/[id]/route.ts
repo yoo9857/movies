@@ -47,7 +47,9 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
       birthPlace: input.birthPlace ?? null,
       birthDate: input.birthDate ? new Date(input.birthDate) : null,
       deathDate: input.deathDate ? new Date(input.deathDate) : null,
-      links: input.links.length > 0 ? input.links : undefined,
+      // An empty list means "remove every link" — undefined would mean "keep
+      // them", which made links impossible to clear from the form.
+      links: input.links,
     },
   });
 
