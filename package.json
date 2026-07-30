@@ -8,6 +8,9 @@
     "packages/*"
   ],
   "scripts": {
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:db": "vitest run --project db",
     "dev": "npm run dev -w web",
     "build": "npm run build -w web",
     "start": "npm run start -w web",
@@ -28,5 +31,8 @@
     "sharp": "^0.35.3",
     "brace-expansion": "^5.0.8",
     "minimatch": "^10.2.6"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

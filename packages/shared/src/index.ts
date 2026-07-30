@@ -1,5 +1,30 @@
 import { z } from "zod";
 
+// ── Optional free text ───────────────────────────────────────────
+
+/**
+ * An optional prose field. A form submits `""` for anything the user left
+ * blank, every one of these columns is nullable, and every consumer treats
+ * "not set" as null — so `""` is normalised away here, once.
+ *
+ * This replaces `.optional().or(z.literal("").transform(() => undefined))`,
+ * whose right-hand side was unreachable: `.or()` only evaluates it when the
+ * left side *fails*, and `z.string().trim().max(n).optional()` accepts `""`
+ * happily. So the empty string reached the database, where `verdict ?? excerpt`
+ * stopped falling back (`??` passes `""` through, unlike a missing value) and
+ * JSON-LD emitted `image: ""` for a critic with no avatar.
+ *
+ * A whitespace-only value trims to `""` and is normalised too.
+ */
+function optionalText(max: number) {
+  return z
+    .string()
+    .trim()
+    .max(max)
+    .transform((v) => (v === "" ? undefined : v))
+    .optional();
+}
+
 // ── Users & auth ─────────────────────────────────────────────────
 
 export const userRoleSchema = z.enum(["ADMIN", "MEMBER"]);
@@ -55,9 +80,9 @@ export const SPOILER_LABELS: Record<SpoilerLevel, string> = {
 export const reviewInputSchema = z.object({
   slug: slugSchema,
   title: z.string().trim().min(1).max(200),
-  excerpt: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  excerpt: optionalText(500),
   // conclusion-first one-liner, shown above the body
-  verdict: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
+  verdict: optionalText(300),
   content: z.string().min(1).max(100_000),
   rating: ratingSchema,
   status: reviewStatusSchema,
@@ -132,11 +157,17 @@ export const criticLinkSchema = z.object({
   url: httpUrl,
 });
 
+/** Same normalisation as `optionalText`, for a field that must be a real URL. */
+const optionalHttpUrl = z
+  .union([z.literal(""), httpUrl])
+  .transform((v) => (v === "" ? undefined : v))
+  .optional();
+
 export const criticInputSchema = z.object({
   slug: slugSchema,
   name: z.string().trim().min(1).max(100),
-  bio: z.string().trim().max(2000).optional().or(z.literal("").transform(() => undefined)),
-  avatarUrl: httpUrl.optional().or(z.literal("").transform(() => undefined)),
+  bio: optionalText(2000),
+  avatarUrl: optionalHttpUrl,
   links: z.array(criticLinkSchema).max(10).default([]),
 });
 export type CriticInput = z.infer<typeof criticInputSchema>;
