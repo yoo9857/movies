@@ -197,6 +197,8 @@ export default async function SearchPage(props: {
                 <Poster
                   path={m.posterPath}
                   title={m.title}
+                  year={m.releaseDate ? new Date(m.releaseDate).getFullYear() : null}
+                  director={m.director}
                   className="aspect-2/3 w-full rounded-lg border border-line"
                 />
                 <p className="mt-1 truncate text-xs group-hover:text-accent transition-colors">

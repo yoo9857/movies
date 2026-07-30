@@ -158,6 +158,9 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
   if (movie.slug !== slug) permanentRedirect(`/movies/${movie.slug}`);
 
   const { genres, keywords, countries } = movie;
+  // The crew table is authoritative; the column is the fallback for films
+  // imported before crew existed, and for the Wikidata rows that carry only it.
+  const director = movie.crew.find((c) => c.job === "Director")?.name ?? movie.director;
   // Ours, so they lead: themes and motifs are argued film by film, while the
   // keyword strip further down is imported metadata about this film alone.
   const topics = movie.topics.map((mt) => ({ ...mt.topic, note: mt.note }));
@@ -372,6 +375,9 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
           <Poster
             path={movie.posterPath}
             title={movie.title}
+            year={year}
+            director={director}
+            size="hero"
             className="w-full rounded-xl border border-line shadow-2xl"
           />
         </div>

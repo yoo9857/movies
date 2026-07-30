@@ -200,6 +200,7 @@ export default async function TopicPage(props: { params: Promise<{ slug: string 
                     <Poster
                       path={f.movie.posterPath}
                       title={f.movie.title}
+                      year={f.year}
                       size="thumb"
                       className="aspect-2/3 w-14 shrink-0 rounded border border-line object-cover"
                     />
