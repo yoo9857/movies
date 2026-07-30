@@ -11,6 +11,8 @@ export interface ToolAction {
   run: () => void;
   /** Greyed out and inert — a trailer button for a film with no trailer on file. */
   disabled?: boolean;
+  /** Lit up — the caret is inside this formatting (visual editor only). */
+  active?: boolean;
 }
 
 export function EditorToolbar({ groups }: { groups: ToolAction[][] }) {
@@ -35,7 +37,10 @@ export function EditorToolbar({ groups }: { groups: ToolAction[][] }) {
               // position is the input to every one of these actions, and a
               // focus change on mousedown would lose the selection.
               onMouseDown={(e) => e.preventDefault()}
-              className="grid h-8 min-w-8 place-items-center rounded px-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted"
+              aria-pressed={t.active ?? undefined}
+              className={`grid h-8 min-w-8 place-items-center rounded px-1.5 transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted ${
+                t.active ? "bg-accent/15 text-accent" : "text-muted"
+              }`}
             >
               {t.glyph}
             </button>

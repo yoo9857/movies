@@ -33,6 +33,7 @@
     "minimatch": "^10.2.6"
   },
   "devDependencies": {
+    "jsdom": "^30.0.1",
     "vitest": "^4.1.10"
   }
 }

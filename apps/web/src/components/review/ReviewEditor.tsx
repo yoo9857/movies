@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { RichEditor, type UploadedImage } from "./editor/RichEditor";
 import { EditorToolbar, Glyphs, type ToolAction } from "./EditorToolbar";
 import { MoviePicker, type PickerMovie } from "./MoviePicker";
 import { ReviewBody, type ReviewMedia } from "./ReviewBody";
@@ -121,7 +122,10 @@ export function ReviewEditor({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug));
-  const [tab, setTab] = useState<"write" | "split" | "preview">("split");
+  // "write" is the visual editor — formatting stays formatting, no markdown
+  // syntax on screen. "markdown" is the same document as source, for anyone
+  // who wants the plumbing; "split" pairs that source with a live preview.
+  const [tab, setTab] = useState<"write" | "markdown" | "split" | "preview">("write");
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [serverState, setServerState] = useState<"idle" | "saving" | "saved" | "local">("idle");
   const [restoreHandled, setRestoreHandled] = useState(false);
@@ -328,46 +332,58 @@ export function ReviewEditor({
     [applyEdit],
   );
 
+  /**
+   * Upload one file; resolve to its URL and alt text, or null after putting
+   * the reason in the error slot. Shared by both writing surfaces — the
+   * visual editor inserts the image node itself, the markdown textarea wraps
+   * this in its placeholder-token flow below.
+   */
+  const uploadOne = useCallback(async (file: File): Promise<UploadedImage | null> => {
+    if (!file.type.startsWith("image/")) return null;
+    if (file.size > 20 * 1024 * 1024) {
+      setError(`"${file.name}" is larger than 20 MB.`);
+      return null;
+    }
+
+    // Alt text starts as the filename — the one hint the author has already
+    // typed. Brackets and newlines would break the markdown around it.
+    const alt =
+      file.name
+        .replace(/\.[a-z0-9]+$/i, "")
+        .replace(/[[\]\n\r]/g, " ")
+        .trim() || "image";
+
+    setUploadsInFlight((n) => n + 1);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/v1/my/review-images", { method: "POST", body });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setError(data.error ?? `Uploading "${file.name}" failed — try again.`);
+        return null;
+      }
+      return { url: data.url, alt };
+    } catch {
+      setError("Network error during upload — your text is untouched, try again.");
+      return null;
+    } finally {
+      setUploadsInFlight((n) => n - 1);
+    }
+  }, []);
+
   const uploadImages = useCallback(
     async (files: Iterable<File>) => {
       for (const file of files) {
         if (!file.type.startsWith("image/")) continue;
-        if (file.size > 20 * 1024 * 1024) {
-          setError(`"${file.name}" is larger than 20 MB.`);
-          continue;
-        }
-
-        // Alt text starts as the filename — the one hint the author has already
-        // typed. Brackets and newlines would break the markdown around it.
-        const alt =
-          file.name
-            .replace(/\.[a-z0-9]+$/i, "")
-            .replace(/[[\]\n\r]/g, " ")
-            .trim() || "image";
-        const token = `![Uploading ${alt}…](upload-${++uploadSeq.current})`;
+        const token = `![Uploading ${file.name}…](upload-${++uploadSeq.current})`;
         block(`${token}\n\n`);
-
-        setUploadsInFlight((n) => n + 1);
-        try {
-          const body = new FormData();
-          body.append("file", file);
-          const res = await fetch("/api/v1/my/review-images", { method: "POST", body });
-          const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-          if (!res.ok || !data.url) {
-            replaceToken(token, "");
-            setError(data.error ?? `Uploading "${file.name}" failed — try again.`);
-            continue;
-          }
-          replaceToken(token, `![${alt}](${data.url})`);
-        } catch {
-          replaceToken(token, "");
-          setError("Network error during upload — your text is untouched, try again.");
-        } finally {
-          setUploadsInFlight((n) => n - 1);
-        }
+        const uploaded = await uploadOne(file);
+        if (uploaded) replaceToken(token, `![${uploaded.alt}](${uploaded.url})`);
+        else replaceToken(token, "");
       }
     },
-    [block, replaceToken],
+    [block, replaceToken, uploadOne],
   );
 
   /* ── Keyboard ── */
@@ -1088,15 +1104,19 @@ export function ReviewEditor({
 
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <div className="mr-auto flex gap-1.5 rounded-lg border border-line p-0.5">
-            {(["write", "split", "preview"] as const).map((t) => (
+            {(["write", "markdown", "split", "preview"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
                 title={
-                  t === "split"
-                    ? "Source and result side by side"
-                    : `${t} — ${MOD}+Shift+P toggles`
+                  t === "write"
+                    ? "Visual editor — formatting stays formatting"
+                    : t === "markdown"
+                      ? "The same review as markdown source"
+                      : t === "split"
+                        ? "Source and result side by side"
+                        : `${t} — ${MOD}+Shift+P toggles`
                 }
                 // Split needs the width for two columns; on a phone the tabs are
                 // the whole interface.
@@ -1120,7 +1140,20 @@ export function ReviewEditor({
           </span>
         </div>
 
-        {tab !== "preview" ? (
+        {tab === "write" && (
+          <div className="mt-3">
+            <RichEditor
+              value={v.content}
+              onChange={(md) => set("content", md)}
+              onSaveShortcut={() => void saveDraftNow()}
+              uploadImage={uploadOne}
+              hasTrailer={Boolean(chosen?.trailerKey)}
+              stillCount={media.stills.length}
+            />
+          </div>
+        )}
+
+        {(tab === "markdown" || tab === "split") ? (
           <>
             <div className="mt-3">
               <EditorToolbar groups={toolGroups} />
@@ -1201,7 +1234,7 @@ export function ReviewEditor({
               </ul>
             </details>
           </>
-        ) : (
+        ) : tab === "preview" ? (
           <div className="mt-4 rounded-lg border border-line bg-background p-5">
             {v.content.trim() ? (
               <ReviewBody content={v.content} media={media} />
@@ -1214,7 +1247,7 @@ export function ReviewEditor({
                 : "Pick a film and trailers and stills will render with its real media."}
             </p>
           </div>
-        )}
+        ) : null}
       </fieldset>
 
       {error && (

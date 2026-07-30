@@ -339,3 +339,72 @@ body {
   padding: 0.5rem 0.75rem;
   text-align: left;
 }
+
+/* ── The visual editor (RichEditor) ─────────────────────────────
+   The content area reuses .prose-review so what you write looks like what
+   ships; everything below is editing chrome that never appears on a page. */
+.cx-richtext:focus {
+  outline: none;
+}
+/* tiptap's placeholder: rendered as a data attribute on the empty paragraph */
+.cx-richtext p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+/* A spoiler region while editing: visibly fenced, never actually hidden —
+   you cannot edit what you cannot see. */
+.cx-richtext .cx-edit-spoiler {
+  border: 1px dashed var(--accent-dim);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  margin: 1rem 0;
+  position: relative;
+}
+.cx-richtext .cx-edit-spoiler::before {
+  content: "SPOILER — hidden until revealed";
+  display: block;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+/* Trailer / still placeholders: the film's real media renders on the page and
+   in Preview; while editing they are labelled slots. */
+.cx-richtext .cx-edit-media {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  padding: 0.85rem 1rem;
+  margin: 1rem 0;
+  user-select: none;
+}
+.cx-richtext img {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  max-width: 100%;
+}
+/* Selected atoms (a still, a trailer, an image) get the accent ring */
+.cx-richtext .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Task list checkboxes line up with their text */
+.cx-richtext ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+.cx-richtext ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5rem;
+}
+.cx-richtext ul[data-type="taskList"] li > label {
+  margin-top: 0.35rem;
+}
