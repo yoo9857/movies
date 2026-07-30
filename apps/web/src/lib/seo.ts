@@ -835,7 +835,12 @@ export function pageMetadata(input: PageMetaInput): Metadata {
       description,
       siteName: SITE_NAME,
       locale: SITE_LOCALE,
-      images: images.length > 0 ? images : undefined,
+      // The key is *omitted*, never set to undefined. File-based metadata has
+      // higher priority than this object — but only if the key is absent: a
+      // present `images: undefined` reads as "this page declares no image" and
+      // suppresses the convention. That one line meant most of the site shipped
+      // with no og:image at all, static fallback included, for its whole life.
+      ...(images.length > 0 ? { images } : {}),
       ...(input.ogType === "article"
         ? {
             publishedTime: isoStamp(input.publishedTime),
@@ -847,12 +852,13 @@ export function pageMetadata(input: PageMetaInput): Metadata {
         : {}),
     },
     twitter: {
-      // Always the large card: a page with no image of its own still falls back
-      // to app/opengraph-image.png via the file convention.
+      // Always the large card. Same omission rule as openGraph above: with no
+      // `images` key, a page inherits its segment's generated card, or the
+      // site-wide app/opengraph-image.png.
       card: "summary_large_image",
       title: input.title,
       description,
-      images: images.length > 0 ? images.map((i) => i.url) : undefined,
+      ...(images.length > 0 ? { images: images.map((i) => i.url) } : {}),
     },
   };
 }

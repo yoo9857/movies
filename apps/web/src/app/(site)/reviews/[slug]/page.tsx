@@ -84,19 +84,16 @@ export async function generateMetadata(props: {
     review.excerpt ??
     `${author} reviews ${movie.title}${year ? ` (${year})` : ""} for CinePixo.`;
 
-  const backdrop = backdropUrl(movie.backdropPath, "w1280");
-  const poster = posterUrl(movie.posterPath, "w780");
-
   return pageMetadata({
     path: `/reviews/${review.slug}`,
     title: review.title,
     description,
     ogType: "article",
-    images: backdrop
-      ? [{ url: backdrop, width: 1280, height: 720, alt: `${movie.title} — still` }]
-      : poster
-        ? [{ url: poster, width: 780, height: 1170, alt: `${movie.title} — poster` }]
-        : [],
+    // No `images` on purpose: `opengraph-image.tsx` in this segment draws the
+    // house share card — title, verdict, score, author, wordmark — and an
+    // explicit list here would win over it. A TMDB still is the same picture
+    // every other site shares; the card is ours and says more.
+
     publishedTime: review.publishedAt,
     modifiedTime: review.updatedAt,
     authors: [author],

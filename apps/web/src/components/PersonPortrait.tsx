@@ -15,22 +15,12 @@
 // the monogram is styled to hold its own next to a photograph rather than
 // apologise for not being one.
 import Image from "next/image";
+import { monogram } from "@/lib/monogram";
 
 export interface PortraitSubject {
   name: string;
   image?: string | null;
   tmdbProfilePath?: string | null;
-}
-
-/** First letters of the first two words: "Bong Joon-ho" → "BJ". */
-export function monogram(name: string): string {
-  const parts = name
-    .split(/\s+/)
-    .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ""))
-    .filter(Boolean);
-  if (parts.length === 0) return "?";
-  const letters = parts.slice(0, 2).map((w) => [...w][0] ?? "");
-  return letters.join("").toUpperCase();
 }
 
 export function PersonPortrait({

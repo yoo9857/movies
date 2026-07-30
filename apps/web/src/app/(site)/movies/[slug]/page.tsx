@@ -103,19 +103,13 @@ export async function generateMetadata(props: {
         : "Full credits, and the first review is open.",
     ].join(" ");
 
-  const backdrop = backdropUrl(movie.backdropPath, "w1280");
-  const poster = posterUrl(movie.posterPath, "w780");
-
   return pageMetadata({
     path: `/movies/${movie.slug}`,
     title,
     description,
-    images: [
-      backdrop
-        ? { url: backdrop, width: 1280, height: 720, alt: `${movie.title} — still` }
-        : undefined,
-      poster ? { url: poster, width: 780, height: 1170, alt: `${movie.title} — poster` } : undefined,
-    ].filter((i): i is { url: string; width: number; height: number; alt: string } => Boolean(i)),
+    // No `images`: the segment's `opengraph-image.tsx` draws the house card,
+    // which carries the fandom score a bare still cannot.
+
     keywords: [movie.title, `${movie.title} review`, ...movie.genres, director ?? ""].filter(
       Boolean,
     ),

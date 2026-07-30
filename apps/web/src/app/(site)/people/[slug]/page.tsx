@@ -128,9 +128,9 @@ export async function generateMetadata(props: {
     description:
       person.bio ??
       `${person.name} — ${role.toLowerCase()}. ${films} film${films === 1 ? "" : "s"} in the CinePixo library, with the fandom's reviews of each.`,
-    images: person.image
-      ? [{ url: absUrl(person.image), width: 640, height: 640, alt: person.name }]
-      : [],
+    // No `images`: the segment's `opengraph-image.tsx` draws the house card,
+    // portrait included, and sized for a share preview rather than a page.
+
     keywords: [person.name, `${person.name} films`, `${person.name} reviews`],
   });
 }
