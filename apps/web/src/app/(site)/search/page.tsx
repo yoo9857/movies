@@ -1,4 +1,5 @@
 import { prisma } from "@cinepixo/db";
+import { PersonPortrait } from "@/components/PersonPortrait";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Poster } from "@/components/Poster";
@@ -35,7 +36,7 @@ export default async function SearchPage(props: {
   // exist precisely for this; see the search API route for the history.
   const ci = (value: string) => ({ contains: value, mode: "insensitive" as const });
 
-  const [reviews, movies, critics] = q
+  const [reviews, movies, critics, people] = q
     ? await Promise.all([
         prisma.review.findMany({
           where: {
@@ -64,10 +65,32 @@ export default async function SearchPage(props: {
           take: 10,
           select: { slug: true, name: true, bio: true },
         }),
+        // Only people with credits — a page with nothing on it is a dead result.
+        prisma.person.findMany({
+          where: {
+            name: ci(q),
+            OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }],
+          },
+          take: 12,
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            image: true,
+            tmdbProfilePath: true,
+            crewRoles: { select: { job: true } },
+            _count: { select: { castRoles: true, crewRoles: true } },
+          },
+        }),
       ])
-    : [[], [], []];
+    : [[], [], [], []];
 
-  const empty = q && reviews.length === 0 && movies.length === 0 && critics.length === 0;
+  const empty =
+    q &&
+    reviews.length === 0 &&
+    movies.length === 0 &&
+    critics.length === 0 &&
+    people.length === 0;
 
   return (
     <div>
@@ -77,7 +100,7 @@ export default async function SearchPage(props: {
           name="q"
           defaultValue={q}
           maxLength={100}
-          placeholder="Reviews, movies, critics…"
+          placeholder="Reviews, movies, people, critics…"
           className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
         />
         <button
@@ -114,6 +137,37 @@ export default async function SearchPage(props: {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {people.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold uppercase text-muted">People</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {people.map((p) => {
+              const jobs = [...new Set(p.crewRoles.map((c) => c.job))];
+              const role = jobs[0] ?? (p._count.castRoles > 0 ? "Actor" : null);
+              return (
+                <Link
+                  key={p.id}
+                  href={`/people/${p.slug}`}
+                  className="group flex items-center gap-2.5 rounded-full border border-line bg-surface py-1.5 pl-1.5 pr-4 transition-colors hover:border-accent-dim"
+                >
+                  <PersonPortrait person={p} size={34} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm transition-colors group-hover:text-accent">
+                      {p.name}
+                    </span>
+                    {role && (
+                      <span className="block truncate font-mono text-[10px] text-muted">
+                        {role}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         </section>
       )}
 

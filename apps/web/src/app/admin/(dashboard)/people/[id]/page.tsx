@@ -2,6 +2,7 @@ import { prisma } from "@cinepixo/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PersonForm } from "@/components/admin/PersonForm";
+import { PersonIdentityFinder } from "@/components/admin/PersonIdentityFinder";
 import { PersonPhotoManager } from "@/components/admin/PersonPhotoManager";
 import { PersonPortrait } from "@/components/PersonPortrait";
 
@@ -75,8 +76,13 @@ export default async function AdminPersonPage(props: { params: Promise<{ id: str
               ? "Not imported yet; the page is showing the source until it is."
               : "No source anywhere. This one is ours to find."}
         </p>
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
           <PersonPhotoManager personId={person.id} hasImage={Boolean(person.image)} />
+          <PersonIdentityFinder
+            personId={person.id}
+            name={person.name}
+            linked={person.tmdbId !== null}
+          />
         </div>
       </section>
 

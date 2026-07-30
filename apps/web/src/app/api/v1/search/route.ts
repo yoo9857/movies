@@ -18,7 +18,7 @@ export const GET = handle(async (request: Request) => {
   const url = new URL(request.url);
   const q = querySchema.parse(url.searchParams.get("q") ?? "");
 
-  const [reviews, movies, critics] = await Promise.all([
+  const [reviews, movies, critics, people] = await Promise.all([
     prisma.review.findMany({
       where: {
         status: "PUBLISHED",
@@ -46,7 +46,32 @@ export const GET = handle(async (request: Request) => {
       take: 10,
       select: { slug: true, name: true, bio: true },
     }),
+    // Only people we can show something for: a page with no credits has nothing
+    // on it, and a search result that leads nowhere is worse than no result.
+    prisma.person.findMany({
+      where: {
+        name: ci(q),
+        OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }],
+      },
+      take: 10,
+      select: {
+        slug: true,
+        name: true,
+        image: true,
+        _count: { select: { castRoles: true, crewRoles: true } },
+      },
+    }),
   ]);
 
-  return json({ reviews, movies, critics });
+  return json({
+    reviews,
+    movies,
+    critics,
+    people: people.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      image: p.image,
+      credits: p._count.castRoles + p._count.crewRoles,
+    })),
+  });
 });

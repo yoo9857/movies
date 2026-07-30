@@ -114,6 +114,50 @@ export async function searchMovies(query: string): Promise<TmdbMovieSummary[]> {
   return data.results.slice(0, 10);
 }
 
+/* ── People ──────────────────────────────────────────────────────
+ *
+ * Search is *discovery*, not sourcing. What comes back here is a list of
+ * candidates for a human to pick from; the picked portrait is then pulled
+ * through our own pipeline and stored as our object. Nothing on this path ever
+ * writes a foreign URL into a row that a page renders.
+ */
+
+export interface TmdbPersonSummary {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  known_for_department: string | null;
+  popularity: number;
+  known_for?: { title?: string; name?: string }[];
+}
+
+export interface TmdbPersonDetail extends TmdbPersonSummary {
+  biography: string | null;
+  birthday: string | null;
+  deathday: string | null;
+  place_of_birth: string | null;
+  homepage: string | null;
+  imdb_id: string | null;
+  also_known_as?: string[];
+}
+
+/** Candidates for "who is this credit?", best guess first. */
+export async function searchPeople(query: string): Promise<TmdbPersonSummary[]> {
+  const data = await tmdbFetch<{ results: TmdbPersonSummary[] }>("/search/person", {
+    query,
+    include_adult: "false",
+    language: "en-US",
+  });
+  // TMDB's own relevance order is better than anything we would re-sort by, and
+  // a long list is a worse interface than a short one for a pick-the-right-face
+  // task.
+  return data.results.slice(0, 12);
+}
+
+export async function getPersonDetail(tmdbId: number): Promise<TmdbPersonDetail> {
+  return tmdbFetch<TmdbPersonDetail>(`/person/${tmdbId}`, { language: "en-US" });
+}
+
 export async function getMovieDetail(tmdbId: number): Promise<TmdbMovieDetail> {
   return tmdbFetch<TmdbMovieDetail>(`/movie/${tmdbId}`, {
     language: "en-US",

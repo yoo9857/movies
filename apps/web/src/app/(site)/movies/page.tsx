@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { MovieCard } from "@/components/MovieCard";
+import { MovieFilterBar } from "@/components/MovieFilterBar";
 import { Poster } from "@/components/Poster";
 import { RatingHistogram } from "@/components/RatingHistogram";
 import {
@@ -264,77 +265,21 @@ export default async function MoviesPage(props: {
           <Breadcrumbs trail={trail} />
         </div>
       )}
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">{heading}</h1>
-        <p className="font-mono text-xs text-muted">
-          {total} film{total === 1 ? "" : "s"}
-          {genre ? ` · ${genre}` : ""}
-          {decade != null ? ` · ${decade}s` : ""}
-          {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
-        </p>
-      </div>
+      <h1 className="text-3xl font-bold tracking-tight">{heading}</h1>
 
-      {/* Filter rail — text links on a hairline, no dropdown boxes */}
-      <nav
-        className="mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-2 border-y border-line py-3 text-sm"
-        aria-label="Filters"
-      >
-        <Link
-          href={qs({ genre: undefined })}
-          className={!genre ? "font-semibold text-accent underline underline-offset-4" : "text-muted hover:text-foreground"}
-        >
-          All
-        </Link>
-        {allGenres.map((g) => (
-          <Link
-            key={g}
-            href={qs({ genre: g === genre ? undefined : g })}
-            className={
-              g === genre
-                ? "font-semibold text-accent underline underline-offset-4"
-                : "text-muted hover:text-foreground"
-            }
-          >
-            {g}
-          </Link>
-        ))}
-        <span className="mx-1 hidden text-line sm:inline">|</span>
-        {decades.map((d) => (
-          <Link
-            key={d}
-            href={qs({ decade: d === decade ? undefined : String(d) })}
-            className={
-              d === decade
-                ? "font-mono font-semibold text-accent underline underline-offset-4"
-                : "font-mono text-muted hover:text-foreground"
-            }
-          >
-            {d}s
-          </Link>
-        ))}
-        <span className="ml-auto flex items-baseline gap-4">
-          {(Object.entries(SORTS) as [SortKey, string][]).map(([k, label]) => (
-            <Link
-              key={k}
-              href={qs({ sort: k })}
-              className={
-                k === sort
-                  ? "font-mono text-xs uppercase tracking-wide text-accent"
-                  : "font-mono text-xs uppercase tracking-wide text-muted hover:text-foreground"
-              }
-            >
-              {label}
-            </Link>
-          ))}
-          <Link
-            href={qs({ view: view === "grid" ? "index" : undefined })}
-            className="font-mono text-xs uppercase tracking-wide text-muted hover:text-foreground"
-            aria-label="Toggle view"
-          >
-            {view === "grid" ? "⊟ Compare" : "⊞ Posters"}
-          </Link>
-        </span>
-      </nav>
+      <MovieFilterBar
+        genres={allGenres}
+        decades={decades}
+        sorts={SORTS}
+        activeGenre={genre}
+        activeDecade={decade}
+        activeSort={sort}
+        activeView={view}
+        total={total}
+        page={page}
+        totalPages={totalPages}
+        href={qs}
+      />
 
       {/* Editor's pick — asymmetric entry before the index */}
       {featured && featured.count > 0 && (
