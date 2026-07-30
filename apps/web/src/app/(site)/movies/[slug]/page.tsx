@@ -398,6 +398,27 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
               <p className="mt-3 max-w-[65ch] text-[1.06rem] leading-relaxed text-foreground/95">
                 {movie.overview}
               </p>
+              {/* A share-alike licence is a licence with terms: name the author,
+                  link the licence. The synopsis on most of the library comes from
+                  Wikipedia under CC BY-SA, and a page that keeps the text and
+                  drops the credit has not used the licence — it has taken the
+                  text. TMDB rows carry no line here; the site-wide notice covers
+                  them, and the difference is the point. */}
+              {movie.overviewSourceUrl && (
+                <p className="mt-2 max-w-[65ch] text-xs text-muted">
+                  Synopsis from{" "}
+                  <a
+                    href={movie.overviewSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent hover:opacity-80"
+                  >
+                    Wikipedia
+                  </a>
+                  {movie.overviewLicense ? `, ${movie.overviewLicense}` : ""}. Everything below
+                  written here.
+                </p>
+              )}
             </>
           )}
           {/* Ours before the imported: the axes this film sits on, each with

@@ -97,6 +97,16 @@ model Movie {
   originalTitle String?
   tagline       String?
   overview      String?
+  /// Where the synopsis came from and under what terms. TMDB rows leave these
+  /// null (the site-wide TMDB notice covers them); a Wikipedia synopsis is
+  /// CC BY-SA and must carry its article and licence, which a CHECK enforces.
+  overviewSourceUrl String?
+  overviewLicense   String?
+  /// The article about the film, for the sources line and for re-enrichment.
+  wikipediaUrl  String?
+  /// ISO-ish label of the original language ("Japanese"), for JSON-LD's
+  /// inLanguage — which was left empty rather than asserting "en" for everything.
+  originalLanguage String?
   /// TMDB's paths — a source their CDN completes, never something we host.
   posterPath    String?
   backdropPath  String?

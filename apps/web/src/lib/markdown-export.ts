@@ -207,6 +207,11 @@ export interface MovieExport {
   homepage: Nullable<string>;
   collectionName: Nullable<string>;
   updatedAt: Nullable<Date>;
+  /** Provenance, for the footer: which database supplied these facts. */
+  tmdbId?: Nullable<number>;
+  wikidataId?: Nullable<string>;
+  overviewSourceUrl?: Nullable<string>;
+  overviewLicense?: Nullable<string>;
   // `personSlug`, where a credit is linked, turns the name into a link to that
   // person's page — so a crawler walking the .md corpus resolves one human
   // across films instead of a fresh string per document.
@@ -227,6 +232,24 @@ export interface MovieExport {
     publishedAt: Nullable<Date>;
     author: { username: string; displayName: Nullable<string> };
   }[];
+}
+
+/**
+ * Who supplied the facts in this document.
+ *
+ * A film imported from Wikidata carries a Q-id; one imported from TMDB carries a
+ * numeric id; a synopsis taken from Wikipedia carries its licence. Saying "TMDB"
+ * for all of them, as this footer used to, is a citation that does not hold.
+ */
+function provenanceLine(movie: MovieExport): string {
+  const sources: string[] = [];
+  if (movie.wikidataId) sources.push(`Wikidata (${movie.wikidataId})`);
+  if (movie.tmdbId) sources.push("TMDB");
+  if (movie.overviewLicense && movie.overviewSourceUrl) {
+    sources.push(`synopsis from Wikipedia, ${movie.overviewLicense}`);
+  }
+  const facts = sources.length > 0 ? sources.join("; ") : "this site";
+  return `Film facts: ${facts}. Reviews, themes and notes are the work of this site's members.`;
 }
 
 export function movieToMarkdown(movie: MovieExport): string {
@@ -352,7 +375,10 @@ export function movieToMarkdown(movie: MovieExport): string {
   lines.push(
     movie.homepage ? `Official site: ${movie.homepage}` : null,
     `Source: ${absUrl(`/movies/${movie.slug}`)}`,
-    "Film metadata supplied by TMDB. Reviews are the work of their authors.",
+    // Per film, not per site: most of the library's facts come from Wikidata now,
+    // and a document that credits TMDB for a row TMDB never supplied is wrong in
+    // the one place a machine reader is most likely to believe it.
+    provenanceLine(movie),
   );
 
   return `${lines.filter((l) => l !== null).join("\n")}\n`;
