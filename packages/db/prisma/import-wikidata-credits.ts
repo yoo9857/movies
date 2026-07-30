@@ -193,6 +193,7 @@ async function main() {
   let crewRows = 0;
   let peopleLinked = 0;
   let moneyFilled = 0;
+  const skipped: string[] = [];
 
   for (let i = 0; i < films.length; i += BATCH) {
     const batch = films.slice(i, i + BATCH);
@@ -307,7 +308,12 @@ async function main() {
         continue;
       }
 
-      const linked = await prisma.$transaction(async (tx) => {
+      // Per film, and caught per film: a run over tens of thousands of films
+      // must not end because one of them has a credit the database refuses. The
+      // transaction keeps that film's rows all-or-nothing; the catch keeps the
+      // rest of the library moving, and names what was skipped.
+      const linked = await prisma
+        .$transaction(async (tx) => {
         if (cast.length > 0) {
           await tx.movieCast.createMany({
             data: cast.map((c, index) => ({
@@ -334,8 +340,13 @@ async function main() {
         // Credits become people, claiming rows the site already knows rather than
         // duplicating them. This is what grows /people.
         return linkCreditsToPeople(tx, film.id);
-      });
+        })
+        .catch((e: Error) => {
+          skipped.push(`${film.title}: ${e.message.split("\n").pop()}`);
+          return null;
+        });
 
+      if (linked === null) continue;
       castRows += cast.length;
       crewRows += crew.length;
       peopleLinked += linked;
@@ -353,8 +364,14 @@ async function main() {
         if (Number.isFinite(revenue) && revenue > 0) data.revenue = revenue;
         if (Number.isFinite(budget) && budget > 0) data.budget = budget;
         if (Object.keys(data).length === 0) continue;
-        await prisma.movie.update({ where: { id: film.id }, data });
-        moneyFilled += 1;
+        // A figure the CHECK constraints refuse (a negative, an absurd amount)
+        // costs that film's money row and nothing else.
+        try {
+          await prisma.movie.update({ where: { id: film.id }, data });
+          moneyFilled += 1;
+        } catch (e) {
+          skipped.push(`${film.title} (money): ${(e as Error).message.split("\n").pop()}`);
+        }
       }
     }
 
@@ -369,6 +386,11 @@ async function main() {
     `\nCast rows ${castRows.toLocaleString("en-US")} · crew rows ${crewRows.toLocaleString("en-US")} · credits linked ${peopleLinked.toLocaleString("en-US")} · box office/budget filled ${moneyFilled}`,
   );
   console.log(`People in the library: ${people.toLocaleString("en-US")}`);
+  if (skipped.length > 0) {
+    console.warn(`\n${skipped.length} film(s) skipped:`);
+    for (const line of skipped.slice(0, 20)) console.warn(`  ${line}`);
+    if (skipped.length > 20) console.warn(`  …and ${skipped.length - 20} more`);
+  }
 }
 
 main()

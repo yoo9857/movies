@@ -24,6 +24,7 @@
     "db:add-films": "npm run add-films -w @cinepixo/db --",
     "db:import-wikidata": "npm run import-wikidata -w @cinepixo/db --",
     "db:import-wikidata-credits": "npm run import-wikidata-credits -w @cinepixo/db --",
+    "db:import-wikidata-people": "npm run import-wikidata-people -w @cinepixo/db --",
     "db:refresh-library": "npm run refresh-library -w @cinepixo/db",
     "db:studio": "npm run studio -w @cinepixo/db",
     "db:deploy": "npm run deploy -w @cinepixo/db",
