@@ -1,5 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import Link from "next/link";
+import { EnrichAllButton } from "@/components/admin/EnrichAllButton";
 import { ImportPortraitsButton } from "@/components/admin/ImportPortraitsButton";
 import { PersonPhotoManager } from "@/components/admin/PersonPhotoManager";
 import { PersonPortrait } from "@/components/PersonPortrait";
@@ -24,11 +25,14 @@ export default async function AdminPeoplePage() {
       tmdbProfilePath: true,
       bio: true,
       notes: true,
+      wikidataId: true,
       _count: { select: { castRoles: true, crewRoles: true } },
     },
     orderBy: { name: "asc" },
   });
 
+  const credited = people.filter((p) => p._count.castRoles + p._count.crewRoles > 0);
+  const pendingWiki = credited.filter((p) => !p.wikidataId).length;
   const pendingImport = people.filter((p) => !p.image && p.tmdbProfilePath).length;
   const needResearch = people.filter((p) => !p.image && !p.tmdbProfilePath);
   const ours = people.filter((p) => p.image);
@@ -48,10 +52,12 @@ export default async function AdminPeoplePage() {
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold">People</h1>
         <p className="font-mono text-xs text-muted">
-          {ours.length} ours · {pendingImport} importable · {needResearch.length} need research
+          {ours.length} ours · {pendingWiki} unlinked · {needResearch.length} need research
         </p>
       </div>
 
+      {/* Wikipedia first — it brings the photograph, its credit, and the facts. */}
+      <EnrichAllButton pending={pendingWiki} />
       <ImportPortraitsButton pending={pendingImport} />
 
       <div className="overflow-x-auto rounded-xl border border-line">
