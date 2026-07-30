@@ -128,11 +128,59 @@ model Movie {
   @@index([genres], type: Gin)
 }
 
+/// A person — actor, director, writer — as an entity this site owns.
+///
+/// Cast and crew used to be loose rows carrying a name and a TMDB path, so the
+/// same actor across five films was five unconnected records with nowhere to
+/// put a photo, a biography, or anything we had written. A Person is the row
+/// those credits point at: one identity, one page, one place for our own
+/// research.
+///
+/// `image` is deliberately *our* URL — an object on our storage that went
+/// through our upload pipeline — not a TMDB hotlink. `tmdbProfilePath` is kept
+/// only as the seed a first import can pull from; once `image` is set it is the
+/// one that renders.
+model Person {
+  id      String  @id @default(cuid())
+  /// URL identity: "song-kang-ho". Old ids never appear in public URLs.
+  slug    String  @unique
+  name    String
+  /// Optional link to TMDB, for enrichment. Null for people we added ourselves.
+  tmdbId  Int?    @unique
+  /// Our own portrait, served from our origin. Null renders house initials.
+  image   String?
+  /// TMDB's profile path — a source to import from, never what the page shows.
+  tmdbProfilePath String?
+
+  /// ── Everything below is ours to write ──
+  /// Who they are, in our words.
+  bio       String?
+  /// Career notes, recurring collaborators, what to watch first.
+  notes     String?
+  birthDate DateTime? @db.Date
+  deathDate DateTime? @db.Date
+  birthPlace String?
+  /// Off-site profiles for schema.org sameAs — identity claims, so real ones only.
+  links     Json?
+
+  castRoles MovieCast[]
+  crewRoles MovieCrew[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+}
+
 /// Top-billed cast, in TMDB billing order.
 model MovieCast {
   id           String  @id @default(cuid())
   movieId      String
   movie        Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  /// The person this credit is for. Set for every row the backfill matched;
+  /// nullable so a hand-added credit can exist before its Person does.
+  personId     String?
+  person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
   tmdbPersonId Int
   name         String
   character    String?
@@ -141,6 +189,7 @@ model MovieCast {
 
   @@index([movieId, order])
   @@index([name])
+  @@index([personId])
 }
 
 /// Key crew: Director, Screenplay, Director of Photography, Composer, Editor…
@@ -148,6 +197,8 @@ model MovieCrew {
   id           String  @id @default(cuid())
   movieId      String
   movie        Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  personId     String?
+  person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
   tmdbPersonId Int
   name         String
   job          String
@@ -156,6 +207,7 @@ model MovieCrew {
 
   @@index([movieId])
   @@index([name])
+  @@index([personId])
 }
 
 /// Trailers, teasers and clips — so a film with several gets a picker.

@@ -190,6 +190,39 @@ export async function processImage(
 }
 
 /**
+ * Fetch an image from elsewhere so it can become one of ours.
+ *
+ * The point of this function is ownership: a remote URL rendered directly is a
+ * hotlink — it can rot, it leaks our readers' requests to another host, and it
+ * is not ours in any sense. Pulled through here and then through
+ * `processImage`, the bytes land on our storage, stripped and re-encoded, and
+ * the page serves our object.
+ *
+ * Only http(s), and the size is capped before the body is read — a redirect to
+ * something enormous must not be able to exhaust the process.
+ */
+export async function fetchRemoteImage(url: string): Promise<Buffer> {
+  if (!/^https:\/\//i.test(url)) throw new ApiError(400, "Only https image URLs can be imported");
+
+  let res: Response;
+  try {
+    res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
+  } catch {
+    throw new ApiError(502, "Could not reach that image");
+  }
+  if (!res.ok) throw new ApiError(502, `Source returned ${res.status}`);
+
+  const declared = Number(res.headers.get("content-length") ?? 0);
+  if (declared > MAX_UPLOAD_BYTES) throw new ApiError(413, "That image is larger than 20 MB");
+
+  const buf = Buffer.from(await res.arrayBuffer());
+  // Content-Length is a hint, not a promise — check the bytes we actually got.
+  if (buf.length > MAX_UPLOAD_BYTES) throw new ApiError(413, "That image is larger than 20 MB");
+  if (buf.length === 0) throw new ApiError(502, "Source returned an empty image");
+  return buf;
+}
+
+/**
  * Pull a single file out of a multipart request.
  *
  * Next's route handlers give us `FormData` directly, so there is no multer here

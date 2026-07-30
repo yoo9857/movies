@@ -31,7 +31,7 @@ function newest(dates: (Date | null | undefined)[]): Date | undefined {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [reviews, movies, critics] = await Promise.all([
+  const [reviews, movies, critics, people] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { updatedAt: "desc" },
@@ -49,6 +49,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     prisma.critic.findMany({
       orderBy: { updatedAt: "desc" },
       select: { slug: true, updatedAt: true, avatarUrl: true },
+    }),
+    // Only people actually credited on something: a person page with an empty
+    // filmography has nothing to index.
+    prisma.person.findMany({
+      where: { OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }] },
+      orderBy: { updatedAt: "desc" },
+      select: { slug: true, updatedAt: true, image: true },
     }),
   ]);
 
@@ -120,6 +127,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly" as const,
       priority: 0.6,
       images: c.avatarUrl ? [c.avatarUrl] : [],
+    })),
+    {
+      url: absUrl("/people"),
+      lastModified: anything,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    },
+    ...people.map((p) => ({
+      url: absUrl(`/people/${p.slug}`),
+      lastModified: p.updatedAt,
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+      // Only our own object — a TMDB path is not ours to advertise as page media.
+      images: p.image ? [absUrl(p.image)] : [],
     })),
   ];
 }

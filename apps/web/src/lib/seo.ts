@@ -175,6 +175,9 @@ export const memberEntityId = (username: string) =>
  *  writer-director across the `director` and `author` slots of one film. */
 export const personEntityId = (name: string) => `${SITE_URL}/#/schema/person/${nameSlug(name)}`;
 
+/** A person we have a page for. Their page owns their identity. */
+export const peopleEntityId = (slug: string) => `${SITE_URL}/people/${slug}#person`;
+
 /* ───────────────────────────── site-wide nodes ───────────────────────────── */
 
 export function organizationNode(): JsonLdNode {
@@ -326,11 +329,17 @@ export function breadcrumbNode(path: string, trail: readonly Crumb[]): JsonLdNod
 /* ─────────────────────────────── people ─────────────────────────────── */
 
 /** A cast/crew name with no page of its own. */
-export function personNode(name: string, extra?: JsonLdNode): JsonLdNode {
+export function personNode(
+  name: string,
+  extra?: JsonLdNode,
+  /** Their page's slug, when we have one — then the page owns the identity. */
+  slug?: Nullable<string>,
+): JsonLdNode {
   return compact({
     "@type": "Person",
-    "@id": personEntityId(name),
+    "@id": slug ? peopleEntityId(slug) : personEntityId(name),
     name,
+    url: slug ? absUrl(`/people/${slug}`) : undefined,
     ...extra,
   });
 }
@@ -407,8 +416,11 @@ export interface MovieInput {
 }
 
 export interface MovieNodeOptions {
-  cast?: readonly { name: string; character?: Nullable<string> }[];
-  crew?: readonly { name: string; job: string }[];
+  // `personSlug`, where present, points the credit at that person's own page
+  // instead of a bare fragment id — so a crawler resolves one Bong Joon-ho
+  // across every film and review rather than a fresh stranger per page.
+  cast?: readonly { name: string; character?: Nullable<string>; personSlug?: Nullable<string> }[];
+  crew?: readonly { name: string; job: string; personSlug?: Nullable<string> }[];
   companies?: readonly { name: string }[];
   videos?: readonly {
     youtubeKey: string;
@@ -444,7 +456,7 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
   const directors = byJob("Director");
   const directorNodes =
     directors.length > 0
-      ? directors.map((d) => personNode(d.name))
+      ? directors.map((d) => personNode(d.name, undefined, d.personSlug))
       : movie.director
         ? [personNode(movie.director)]
         : [];
@@ -483,12 +495,14 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
     inLanguage: undefined, // not stored; asserting "en" for every film would lie
     countryOfOrigin: movie.countries?.map((name) => ({ "@type": "Country", name })),
     director: directorNodes,
-    author: writers.map((w) => personNode(w.name)),
-    musicBy: composers.map((c) => personNode(c.name)),
+    author: writers.map((w) => personNode(w.name, undefined, w.personSlug)),
+    musicBy: composers.map((c) => personNode(c.name, undefined, c.personSlug)),
     // No schema.org property for a DoP or an editor; `contributor` is the
     // honest generic rather than misusing `creator`.
-    contributor: [...photography, ...editors].map((c) => personNode(c.name)),
-    actor: opts.cast?.slice(0, 15).map((c) => personNode(c.name)),
+    contributor: [...photography, ...editors].map((c) =>
+      personNode(c.name, undefined, c.personSlug),
+    ),
+    actor: opts.cast?.slice(0, 15).map((c) => personNode(c.name, undefined, c.personSlug)),
     productionCompany: opts.companies?.map((c) => ({ "@type": "Organization", name: c.name })),
     partOfSeries: movie.collectionName
       ? { "@type": "CreativeWorkSeries", name: movie.collectionName }

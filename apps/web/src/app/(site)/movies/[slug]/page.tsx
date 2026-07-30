@@ -52,8 +52,12 @@ const getMovie = cache(async (param: string) => {
 });
 
 const movieInclude = {
-  cast: { orderBy: { order: "asc" as const } },
-  crew: true,
+  // The linked Person carries the portrait we own and the page to link to.
+  cast: {
+    orderBy: { order: "asc" as const },
+    include: { person: { select: { slug: true, image: true } } },
+  },
+  crew: { include: { person: { select: { slug: true } } } },
   videos: { orderBy: { sort: "asc" as const } },
   images: { orderBy: [{ kind: "asc" as const }, { sort: "asc" as const }] },
   reviews: {
@@ -226,8 +230,10 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
     }),
     breadcrumbNode(path, trail),
     movieNode(movie, {
-      cast: movie.cast,
-      crew: movie.crew,
+      // personSlug points each credit at that person's page, so the graph
+      // resolves one human across the site rather than one per film.
+      cast: movie.cast.map((c) => ({ ...c, personSlug: c.person?.slug })),
+      crew: movie.crew.map((c) => ({ ...c, personSlug: c.person?.slug })),
       companies,
       videos: movie.videos,
       fandom,
@@ -352,7 +358,12 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         <div>
           <div className="mb-3"><SectionHead>Credits</SectionHead></div>
           <CrewList
-            crew={movie.crew.map((c) => ({ id: c.id, name: c.name, job: c.job }))}
+            crew={movie.crew.map((c) => ({
+              id: c.id,
+              name: c.name,
+              job: c.job,
+              person: c.person,
+            }))}
             extra={[
               ...(movie.crew.length === 0 && movie.director
                 ? [{ label: "Director", value: movie.director }]
@@ -401,6 +412,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
           name: c.name,
           character: c.character,
           profilePath: c.profilePath,
+          person: c.person,
         }))}
       />
 
