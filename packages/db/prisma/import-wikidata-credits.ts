@@ -58,29 +58,48 @@ interface CreditRow {
 
 type Binding = Record<string, { value: string } | undefined>;
 
-function creditsQuery(qids: string[]): string {
+/**
+ * Cast, from the statements rather than the plain values.
+ *
+ * The character a performer plays is a qualifier on the statement (P453 as an
+ * item, P4633 where no item exists), and so is the billing position (P1545).
+ *
+ * `SERVICE wikibase:label` rather than an rdfs:label join with a language
+ * FILTER: the label service is the pattern the query service optimises for, and
+ * the difference is not marginal. Cast and crew in one query with seven UNIONs
+ * and manual label joins timed out at 504 for *five* films; split in two and
+ * asking the label service, eight films answer in a second.
+ */
+function castQuery(qids: string[]): string {
   const values = qids.map((q) => `wd:${q}`).join(" ");
-  const crew = CREW_PROPERTIES.map(
-    ([property, job]) => `  UNION { ?film wdt:${property} ?person . BIND("${job}" AS ?role) }`,
-  ).join("\n");
-
   return `
-SELECT ?film ?role ?person ?personLabel ?charLabel ?charName ?ordinal
-WHERE {
+SELECT ?film ?person ?personLabel ?charLabel ?charName ?ordinal WHERE {
   VALUES ?film { ${values} }
-  {
-    # The statement, not the plain value, because the character a performer plays
-    # is a qualifier on it — as an item (P453) or, where no item exists, as a
-    # plain string (P4633).
-    ?film p:P161 ?statement .
-    ?statement ps:P161 ?person .
-    BIND("cast" AS ?role)
-    OPTIONAL { ?statement pq:P453 ?char . ?char rdfs:label ?charLabel . FILTER(LANG(?charLabel) = "en") }
-    OPTIONAL { ?statement pq:P4633 ?charName }
-    OPTIONAL { ?statement pq:P1545 ?ordinal }
-  }
-${crew}
-  ?person rdfs:label ?personLabel . FILTER(LANG(?personLabel) = "en")
+  ?film p:P161 ?statement .
+  ?statement ps:P161 ?person .
+  OPTIONAL { ?statement pq:P453 ?char }
+  OPTIONAL { ?statement pq:P4633 ?charName }
+  OPTIONAL { ?statement pq:P1545 ?ordinal }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+`;
+}
+
+/**
+ * Crew, with the property as a variable.
+ *
+ * `VALUES ?prop { wdt:P57 … }` collapses what would otherwise be six UNION
+ * branches into one pattern the planner handles in a single pass.
+ */
+function crewQuery(qids: string[]): string {
+  const values = qids.map((q) => `wd:${q}`).join(" ");
+  const properties = CREW_PROPERTIES.map(([property]) => `wdt:${property}`).join(" ");
+  return `
+SELECT ?film ?prop ?person ?personLabel WHERE {
+  VALUES ?film { ${values} }
+  VALUES ?prop { ${properties} }
+  ?film ?prop ?person .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 `;
 }
@@ -182,28 +201,66 @@ async function main() {
     let credits: CreditRow[] = [];
     let money: Binding[] = [];
     try {
-      const [creditBindings, moneyBindings] = await Promise.all([
-        ask(creditsQuery(qids)),
+      const [castBindings, crewBindings, moneyBindings] = await Promise.all([
+        ask(castQuery(qids)),
+        ask(crewQuery(qids)),
         ask(moneyQuery(qids)),
       ]);
       money = moneyBindings;
-      credits = creditBindings.flatMap((b) => {
-        const filmQid = qidOf(b.film?.value);
-        const personQid = qidOf(b.person?.value);
-        const name = b.personLabel?.value?.trim();
-        if (!filmQid || !personQid || !name) return [];
-        const ordinal = b.ordinal ? Number(b.ordinal.value) : NaN;
-        return [
-          {
-            filmQid,
-            role: b.role?.value ?? "cast",
-            personQid,
-            personName: name.slice(0, 200),
-            character: (b.charLabel?.value ?? b.charName?.value ?? null)?.slice(0, 200) ?? null,
-            ordinal: Number.isFinite(ordinal) ? ordinal : null,
-          },
-        ];
-      });
+
+      const jobOf = (propertyUri: string | undefined) => {
+        const property = propertyUri?.split("/").pop() ?? "";
+        return CREW_PROPERTIES.find(([p]) => p === property);
+      };
+
+      // The label service leaves a label unbound when the entity has none in
+      // English; a person we cannot name is a credit we cannot show, so it goes.
+      const named = (b: Binding) => {
+        const uri = b.person?.value;
+        const label = b.personLabel?.value?.trim();
+        // An unlabelled entity's "label" is the Q-id itself; that is not a name.
+        return label && label !== uri?.split("/").pop() ? label : null;
+      };
+
+      credits = [
+        ...castBindings.flatMap((b) => {
+          const filmQid = qidOf(b.film?.value);
+          const personQid = qidOf(b.person?.value);
+          const name = named(b);
+          if (!filmQid || !personQid || !name) return [];
+          const ordinal = b.ordinal ? Number(b.ordinal.value) : NaN;
+          const character = b.charLabel?.value ?? b.charName?.value ?? null;
+          return [
+            {
+              filmQid,
+              role: "cast",
+              personQid,
+              personName: name.slice(0, 200),
+              // A character with no English label comes back as its Q-id.
+              character:
+                character && !/^Q[1-9][0-9]*$/.test(character) ? character.slice(0, 200) : null,
+              ordinal: Number.isFinite(ordinal) ? ordinal : null,
+            },
+          ];
+        }),
+        ...crewBindings.flatMap((b) => {
+          const filmQid = qidOf(b.film?.value);
+          const personQid = qidOf(b.person?.value);
+          const name = named(b);
+          const job = jobOf(b.prop?.value);
+          if (!filmQid || !personQid || !name || !job) return [];
+          return [
+            {
+              filmQid,
+              role: job[1],
+              personQid,
+              personName: name.slice(0, 200),
+              character: null,
+              ordinal: null,
+            },
+          ];
+        }),
+      ];
     } catch (e) {
       console.warn(`!  batch ${i / BATCH + 1}: ${(e as Error).message}`);
       continue;
