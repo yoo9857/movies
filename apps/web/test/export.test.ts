@@ -246,12 +246,18 @@ describe("topicToMarkdown", () => {
     );
   });
 
-  it("lists films newest first, with this site's numbers and the note", () => {
+  it("keeps the curator's order, with this site's numbers and the note", () => {
+    // Not re-sorted by year: the sequence is editorial, and the page presents
+    // the same one, so a quote from either lands in the same place.
     const md = topicToMarkdown(topic);
     const parasite = md.indexOf("Parasite");
     const interstellar = md.indexOf("Interstellar");
     expect(parasite).toBeGreaterThan(-1);
     expect(parasite).toBeLessThan(interstellar);
+    expect(topicToMarkdown({ ...topic, films: [...topic.films].reverse() }).indexOf("Interstellar"))
+      .toBeLessThan(
+        topicToMarkdown({ ...topic, films: [...topic.films].reverse() }).indexOf("Parasite"),
+      );
     expect(md).toContain("- 2019 · [Parasite](http://localhost:3000/movies/parasite-2019)");
     expect(md).toContain("**9.5/10** from 2 reviews");
     expect(md).toContain("— One downpour, two addresses, opposite meanings.");

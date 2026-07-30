@@ -179,6 +179,24 @@ function Md({ text }: { text: string }) {
   );
 }
 
+/**
+ * The same renderer, for house prose that is not a review body — a topic's
+ * essay, for one. The `:::` directives are review-only and deliberately not
+ * parsed here: a theme's essay has no film to pull a still or a trailer from.
+ *
+ * This exists because the topic page printed its essay as preformatted text
+ * while the admin form promised Markdown and the .md export shipped Markdown —
+ * so an author who wrote `**this**` saw asterisks on the page and bold
+ * everywhere else.
+ */
+export function MarkdownProse({ text }: { text: string }) {
+  return (
+    <div className="prose-review">
+      <Md text={text} />
+    </div>
+  );
+}
+
 export function ReviewBody({ content, media }: { content: string; media: ReviewMedia }) {
   const blocks = parse(content);
 

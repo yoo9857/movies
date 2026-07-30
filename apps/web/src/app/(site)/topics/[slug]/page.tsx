@@ -8,6 +8,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { Poster } from "@/components/Poster";
 import { ReelDivider } from "@/components/ReelDivider";
+import { MarkdownProse } from "@/components/review/ReviewBody";
 import {
   breadcrumbNode,
   type Crumb,
@@ -38,6 +39,9 @@ const getTopic = cache(async (slug: string) => {
     where: { slug },
     include: {
       movies: {
+        // The order the curator arranged, not chronology: this page is an
+        // argument, and the sequence films are presented in is part of it.
+        orderBy: { sort: "asc" },
         include: {
           movie: {
             select: {
@@ -99,18 +103,16 @@ export default async function TopicPage(props: { params: Promise<{ slug: string 
   const topic = await getTopic(slug);
   if (!topic) notFound();
 
-  const films = topic.movies
-    .map((mt) => {
-      const ratings = mt.movie.reviews.map((r) => r.rating);
-      return {
-        movie: mt.movie,
-        note: mt.note,
-        year: mt.movie.releaseDate ? mt.movie.releaseDate.getUTCFullYear() : null,
-        average: ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : null,
-        reviewCount: ratings.length,
-      };
-    })
-    .sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+  const films = topic.movies.map((mt) => {
+    const ratings = mt.movie.reviews.map((r) => r.rating);
+    return {
+      movie: mt.movie,
+      note: mt.note,
+      year: mt.movie.releaseDate ? mt.movie.releaseDate.getUTCFullYear() : null,
+      average: ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : null,
+      reviewCount: ratings.length,
+    };
+  });
 
   const related = await getRelated(topic.id, films.map((f) => f.movie.id));
 
@@ -174,9 +176,9 @@ export default async function TopicPage(props: { params: Promise<{ slug: string 
               <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
                 The reading
               </h2>
-              <p className="mt-3 whitespace-pre-line text-[1.02rem] leading-relaxed">
-                {topic.essay}
-              </p>
+              <div className="mt-3">
+                <MarkdownProse text={topic.essay} />
+              </div>
             </section>
           )}
 

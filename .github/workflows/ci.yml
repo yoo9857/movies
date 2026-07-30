@@ -1,0 +1,92 @@
+# Everything that can fail before a deploy, run on every push.
+#
+# There was no CI: the 300 unit tests, the lint pass, the typecheck and the
+# production build only ran when someone remembered to run them, and the
+# PostgreSQL suite ran only on a machine with a tunnel open. Deploys go out by
+# `git archive` rather than from GitHub, so this is not a gate on release — it is
+# the record of whether master is sound.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: lint · types · unit tests · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The client is generated into packages/db/src/generated, which is
+      # gitignored — nothing typechecks or builds without this. No database is
+      # touched: generate reads the schema only.
+      - run: npm run db:generate
+
+      - run: npm run lint -w web
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p apps/web/tsconfig.json
+
+      - run: npm test
+
+      - name: Production build
+        # Required at build time: NEXT_PUBLIC_* is inlined, and lib/site.ts fails
+        # the build rather than shipping "localhost" as the canonical origin.
+        env:
+          NEXT_PUBLIC_SITE_URL: https://cinepixo.com
+        run: npm run build
+
+  database:
+    name: PostgreSQL constraints
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same major as production. The suite builds its own scratch database
+        # from the real migration files, so the schema under test is the one that
+        # ships — including pg_trgm and every hand-written CHECK.
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cinepixo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run db:generate
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql://postgres:ci@127.0.0.1:5432/cinepixo?schema=public
+        run: npm run db:deploy
+
+      - name: Constraint and query tests
+        # The helper derives its scratch database from this URL by suffixing the
+        # name, and asserts the suffix is present before dropping anything.
+        env:
+          DATABASE_URL: postgresql://postgres:ci@127.0.0.1:5432/cinepixo?schema=public
+        run: npm run test:db

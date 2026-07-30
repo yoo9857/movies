@@ -22,7 +22,10 @@ export const GET = handle(async (request: Request) => {
     prisma.review.findMany({
       where: {
         status: "PUBLISHED",
-        OR: [{ title: ci(q) }, { excerpt: ci(q) }],
+        // The body too, not just the title: on a site whose product is
+        // long-form writing, a phrase someone remembers from a review has to
+        // find it. Served by Review_content_trgm.
+        OR: [{ title: ci(q) }, { excerpt: ci(q) }, { verdict: ci(q) }, { content: ci(q) }],
       },
       orderBy: { publishedAt: "desc" },
       take: 10,

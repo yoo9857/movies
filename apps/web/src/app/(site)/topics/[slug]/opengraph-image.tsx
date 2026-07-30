@@ -28,7 +28,8 @@ export default async function Image({ params }: { params: Promise<{ slug: string
           kind: true,
           description: true,
           movies: {
-            orderBy: { createdAt: "asc" },
+            // The curator's order: the first three are the ones that make the case.
+            orderBy: { sort: "asc" },
             select: { movie: { select: { posterPath: true } } },
           },
         },

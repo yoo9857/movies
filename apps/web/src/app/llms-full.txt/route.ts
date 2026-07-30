@@ -38,7 +38,7 @@ async function taxonomySection(): Promise<string> {
       description: true,
       essay: true,
       movies: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { sort: "asc" },
         select: {
           note: true,
           movie: { select: { slug: true, title: true, releaseDate: true } },

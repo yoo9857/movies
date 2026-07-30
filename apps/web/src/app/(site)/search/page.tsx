@@ -42,7 +42,8 @@ export default async function SearchPage(props: {
         prisma.review.findMany({
           where: {
             status: "PUBLISHED",
-            OR: [{ title: ci(q) }, { excerpt: ci(q) }],
+            // Body and verdict included — see the API route for why.
+            OR: [{ title: ci(q) }, { excerpt: ci(q) }, { verdict: ci(q) }, { content: ci(q) }],
           },
           orderBy: { publishedAt: "desc" },
           take: 10,

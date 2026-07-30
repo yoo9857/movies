@@ -121,7 +121,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
           slug: true,
           updatedAt: true,
           movies: {
-            orderBy: { createdAt: "asc" },
+            orderBy: { sort: "asc" },
             take: 3,
             select: { movie: { select: { posterPath: true } } },
           },

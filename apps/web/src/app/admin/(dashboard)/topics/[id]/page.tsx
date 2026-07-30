@@ -21,7 +21,7 @@ export default async function AdminTopicPage(props: { params: Promise<{ id: stri
   const [topic, library] = await Promise.all([
     prisma.topic.findUnique({
       where: { id },
-      include: { movies: { orderBy: { createdAt: "asc" }, select: { movieId: true, note: true } } },
+      include: { movies: { orderBy: { sort: "asc" }, select: { movieId: true, note: true } } },
     }),
     prisma.movie.findMany({
       orderBy: { title: "asc" },

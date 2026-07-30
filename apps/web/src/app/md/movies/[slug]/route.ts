@@ -16,7 +16,8 @@ const include = {
   },
   crew: { include: { person: { select: { slug: true } } } },
   topics: {
-    orderBy: { createdAt: "asc" as const },
+    // Same order the film page shows: themes first, alphabetical within.
+    orderBy: [{ topic: { kind: "asc" as const } }, { topic: { name: "asc" as const } }],
     select: { note: true, topic: { select: { slug: true, name: true, kind: true } } },
   },
   reviews: {

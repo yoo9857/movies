@@ -97,7 +97,7 @@ export default async function TopicsPage() {
       kind: true,
       description: true,
       movies: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { sort: "asc" },
         select: { movie: { select: { title: true, posterPath: true } } },
       },
     },

@@ -20,6 +20,7 @@
     "db:seed": "npm run seed -w @cinepixo/db",
     "db:seed:library": "npm run seed:library -w @cinepixo/db",
     "db:seed:topics": "npm run seed:topics -w @cinepixo/db",
+    "db:add-films": "npm run add-films -w @cinepixo/db",
     "db:refresh-library": "npm run refresh-library -w @cinepixo/db",
     "db:studio": "npm run studio -w @cinepixo/db",
     "db:deploy": "npm run deploy -w @cinepixo/db",

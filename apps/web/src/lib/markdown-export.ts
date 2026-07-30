@@ -538,7 +538,9 @@ export function topicToMarkdown(topic: TopicExport): string {
   if (topic.films.length === 0) {
     lines.push("No films assigned yet.", "");
   } else {
-    for (const f of [...topic.films].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))) {
+    // The order the caller passed, which is the curator's — same sequence the
+    // page presents, so a quote from either lands in the same place.
+    for (const f of topic.films) {
       lines.push(
         `- ${f.year ?? "—"} · [${f.title}](${absUrl(`/movies/${f.slug}`)})` +
           (f.average != null

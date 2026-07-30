@@ -34,7 +34,10 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
   await prisma.$transaction([
     prisma.movieTopic.deleteMany({ where: { topicId } }),
     prisma.movieTopic.createMany({
-      data: films.map((f) => ({ topicId, movieId: f.movieId, note: f.note ?? null })),
+      // `sort` carries the order the screen was in. It cannot be inferred from
+      // createdAt: this runs in one transaction, and PostgreSQL's now() is
+      // transaction-scoped, so every row here shares a timestamp.
+      data: films.map((f, i) => ({ topicId, movieId: f.movieId, note: f.note ?? null, sort: i })),
     }),
     // The topic's public page just changed; its sitemap lastmod should say so.
     prisma.topic.update({ where: { id: topicId }, data: { updatedAt: new Date() } }),

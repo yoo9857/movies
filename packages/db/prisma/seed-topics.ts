@@ -14,15 +14,25 @@ import { prisma } from "../src/index";
 
 type Kind = "THEME" | "MOTIF";
 
+/**
+ * A film on an axis, identified by whichever handle is stable for it.
+ *
+ * `tmdbId` for the films the seeds themselves put in the library — that is the
+ * key seed-movies.ts upserts on. `slug` for everything imported from TMDB by
+ * add-films.ts, whose ids are resolved at run time and are not knowable here.
+ */
+type FilmRef = ({ tmdbId: number } | { slug: string }) & { note: string };
+
 interface SeedTopic {
   slug: string;
   name: string;
   kind: Kind;
   /** One sentence, ≤300 chars — what the axis means, precisely. */
   description: string;
-  /** Shown as "The reading" on the topic page. Prose, not markdown headings. */
+  /** Shown as "The reading" on the topic page. Markdown. */
   essay?: string;
-  films: { tmdbId: number; note: string }[];
+  /** Order is editorial: it is the sequence the argument is made in. */
+  films: FilmRef[];
 }
 
 // tmdbId is the join key because it is what seed-movies.ts upserts on; slugs
@@ -289,9 +299,18 @@ const TOPICS: SeedTopic[] = [
   },
 ];
 
+/** The film this reference points at, or null when it is not in the library. */
+async function findFilm(ref: FilmRef): Promise<{ id: string } | null> {
+  return "tmdbId" in ref
+    ? prisma.movie.findUnique({ where: { tmdbId: ref.tmdbId }, select: { id: true } })
+    : prisma.movie.findUnique({ where: { slug: ref.slug }, select: { id: true } });
+}
+
+const refLabel = (ref: FilmRef) => ("tmdbId" in ref ? `tmdb:${ref.tmdbId}` : ref.slug);
+
 async function main() {
   let assignments = 0;
-  const missing: number[] = [];
+  const missing: string[] = [];
 
   for (const t of TOPICS) {
     const topic = await prisma.topic.upsert({
@@ -312,24 +331,25 @@ async function main() {
       select: { id: true },
     });
 
+    // `position` counts only the films that are actually here, so a skipped
+    // title leaves no gap in the order the page renders.
+    let position = 0;
     for (const f of t.films) {
-      const movie = await prisma.movie.findUnique({
-        where: { tmdbId: f.tmdbId },
-        select: { id: true },
-      });
+      const movie = await findFilm(f);
       // A film absent from this library is not an error — the seed is a subset
       // of a growing catalogue — but it is worth naming, because a topic page
       // quietly missing a third of its argument looks finished.
       if (!movie) {
-        missing.push(f.tmdbId);
+        missing.push(refLabel(f));
         continue;
       }
 
       await prisma.movieTopic.upsert({
         where: { movieId_topicId: { movieId: movie.id, topicId: topic.id } },
-        update: { note: f.note },
-        create: { movieId: movie.id, topicId: topic.id, note: f.note },
+        update: { note: f.note, sort: position },
+        create: { movieId: movie.id, topicId: topic.id, note: f.note, sort: position },
       });
+      position += 1;
       assignments += 1;
     }
   }
@@ -343,6 +363,7 @@ async function main() {
     console.warn(
       `Skipped ${missing.length} assignment(s) — film not in this library: ${[...new Set(missing)].join(", ")}`,
     );
+    console.warn("Run `npm run db:add-films` first if those titles should be here.");
   }
 }
 

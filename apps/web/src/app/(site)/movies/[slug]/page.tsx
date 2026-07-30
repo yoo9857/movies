@@ -62,7 +62,10 @@ const movieInclude = {
   crew: { include: { person: { select: { slug: true } } } },
   // The axes we placed this film on, each with the sentence that justifies it.
   topics: {
-    orderBy: { createdAt: "asc" as const },
+    // Themes before motifs (the enum's own order), alphabetical within. Not
+    // `sort`: that column is a film's position *inside a topic*, which says
+    // nothing about how one film's axes should be listed.
+    orderBy: [{ topic: { kind: "asc" as const } }, { topic: { name: "asc" as const } }],
     select: {
       note: true,
       // Timestamps, because they are part of when *this page* last changed —

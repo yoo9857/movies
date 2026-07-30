@@ -16,6 +16,7 @@ export async function GET(
     where: { slug },
     include: {
       movies: {
+        orderBy: { sort: "asc" },
         include: {
           movie: {
             select: {

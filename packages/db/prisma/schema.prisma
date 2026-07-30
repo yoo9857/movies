@@ -302,10 +302,15 @@ model MovieTopic {
   /// How the theme or motif shows up in *this* film — one editorial sentence.
   /// A topic page listing films without saying why is just a tag cloud.
   note      String?
+  /// Curated position within the topic, 0-based. Not derived from createdAt:
+  /// the admin screen rewrites the whole list in one transaction, and now() is
+  /// transaction-scoped, so every row would share a timestamp.
+  sort      Int      @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@id([movieId, topicId])
   @@index([topicId])
+  @@index([topicId, sort])
 }
 
 /// A fan-written review of a movie.
