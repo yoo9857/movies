@@ -40,6 +40,11 @@ enum ImageKind {
   backdrop
 }
 
+enum TopicKind {
+  THEME
+  MOTIF
+}
+
 /// Fan account. Reviews are written by users; the site owner is role=ADMIN.
 model User {
   id           String   @id @default(cuid())
@@ -117,6 +122,7 @@ model Movie {
   crew          MovieCrew[]
   videos        MovieVideo[]
   images        MovieImage[]
+  topics        MovieTopic[]
 
   @@index([title])
   @@index([collectionId])
@@ -258,6 +264,48 @@ model MovieImage {
 
   @@unique([movieId, path])
   @@index([movieId, kind, sort])
+}
+
+/// An editorial axis of the library — a theme (what a film is about: class
+/// divide, the cost of ambition) or a motif (what recurs on screen: stairs,
+/// mirrors, one continuous take).
+///
+/// This is curation, not import: TMDB keywords describe a film in isolation,
+/// a topic connects films to each other in our voice. Nothing here is ever
+/// filled from an API — the taxonomy, the definitions and every per-film note
+/// are written by us, which is the point of having one.
+model Topic {
+  id   String    @id @default(cuid())
+  /// URL identity: "class-divide". Same slug grammar as every public URL.
+  slug String    @unique
+  name String
+  kind TopicKind
+  /// One-sentence definition of the axis, shown on cards and in dt/dd lists.
+  description String?
+  /// The editorial essay: why this axis matters, how to read it, what to
+  /// watch first. Markdown, ours.
+  essay String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  movies    MovieTopic[]
+
+  @@index([kind])
+  @@index([name])
+}
+
+/// One film carrying one topic, with the sentence that justifies the claim.
+model MovieTopic {
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  /// How the theme or motif shows up in *this* film — one editorial sentence.
+  /// A topic page listing films without saying why is just a tag cloud.
+  note      String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([movieId, topicId])
+  @@index([topicId])
 }
 
 /// A fan-written review of a movie.
