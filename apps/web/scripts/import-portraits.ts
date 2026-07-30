@@ -31,9 +31,34 @@ function arg(name: string, fallback: number): number {
 }
 
 const LIMIT = arg("limit", 200);
-/** Milliseconds between people. Wikimedia is free and shared; serial and slow. */
-const PACE = arg("pace", 700);
+/**
+ * Milliseconds between people. Wikimedia is free and shared; serial and slow.
+ *
+ * 700ms drew 429s from upload.wikimedia.org on one run in four — the image host
+ * throttles harder than the API does, and a portrait fetch is a megabyte or two.
+ */
+const PACE = arg("pace", 1500);
 const DRY = process.argv.includes("--dry");
+
+/**
+ * Three tries with a widening pause, for the one error worth retrying.
+ *
+ * A 429 from the image host means "not yet", not "no" — and losing a portrait to
+ * it wastes the article lookup that found it. Anything else (a 404, an image
+ * sharp cannot decode) fails immediately, because a second attempt would fail
+ * the same way.
+ */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const throttled = /\b429\b|too many requests/i.test((e as Error).message);
+      if (!throttled || attempt >= 3) throw e;
+      await new Promise((r) => setTimeout(r, attempt * 8_000));
+    }
+  }
+}
 
 /** "https://en.wikipedia.org/wiki/Song_Kang-ho" → "Song Kang-ho" */
 function articleTitle(url: string): string | null {
@@ -89,7 +114,7 @@ async function main() {
         // working as intended, not a failure — the house monogram stands in.
         noFreeImage += 1;
       } else if (!DRY) {
-        const buf = await fetchRemoteImage(found.image.url);
+        const buf = await withRetry(() => fetchRemoteImage(found.image!.url));
         const processed = await processImage(buf, { fullWidth: 640, square: true });
         const url = await putPublicObject(
           buildKey("people", processed.ext),
