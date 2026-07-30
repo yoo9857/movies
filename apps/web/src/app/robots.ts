@@ -9,7 +9,9 @@ import { SITE_URL } from "@/lib/site";
  * keeping an unbounded set of query-string URLs out of the index. A `Disallow`
  * there would block the crawl and the `noindex` along with it.
  */
-const PRIVATE = ["/admin", "/api/", "/me", "/write", "/login", "/register"];
+// `/legacy/` is the 308 machinery for pre-slug movie URLs — the redirects it
+// issues are followed from the old URLs themselves; the prefix has no content.
+const PRIVATE = ["/admin", "/api/", "/me", "/write", "/login", "/register", "/legacy/"];
 
 /**
  * The Markdown renditions live at /md/ and are rewritten to /reviews/*.md and

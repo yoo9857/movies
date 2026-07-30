@@ -97,13 +97,15 @@ declares its canonical home to be `localhost`.
 | URL | What it is |
 | --- | --- |
 | `/robots.txt` | Crawl policy; search and assistant agents named explicitly |
-| `/sitemap.xml` | Every indexable URL, with posters as image entries |
-| `/feed.xml` | RSS 2.0 — full text via `content:encoded`, `atom:link rel=self` |
+| `/sitemap.xml` | Sitemap **index** → `/sitemaps/{pages,reviews,movies,people,critics}.xml`. Styled via XSL: a browser shows a folder listing and per-section tables, crawlers see standard XML |
+| `/feed.xml` | RSS 2.0 — full text via `content:encoded`; styled via XSL for humans |
 | `/feed.json` | JSON Feed 1.1 — same content, real author objects, ratings |
+| `/ads.txt` | Authorised ad sellers (IAB format), derived from the same env var as the AdSense meta tag |
 | `/llms.txt` | What the site is and what its ratings mean, for language models |
 | `/llms-full.txt` | Full text of every published review as one document |
 | `/reviews/{slug}.md` | One review as clean Markdown with YAML front matter |
-| `/movies/{id}.md` | One film: credits, cast, and the criticism on it |
+| `/movies/{slug}.md` | One film: credits (linked to people pages), cast, and the criticism on it |
+| `/people/{slug}.md` | One person: sourced facts, filmography with this site's ratings, the criticism |
 
 The `.md` URLs are rewrites onto `/md/*` handlers (see `next.config.ts`) and are
 advertised from each page as `rel="alternate" type="text/markdown"`.
