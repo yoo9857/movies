@@ -19,6 +19,7 @@
     "seed:topics": "tsx prisma/seed-topics.ts",
     "add-films": "tsx prisma/add-films.ts",
     "import-wikidata": "tsx prisma/import-wikidata.ts",
+    "import-wikidata-credits": "tsx prisma/import-wikidata-credits.ts",
     "refresh-library": "tsx prisma/refresh-library.ts",
     "studio": "prisma studio"
   },

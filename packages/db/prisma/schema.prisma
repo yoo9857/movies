@@ -88,6 +88,10 @@ model Movie {
   /// The provenance of every fact on those rows, and the key their import is
   /// idempotent on — a title and a year are not unique enough to be one.
   wikidataId    String?   @unique
+  /// How many Wikipedia editions have an article on this film. The notability
+  /// signal every backfill works through, so the library fills in the order
+  /// that matters rather than alphabetically.
+  wikidataSitelinks Int?
   imdbId        String?
   title         String
   originalTitle String?
@@ -208,7 +212,10 @@ model MovieCast {
   /// nullable so a hand-added credit can exist before its Person does.
   personId     String?
   person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
-  tmdbPersonId Int
+  /// Whichever source this credit came from identifies it. TMDB imports carry
+  /// the numeric id; Wikidata imports carry the Q-id. Neither is required.
+  tmdbPersonId Int?
+  wikidataPersonId String?
   name         String
   character    String?
   profilePath  String?
@@ -217,6 +224,7 @@ model MovieCast {
   @@index([movieId, order])
   @@index([name])
   @@index([personId])
+  @@index([wikidataPersonId])
 }
 
 /// Key crew: Director, Screenplay, Director of Photography, Composer, Editor…
@@ -226,7 +234,8 @@ model MovieCrew {
   movie        Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
   personId     String?
   person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
-  tmdbPersonId Int
+  tmdbPersonId Int?
+  wikidataPersonId String?
   name         String
   job          String
   department   String?
@@ -235,6 +244,7 @@ model MovieCrew {
   @@index([movieId])
   @@index([name])
   @@index([personId])
+  @@index([wikidataPersonId])
 }
 
 /// Trailers, teasers and clips — so a film with several gets a picker.

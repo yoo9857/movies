@@ -34,6 +34,15 @@ const MIN_SITELINKS = arg("min-sitelinks", 3);
 const FROM = arg("from", 1900);
 const TO = arg("to", new Date().getUTCFullYear());
 const DRY = process.argv.includes("--dry");
+/**
+ * Fill in `wikidataSitelinks` for films already imported, and nothing else.
+ *
+ * The column arrived after the first bulk run had started, so tens of thousands
+ * of rows have none — and it is the ordering key every backfill uses, so those
+ * rows would sort last forever. This mode asks each year for nothing but ids and
+ * sitelink counts, which is a fraction of the work of a full year fetch.
+ */
+const SITELINKS_ONLY = process.argv.includes("--sitelinks-only");
 
 /**
  * One year of films.
@@ -273,7 +282,68 @@ function slugMinter(taken: Set<string>) {
   };
 }
 
+/** ids and sitelink counts only — the cheap query behind `--sitelinks-only`. */
+function sitelinksQuery(year: number): string {
+  return `
+SELECT ?film ?sitelinks WHERE {
+  ?film wdt:P31 wd:Q11424 ; wdt:P345 ?imdb ; wdt:P57 ?director ; wikibase:sitelinks ?sitelinks .
+  FILTER(?sitelinks >= ${MIN_SITELINKS})
+  FILTER EXISTS { ?film wdt:P577 ?chunkDate . FILTER(YEAR(?chunkDate) = ${year}) }
+}
+`;
+}
+
+async function backfillSitelinks() {
+  console.log(`Filling wikidataSitelinks for ${FROM}–${TO} (≥${MIN_SITELINKS})`);
+  let updated = 0;
+
+  for (let year = FROM; year <= TO; year++) {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        Accept: "application/sparql-results+json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": USER_AGENT,
+      },
+      body: new URLSearchParams({ query: sitelinksQuery(year) }),
+      signal: AbortSignal.timeout(180_000),
+    });
+    if (!res.ok) {
+      console.warn(`!  ${year}: HTTP ${res.status}`);
+      continue;
+    }
+
+    const json = (await res.json()) as { results: { bindings: Binding[] } };
+    const pairs = json.results.bindings.flatMap((b) => {
+      const qid = b.film?.value.split("/").pop();
+      const n = Number(b.sitelinks?.value ?? NaN);
+      return qid && /^Q[1-9][0-9]*$/.test(qid) && Number.isFinite(n) ? [[qid, n] as const] : [];
+    });
+
+    // One UPDATE per year rather than per film: a VALUES list joined against the
+    // table. Only rows that are still null are touched, so a rerun is free.
+    for (let i = 0; i < pairs.length; i += 1000) {
+      const chunk = pairs.slice(i, i + 1000);
+      if (chunk.length === 0) continue;
+      const values = chunk.map(([qid, n]) => `('${qid}',${n})`).join(",");
+      const count = await prisma.$executeRawUnsafe(
+        `UPDATE "Movie" m SET "wikidataSitelinks" = v.n
+           FROM (VALUES ${values}) AS v(qid, n)
+          WHERE m."wikidataId" = v.qid AND m."wikidataSitelinks" IS NULL`,
+      );
+      updated += count;
+    }
+
+    console.log(`${year}: ${String(pairs.length).padStart(5)} on Wikidata · ${updated} filled so far`);
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  console.log(`\nFilled ${updated.toLocaleString("en-US")} rows.`);
+}
+
 async function main() {
+  if (SITELINKS_ONLY) return backfillSitelinks();
+
   console.log(
     `Wikidata → library: ${FROM}–${TO}, films with an IMDb id, a director and ≥${MIN_SITELINKS} Wikipedia editions${DRY ? " (dry run)" : ""}`,
   );
@@ -322,6 +392,11 @@ async function main() {
           genres: r.genres,
           countries: r.countries,
           keywords: [],
+          // Kept because every later backfill — credits, and posters if a
+          // credential ever appears — has to choose an order to work through six
+          // figures of films, and "how many Wikipedia editions wrote about it" is
+          // the only ranking signal these rows arrive with.
+          wikidataSitelinks: r.sitelinks,
         };
       });
 

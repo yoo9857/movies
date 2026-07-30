@@ -134,3 +134,89 @@ describe("after a refresh, the linker", () => {
     expect(count.rows[0].count).toBe("4");
   });
 });
+
+/**
+ * The same function against credits that came from Wikidata.
+ *
+ * These carry a Q-id and no TMDB id, which the linker did not previously admit
+ * existed — the column was required and identity was resolved by it alone. The
+ * bulk import fills the library from Wikidata, so this is now the path most
+ * credits arrive on, and the claim-rather-than-duplicate rule has to hold for it
+ * too: `p-enriched` below is the person an admin has already written about.
+ */
+describe("credits that came from Wikidata", () => {
+  const FILM = "movie-wd-test-00000000";
+
+  beforeAll(async () => {
+    await pg.query(
+      `INSERT INTO "Movie" ("id","slug","title","genres","updatedAt")
+       VALUES ($1,'wd-test-2026','Wikidata Test',ARRAY[]::TEXT[],CURRENT_TIMESTAMP)`,
+      [FILM],
+    );
+    // Same person as the enriched fixture above (Q490529), reached by Q-id.
+    await pg.query(
+      `INSERT INTO "MovieCast" ("id","movieId","wikidataPersonId","name","character","order")
+       VALUES ('wc-1', $1, 'Q490529', 'Song Kang-ho', 'Kim Ki-taek', 0)`,
+      [FILM],
+    );
+    // A Q-id nobody here knows yet, plus a name that collides with an existing
+    // person who has no Q-id — the claim path, from the other direction.
+    await pg.query(
+      `INSERT INTO "MovieCast" ("id","movieId","wikidataPersonId","name","order")
+       VALUES ('wc-2', $1, 'Q1122334', 'Someone Else', 1)`,
+      [FILM],
+    );
+    // A credit with no id at all, as the pre-API seeds wrote them.
+    await pg.query(
+      `INSERT INTO "MovieCrew" ("id","movieId","name","job")
+       VALUES ('ww-1', $1, 'Nameless Only', 'Editor')`,
+      [FILM],
+    );
+    await linkModule.linkCreditsToPeople(prismaModule.prisma, FILM);
+  });
+
+  it("resolves a Q-id to the person already carrying it, without duplicating", async () => {
+    const { rows } = await pg.query(
+      `SELECT "personId" FROM "MovieCast" WHERE id = 'wc-1'`,
+    );
+    expect(rows[0].personId).toBe("p-enriched");
+    const count = await pg.query(
+      `SELECT count(*) FROM "Person" WHERE "wikidataId" = 'Q490529'`,
+    );
+    expect(count.rows[0].count).toBe("1");
+  });
+
+  it("claims a person who has no Q-id yet rather than creating a second one", async () => {
+    // "Someone Else" is the slug squatter from the fixture above: no ids at all.
+    const { rows } = await pg.query(
+      `SELECT id, "wikidataId" FROM "Person" WHERE name = 'Someone Else'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe("p-squat");
+    expect(rows[0].wikidataId).toBe("Q1122334");
+  });
+
+  it("still handles a credit with no id but a name", async () => {
+    const { rows } = await pg.query(
+      `SELECT c."personId", p.name, p."tmdbId", p."wikidataId"
+         FROM "MovieCrew" c JOIN "Person" p ON p.id = c."personId"
+        WHERE c.id = 'ww-1'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name).toBe("Nameless Only");
+    expect(rows[0].tmdbId).toBeNull();
+    expect(rows[0].wikidataId).toBeNull();
+  });
+
+  it("leaves nothing unlinked, and repeats without effect", async () => {
+    const unlinked = await pg.query(
+      `SELECT
+        (SELECT count(*) FROM "MovieCast" WHERE "movieId" = $1 AND "personId" IS NULL) AS c,
+        (SELECT count(*) FROM "MovieCrew" WHERE "movieId" = $1 AND "personId" IS NULL) AS w`,
+      [FILM],
+    );
+    expect(unlinked.rows[0].c).toBe("0");
+    expect(unlinked.rows[0].w).toBe("0");
+    expect(await linkModule.linkCreditsToPeople(prismaModule.prisma, FILM)).toBe(0);
+  });
+});
