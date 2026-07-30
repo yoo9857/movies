@@ -46,7 +46,9 @@ export async function generateMetadata(props: {
 }): Promise<Metadata> {
   const { slug } = await props.params;
   const critic = await getCritic(slug);
-  if (!critic) return { title: "Critic not found", robots: { index: false, follow: false } };
+  // Thrown here, not just in the page: for bots with blocking metadata this is
+  // what turns a missing critic into a real 404 instead of a soft one.
+  if (!critic) notFound();
 
   return pageMetadata({
     path: `/critics/${critic.slug}`,

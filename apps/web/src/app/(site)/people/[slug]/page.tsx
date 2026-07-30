@@ -18,6 +18,8 @@ import {
   type Crumb,
   graph,
   isoDay,
+  itemListNode,
+  movieEntityId,
   pageMetadata,
   peopleEntityId,
   webPageNode,
@@ -192,7 +194,9 @@ export async function generateMetadata(props: {
 }): Promise<Metadata> {
   const { slug } = await props.params;
   const person = await getPerson(slug);
-  if (!person) return { title: "Person not found", robots: { index: false, follow: false } };
+  // Thrown here, not just in the page: for bots with blocking metadata this is
+  // what turns a missing person into a real 404 instead of a soft one.
+  if (!person) notFound();
 
   const films = new Set([
     ...person.castRoles.map((c) => c.movieId),
@@ -210,6 +214,9 @@ export async function generateMetadata(props: {
       person.bio ??
       `${person.name} — ${role}. ${films} film${films === 1 ? "" : "s"} in the CinePixo library, with every review written here about their work.`,
     keywords: [person.name, `${person.name} films`, `${person.name} reviews`, role],
+    // A person page is a profile, and it has a clean-markdown sibling.
+    ogType: "profile",
+    markdownPath: `/people/${person.slug}.md`,
     // No `images`: the segment's opengraph-image.tsx draws the house card.
   });
 }
@@ -324,6 +331,21 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
       ...(roleLine.length > 0 ? { jobTitle: roleLine } : {}),
       ...(sources.length > 0 ? { sameAs: sources.map((s) => s.url) } : {}),
     },
+    // The filmography as a list of movie entities the graph already knows —
+    // each entry points at the film's own @id, so a crawler resolves the same
+    // nine films here and on their pages rather than nine fresh strings.
+    filmography.length > 0
+      ? itemListNode({
+          path,
+          name: `${person.name} — films on CinePixo`,
+          entries: filmography.map((f) => ({
+            path: `/movies/${f.movie.slug}`,
+            name: f.movie.title,
+            entityId: movieEntityId(f.movie.slug),
+          })),
+          totalItems: filmography.length,
+        })
+      : null,
   );
 
   type SpecRow = [label: string, value: React.ReactNode];

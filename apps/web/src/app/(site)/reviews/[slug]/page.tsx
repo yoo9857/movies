@@ -71,7 +71,9 @@ export async function generateMetadata(props: {
 }): Promise<Metadata> {
   const { slug } = await props.params;
   const review = await getReview(slug);
-  if (!review) return { title: "Review not found", robots: { index: false, follow: false } };
+  // Thrown here, not just in the page: for bots with blocking metadata this is
+  // what turns a missing review into a real 404 instead of a soft one.
+  if (!review) notFound();
 
   const movie = review.movie;
   const author = review.author.displayName ?? review.author.username;

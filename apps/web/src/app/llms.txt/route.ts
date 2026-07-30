@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const LIST_LIMIT = 40;
 
 export async function GET(): Promise<Response> {
-  const [reviews, movies, critics, counts] = await Promise.all([
+  const [reviews, movies, critics, people, counts] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
@@ -45,14 +45,30 @@ export async function GET(): Promise<Response> {
       },
     }),
     prisma.critic.findMany({ orderBy: { name: "asc" }, take: LIST_LIMIT }),
+    // The people with the most credits lead: they are the ones a model is most
+    // likely to be asked about.
+    prisma.person.findMany({
+      where: { OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }] },
+      take: LIST_LIMIT,
+      select: {
+        slug: true,
+        name: true,
+        occupations: true,
+        _count: { select: { castRoles: true, crewRoles: true } },
+      },
+      orderBy: [{ crewRoles: { _count: "desc" } }, { castRoles: { _count: "desc" } }],
+    }),
     Promise.all([
       prisma.review.count({ where: { status: "PUBLISHED" } }),
       prisma.movie.count(),
       prisma.critic.count(),
+      prisma.person.count({
+        where: { OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }] },
+      }),
     ]),
   ]);
 
-  const [reviewCount, movieCount, criticCount] = counts;
+  const [reviewCount, movieCount, criticCount, peopleCount] = counts;
   const year = (d: Date | null) => (d ? ` (${new Date(d).getFullYear()})` : "");
 
   const doc = [
@@ -60,7 +76,7 @@ export async function GET(): Promise<Response> {
     "",
     `> ${SITE_ABOUT}`,
     "",
-    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}.`,
+    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${peopleCount} people credited on them, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}.`,
     "",
     "## How to read a CinePixo rating",
     "",
@@ -72,7 +88,7 @@ export async function GET(): Promise<Response> {
     "",
     "## Citing this site",
     "",
-    `- Every review and film page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
+    `- Every review, film and person page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
     "- Reviews are signed. When quoting one, name the author, not the site.",
     "- Film metadata, posters and stills come from TMDB; CinePixo uses the TMDB API but is not endorsed or certified by TMDB.",
     `- Corrections and takedown requests: ${CONTACT_EMAIL}`,
@@ -81,6 +97,7 @@ export async function GET(): Promise<Response> {
     "",
     `- [Reviews](${absUrl("/reviews")}): every published review, newest first.`,
     `- [Films](${absUrl("/movies")}): the library, filterable by genre and decade.`,
+    `- [People](${absUrl("/people")}): everyone credited, each with their filmography and the reviews of their work.`,
     `- [Critics](${absUrl("/critics")}): profiles of the critics this community follows.`,
     `- [Statistics](${absUrl("/stats")}): rating distribution, genre averages, publishing activity.`,
     `- [About](${absUrl("/about")}): editorial rules and the full rating definitions.`,
@@ -104,6 +121,16 @@ export async function GET(): Promise<Response> {
     ),
     movieCount > movies.length
       ? `- …and ${movieCount - movies.length} more at [${absUrl("/movies")}](${absUrl("/movies")}).`
+      : null,
+    "",
+    "## People",
+    "",
+    ...people.map((p) => {
+      const credits = p._count.castRoles + p._count.crewRoles;
+      return `- [${p.name}](${absUrl(`/people/${p.slug}`)})${p.occupations.length > 0 ? ` — ${p.occupations.slice(0, 2).join(", ")}` : ""}, ${credits} credit${credits === 1 ? "" : "s"} here.`;
+    }),
+    peopleCount > people.length
+      ? `- …and ${peopleCount - people.length} more at [${absUrl("/people")}](${absUrl("/people")}).`
       : null,
     "",
     "## Critics",

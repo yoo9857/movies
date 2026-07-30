@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportMarkdownBody } from "@/lib/markdown-export";
+import { exportMarkdownBody, personToMarkdown } from "@/lib/markdown-export";
 import { plainText } from "@/lib/seo";
 
 /**
@@ -40,6 +40,81 @@ describe("exportMarkdownBody", () => {
   it("passes ordinary markdown through byte-for-byte", () => {
     const src = "## Heading\n\n**기생충!**은 걸작. `code` and > quote\n";
     expect(exportMarkdownBody(src)).toBe(src);
+  });
+});
+
+describe("personToMarkdown", () => {
+  const person = {
+    slug: "damien-chazelle",
+    name: "Damien Chazelle",
+    bio: "Our own words about him.",
+    notes: "Watch Whiplash first.",
+    birthDate: new Date("1985-01-19"),
+    deathDate: null,
+    birthPlace: "Providence",
+    occupations: ["film director", "screenwriter"],
+    wikipediaUrl: "https://en.wikipedia.org/wiki/Damien_Chazelle",
+    wikidataId: "Q18350026",
+    imdbId: "nm3227090",
+    updatedAt: new Date("2026-07-30"),
+    films: [
+      {
+        slug: "whiplash-2014",
+        title: "Whiplash",
+        year: 2014,
+        roles: ["Director", "Screenplay"],
+        average: 9,
+        reviewCount: 2,
+      },
+      {
+        slug: "la-la-land-2016",
+        title: "La La Land",
+        year: 2016,
+        roles: ["Director"],
+        average: null,
+        reviewCount: 0,
+      },
+    ],
+    reviews: [
+      {
+        slug: "whiplash-tempo",
+        title: "Not Quite My Tempo",
+        rating: 9,
+        filmTitle: "Whiplash",
+        publishedAt: new Date("2026-07-01"),
+        author: { username: "devoh", displayName: null },
+      },
+    ],
+  };
+
+  it("leads with the attribution facts and their provenance", () => {
+    const md = personToMarkdown(person);
+    expect(md).toContain("type: 'person'");
+    expect(md).toContain("born: '1985-01-19'");
+    expect(md).toContain("wikidata: 'Q18350026'");
+    expect(md).toContain("imdb: 'https://www.imdb.com/name/nm3227090/'");
+    expect(md).toContain("canonical: 'http://localhost:3000/people/damien-chazelle'");
+  });
+
+  it("carries this site's numbers and links the entities", () => {
+    const md = personToMarkdown(person);
+    // Weighted by reviews: (9 × 2) / 2 = 9.00.
+    expect(md).toContain("fandom_rating: '9.00/10 across 2 reviews'");
+    expect(md).toContain("[Whiplash](http://localhost:3000/movies/whiplash-2014)");
+    expect(md).toContain("**9.0/10**");
+    expect(md).toContain("[Not Quite My Tempo](http://localhost:3000/reviews/whiplash-tempo)");
+  });
+
+  it("lists an unreviewed film rather than dropping it", () => {
+    expect(personToMarkdown(person)).toContain("La La Land");
+    expect(personToMarkdown(person)).toContain("unreviewed here");
+  });
+
+  it("keeps our prose sections in our voice", () => {
+    const md = personToMarkdown(person);
+    expect(md).toContain("Our own words about him.");
+    expect(md).toContain("## Notes from the fandom");
+    expect(md).toContain("Watch Whiplash first.");
   });
 });
 

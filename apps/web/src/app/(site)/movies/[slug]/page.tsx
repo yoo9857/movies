@@ -78,7 +78,9 @@ export async function generateMetadata(props: {
 }): Promise<Metadata> {
   const { slug } = await props.params;
   const movie = await getMovie(slug);
-  if (!movie) return { title: "Movie not found", robots: { index: false, follow: false } };
+  // Thrown here, not just in the page: for bots with blocking metadata this is
+  // what turns a missing film into a real 404 instead of a soft one.
+  if (!movie) notFound();
   // The redirect must fire here, not only in the page body: metadata resolves
   // before the response streams, so this is the last moment a real 308 status
   // can still be sent. Thrown from the body, the shell has already flushed as

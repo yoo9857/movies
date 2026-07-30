@@ -9,8 +9,12 @@ import { absUrl } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 
 const include = {
-  cast: { orderBy: { order: "asc" as const }, take: 15 },
-  crew: true,
+  cast: {
+    orderBy: { order: "asc" as const },
+    take: 15,
+    include: { person: { select: { slug: true } } },
+  },
+  crew: { include: { person: { select: { slug: true } } } },
   reviews: {
     where: { status: "PUBLISHED" as const },
     orderBy: { publishedAt: "desc" as const },
@@ -41,5 +45,11 @@ export async function GET(
     return Response.redirect(absUrl(`/movies/${movie.slug}.md`), 301);
   }
 
-  return markdownResponse(movieToMarkdown(movie));
+  return markdownResponse(
+    movieToMarkdown({
+      ...movie,
+      cast: movie.cast.map((c) => ({ ...c, personSlug: c.person?.slug })),
+      crew: movie.crew.map((c) => ({ ...c, personSlug: c.person?.slug })),
+    }),
+  );
 }

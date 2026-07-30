@@ -44,6 +44,29 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   transpilePackages: ["@cinepixo/db", "@cinepixo/shared"],
   poweredByHeader: false, // don't advertise the framework
+
+  // Which user agents get *blocking* metadata instead of streamed metadata.
+  //
+  // For agents on this list the full <head> — title, canonical, Open Graph,
+  // the rel="alternate" markdown links — is present in the initial HTML rather
+  // than injected mid-stream. Agents that read HTML once and do not execute
+  // scripts otherwise see a page with no metadata at all, which for the AI
+  // crawlers robots.txt explicitly welcomes would mean courting them in one
+  // file and serving them a bare shell in another.
+  //
+  // What this does NOT do, verified against Next's own source: change status
+  // codes. A missing slug still answers 200 — once the shell has streamed the
+  // status is committed, and notFound() past that point renders the 404 UI and
+  // injects <meta name="robots" content="noindex"> (framework-designed, and
+  // confirmed present in our output). Search engines honour the noindex, so a
+  // soft-404 here is unindexable rather than harmful.
+  //
+  // Setting the option REPLACES Next's default list, so the first line is that
+  // default, verbatim (next/dist/shared/lib/router/utils/html-bots.js). The
+  // second line adds plain Googlebot — matched by neither default pattern —
+  // and the AI agents from robots.txt.
+  htmlLimitedBots:
+    /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|Googlebot|GoogleOther|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|PerplexityBot|Amazonbot|Bytespider|meta-externalagent|CCBot|cohere-ai|Diffbot|SemrushBot|AhrefsBot|MJ12bot|DotBot/i,
   images: {
     remotePatterns: [
       {
@@ -96,6 +119,7 @@ const nextConfig: NextConfig = {
       // ambiguity about where the extension starts.
       { source: "/reviews/:slug.md", destination: "/md/reviews/:slug" },
       { source: "/movies/:slug.md", destination: "/md/movies/:slug" },
+      { source: "/people/:slug.md", destination: "/md/people/:slug" },
       // Pre-slug movie URLs (/movies/<cuid>) must answer a real HTTP 308, and
       // the page cannot deliver one: Next streams metadata, so by the time a
       // redirect thrown in the page runs, 200 is already on the wire and the

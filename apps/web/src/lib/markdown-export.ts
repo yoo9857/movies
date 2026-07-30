@@ -207,8 +207,11 @@ export interface MovieExport {
   homepage: Nullable<string>;
   collectionName: Nullable<string>;
   updatedAt: Nullable<Date>;
-  cast: readonly { name: string; character: Nullable<string> }[];
-  crew: readonly { name: string; job: string }[];
+  // `personSlug`, where a credit is linked, turns the name into a link to that
+  // person's page — so a crawler walking the .md corpus resolves one human
+  // across films instead of a fresh string per document.
+  cast: readonly { name: string; character: Nullable<string>; personSlug?: Nullable<string> }[];
+  crew: readonly { name: string; job: string; personSlug?: Nullable<string> }[];
   reviews: readonly {
     slug: string;
     title: string;
@@ -242,9 +245,12 @@ export function movieToMarkdown(movie: MovieExport): string {
     ["publisher", SITE_NAME],
   ]);
 
+  const personLink = (name: string, slug?: Nullable<string>) =>
+    slug ? `[${name}](${absUrl(`/people/${slug}`)})` : name;
+
   const crewByJob = new Map<string, string[]>();
   for (const c of movie.crew) {
-    crewByJob.set(c.job, [...(crewByJob.get(c.job) ?? []), c.name]);
+    crewByJob.set(c.job, [...(crewByJob.get(c.job) ?? []), personLink(c.name, c.personSlug)]);
   }
 
   const lines: (string | null)[] = [
@@ -288,7 +294,7 @@ export function movieToMarkdown(movie: MovieExport): string {
   if (movie.cast.length > 0) {
     lines.push("## Cast", "");
     for (const c of movie.cast.slice(0, 15)) {
-      lines.push(`- ${c.name}${c.character ? ` as ${c.character}` : ""}`);
+      lines.push(`- ${personLink(c.name, c.personSlug)}${c.character ? ` as ${c.character}` : ""}`);
     }
     lines.push("");
   }
@@ -321,6 +327,134 @@ export function movieToMarkdown(movie: MovieExport): string {
     movie.homepage ? `Official site: ${movie.homepage}` : null,
     `Source: ${absUrl(`/movies/${movie.slug}`)}`,
     "Film metadata supplied by TMDB. Reviews are the work of their authors.",
+  );
+
+  return `${lines.filter((l) => l !== null).join("\n")}\n`;
+}
+
+export interface PersonExport {
+  slug: string;
+  name: string;
+  bio: Nullable<string>;
+  notes: Nullable<string>;
+  birthDate: Nullable<Date>;
+  deathDate: Nullable<Date>;
+  birthPlace: Nullable<string>;
+  occupations: readonly string[];
+  wikipediaUrl: Nullable<string>;
+  wikidataId: Nullable<string>;
+  imdbId: Nullable<string>;
+  updatedAt: Nullable<Date>;
+  films: readonly {
+    slug: string;
+    title: string;
+    year: Nullable<number>;
+    roles: readonly string[];
+    /** This site's own mean, 0–10, when anyone has written about it. */
+    average: Nullable<number>;
+    reviewCount: number;
+  }[];
+  reviews: readonly {
+    slug: string;
+    title: string;
+    rating: number;
+    filmTitle: string;
+    publishedAt: Nullable<Date>;
+    author: { username: string; displayName: Nullable<string> };
+  }[];
+}
+
+/**
+ * GET /people/{slug}.md — a person as a clean document.
+ *
+ * What makes this worth a crawler's time is the last two sections: the ratings
+ * are this site's own numbers, and the criticism list is writing that exists
+ * nowhere else. The biographical facts come first because attribution needs
+ * them, and their sources are named at the bottom — an exported fact without a
+ * source is an assertion wearing a reference's clothes.
+ */
+export function personToMarkdown(person: PersonExport): string {
+  const rated = person.films.filter((f) => f.average != null);
+  const totalReviews = person.films.reduce((s, f) => s + f.reviewCount, 0);
+  // Mean over reviews, not over films — one much-reviewed film should weigh
+  // exactly as much as its reviews do.
+  const weighted =
+    totalReviews > 0
+      ? person.films.reduce((s, f) => s + (f.average ?? 0) * f.reviewCount, 0) / totalReviews
+      : null;
+
+  const head = frontMatter([
+    ["title", person.name],
+    ["type", "person"],
+    ["roles", [...person.occupations]],
+    ["born", isoDay(person.birthDate)],
+    ["died", isoDay(person.deathDate)],
+    ["birthplace", person.birthPlace],
+    ["films_in_library", person.films.length],
+    ["reviews_of_their_work", totalReviews],
+    [
+      "fandom_rating",
+      weighted != null ? `${weighted.toFixed(2)}/10 across ${totalReviews} reviews` : undefined,
+    ],
+    ["canonical", absUrl(`/people/${person.slug}`)],
+    ["updated", isoDay(person.updatedAt)],
+    ["wikipedia", person.wikipediaUrl],
+    ["wikidata", person.wikidataId],
+    ["imdb", person.imdbId ? `https://www.imdb.com/name/${person.imdbId}/` : undefined],
+    ["publisher", SITE_NAME],
+  ]);
+
+  const lines: (string | null)[] = [
+    head,
+    "",
+    `# ${person.name}`,
+    "",
+    person.occupations.length > 0 ? `${person.occupations.join(", ")}.` : null,
+    "",
+  ];
+
+  if (person.bio) lines.push(person.bio.trim(), "");
+  if (person.notes) {
+    lines.push("## Notes from the fandom", "", person.notes.trim(), "");
+  }
+
+  lines.push(`## Filmography on ${SITE_NAME}`, "");
+  if (person.films.length === 0) {
+    lines.push("No films in the library yet.", "");
+  } else {
+    for (const f of [...person.films].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))) {
+      lines.push(
+        `- ${f.year ?? "—"} · [${f.title}](${absUrl(`/movies/${f.slug}`)}) — ${f.roles.join(", ")}` +
+          (f.average != null
+            ? ` · **${f.average.toFixed(1)}/10** from ${f.reviewCount} review${f.reviewCount === 1 ? "" : "s"}`
+            : " · unreviewed here"),
+      );
+    }
+    lines.push("");
+    if (weighted != null && rated.length > 0) {
+      lines.push(
+        `Across everything reviewed here their work averages **${weighted.toFixed(2)}/10** — the plain mean of every published rating, nothing imported.`,
+        "",
+      );
+    }
+  }
+
+  lines.push(`## Criticism on ${SITE_NAME}`, "");
+  if (person.reviews.length === 0) {
+    lines.push("Nothing written about their work here yet.", "");
+  } else {
+    for (const r of person.reviews) {
+      const author = r.author.displayName ?? r.author.username;
+      lines.push(
+        `- **${r.rating.toFixed(1)}/10** — [${r.title}](${absUrl(`/reviews/${r.slug}`)}) on *${r.filmTitle}* by ${author}${r.publishedAt ? `, ${isoDay(r.publishedAt)}` : ""}`,
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    `Source: ${absUrl(`/people/${person.slug}`)}`,
+    "Biographical facts from Wikipedia/Wikidata where linked above. Ratings and reviews are the work of this site's members.",
   );
 
   return `${lines.filter((l) => l !== null).join("\n")}\n`;
