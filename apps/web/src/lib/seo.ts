@@ -178,6 +178,12 @@ export const personEntityId = (name: string) => `${SITE_URL}/#/schema/person/${n
 /** A person we have a page for. Their page owns their identity. */
 export const peopleEntityId = (slug: string) => `${SITE_URL}/people/${slug}#person`;
 
+/** An editorial topic or motif. Its page owns the term. */
+export const topicEntityId = (slug: string) => `${SITE_URL}/topics/${slug}#term`;
+
+/** The taxonomy itself — the set every topic term belongs to. */
+export const TOPIC_SET_ID = `${SITE_URL}/topics#termset`;
+
 /* ───────────────────────────── site-wide nodes ───────────────────────────── */
 
 export function organizationNode(): JsonLdNode {
@@ -651,6 +657,45 @@ export function reviewNode(review: ReviewInput, opts: ReviewNodeOptions): JsonLd
     interactionStatistic: interactions,
     mainEntityOfPage: ref(pageId(`/reviews/${review.slug}`)),
     isPartOf: ref(WEBSITE_ID),
+  });
+}
+
+/* ─────────────────────────────── topics ─────────────────────────────── */
+
+/**
+ * The taxonomy as schema.org sees it: one `DefinedTermSet` for the site's
+ * editorial axes, one `DefinedTerm` per topic. This is the vocabulary a
+ * crawler can cite — "class divide, as CinePixo defines it" — which is what
+ * an in-house taxonomy is for.
+ */
+export function definedTermSetNode(): JsonLdNode {
+  return compact({
+    "@type": "DefinedTermSet",
+    "@id": TOPIC_SET_ID,
+    name: `${SITE_NAME} Topics & Motifs`,
+    description:
+      "The editorial axes of the library: themes a film is about and motifs that recur on screen, defined and assigned by the fandom.",
+    url: absUrl("/topics"),
+    publisher: ref(ORG_ID),
+  });
+}
+
+export function definedTermNode(topic: {
+  slug: string;
+  name: string;
+  kind: "THEME" | "MOTIF";
+  description?: Nullable<string>;
+}): JsonLdNode {
+  return compact({
+    "@type": "DefinedTerm",
+    "@id": topicEntityId(topic.slug),
+    name: topic.name,
+    description: topic.description ?? undefined,
+    // "termCode" carries the kind, so THEME and MOTIF stay distinguishable
+    // to a consumer that never reads our prose.
+    termCode: topic.kind,
+    url: absUrl(`/topics/${topic.slug}`),
+    inDefinedTermSet: ref(TOPIC_SET_ID),
   });
 }
 

@@ -193,6 +193,47 @@ export const personInputSchema = z.object({
 });
 export type PersonInput = z.infer<typeof personInputSchema>;
 
+// ── Topics ───────────────────────────────────────────────────────
+
+/**
+ * The editorial taxonomy: a THEME is what a film is about, a MOTIF is what
+ * recurs on screen. Two kinds only, on purpose — an axis that doesn't fit
+ * either is usually two axes that haven't been separated yet.
+ */
+export const topicKindSchema = z.enum(["THEME", "MOTIF"]);
+export type TopicKind = z.infer<typeof topicKindSchema>;
+
+export const TOPIC_KIND_LABELS: Record<TopicKind, string> = {
+  THEME: "Theme",
+  MOTIF: "Motif",
+};
+
+export const topicInputSchema = z.object({
+  slug: slugSchema,
+  name: z.string().trim().min(1).max(80),
+  kind: topicKindSchema,
+  /** One-sentence definition, shown on cards and list pages. */
+  description: optionalText(300),
+  /** The editorial essay (markdown) — why the axis matters, what to watch. */
+  essay: optionalText(10_000),
+});
+export type TopicInput = z.infer<typeof topicInputSchema>;
+
+/** Replaces a topic's film list wholesale — assignment is curation, not append. */
+export const topicFilmsSchema = z.object({
+  films: z
+    .array(
+      z.object({
+        movieId: z.string().min(1).max(64),
+        /** Why this film carries the topic — one sentence, ours. */
+        note: optionalText(500),
+      }),
+    )
+    .max(200)
+    .default([]),
+});
+export type TopicFilmsInput = z.infer<typeof topicFilmsSchema>;
+
 // ── Movies ───────────────────────────────────────────────────────
 
 /**

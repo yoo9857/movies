@@ -28,7 +28,7 @@ export interface SitemapUrl {
   images?: string[];
 }
 
-export const SECTIONS = ["pages", "reviews", "movies", "people", "critics"] as const;
+export const SECTIONS = ["pages", "reviews", "movies", "people", "topics", "critics"] as const;
 export type Section = (typeof SECTIONS)[number];
 
 /** Newest timestamp in a set of rows, or undefined when there are none. */
@@ -97,6 +97,21 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         images: p.image ? [absUrl(p.image)] : [],
       }));
     }
+    case "topics": {
+      // Same rule as people: a topic page with no films yet is thin — it joins
+      // the sitemap once the curation exists.
+      const topics = await prisma.topic.findMany({
+        where: { movies: { some: {} } },
+        orderBy: { updatedAt: "desc" },
+        select: { slug: true, updatedAt: true },
+      });
+      return topics.map((t) => ({
+        url: absUrl(`/topics/${t.slug}`),
+        lastModified: t.updatedAt,
+        changeFrequency: "monthly",
+        priority: 0.6,
+      }));
+    }
     case "critics": {
       const critics = await prisma.critic.findMany({
         orderBy: { updatedAt: "desc" },
@@ -114,7 +129,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       // The handful of listing pages. Their lastmod is derived from the newest
       // row they list, not `new Date()` — claiming freshness on every fetch
       // means nothing.
-      const [review, movie, critic, person] = await Promise.all([
+      const [review, movie, critic, person, topic] = await Promise.all([
         prisma.review.findFirst({
           where: { status: "PUBLISHED" },
           orderBy: { updatedAt: "desc" },
@@ -123,18 +138,21 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         prisma.movie.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.critic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.person.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+        prisma.topic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
       ]);
       const anything = newest([
         review?.updatedAt,
         movie?.updatedAt,
         critic?.updatedAt,
         person?.updatedAt,
+        topic?.updatedAt,
       ]);
       return [
         { url: absUrl("/"), lastModified: anything, changeFrequency: "daily", priority: 1 },
         { url: absUrl("/reviews"), lastModified: review?.updatedAt, changeFrequency: "daily", priority: 0.9 },
         { url: absUrl("/movies"), lastModified: movie?.updatedAt, changeFrequency: "weekly", priority: 0.8 },
         { url: absUrl("/people"), lastModified: person?.updatedAt, changeFrequency: "weekly", priority: 0.6 },
+        { url: absUrl("/topics"), lastModified: topic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
         { url: absUrl("/critics"), lastModified: critic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
         { url: absUrl("/stats"), lastModified: review?.updatedAt, changeFrequency: "weekly", priority: 0.5 },
         { url: absUrl("/about"), lastModified: critic?.updatedAt, changeFrequency: "monthly", priority: 0.6 },
@@ -145,7 +163,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
 
 /** Section lastmods for the index — one cheap query per shelf. */
 export async function sectionLastmods(): Promise<Record<Section, Date | undefined>> {
-  const [review, movie, critic, person] = await Promise.all([
+  const [review, movie, critic, person, topic] = await Promise.all([
     prisma.review.findFirst({
       where: { status: "PUBLISHED" },
       orderBy: { updatedAt: "desc" },
@@ -154,18 +172,21 @@ export async function sectionLastmods(): Promise<Record<Section, Date | undefine
     prisma.movie.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     prisma.critic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     prisma.person.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    prisma.topic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
   ]);
   const anything = newest([
     review?.updatedAt,
     movie?.updatedAt,
     critic?.updatedAt,
     person?.updatedAt,
+    topic?.updatedAt,
   ]);
   return {
     pages: anything,
     reviews: review?.updatedAt,
     movies: movie?.updatedAt,
     people: person?.updatedAt,
+    topics: topic?.updatedAt,
     critics: critic?.updatedAt,
   };
 }

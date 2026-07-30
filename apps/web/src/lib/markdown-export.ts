@@ -460,6 +460,78 @@ export function personToMarkdown(person: PersonExport): string {
   return `${lines.filter((l) => l !== null).join("\n")}\n`;
 }
 
+export interface TopicExport {
+  slug: string;
+  name: string;
+  kind: "THEME" | "MOTIF";
+  description: Nullable<string>;
+  essay: Nullable<string>;
+  updatedAt: Date;
+  films: {
+    slug: string;
+    title: string;
+    year: number | null;
+    note: Nullable<string>;
+    average: number | null;
+    reviewCount: number;
+  }[];
+}
+
+/**
+ * A topic page as Markdown: the definition, the essay, then every film that
+ * carries the axis with the sentence that justifies the claim. The notes are
+ * the payload — they are what make this a taxonomy instead of a tag cloud,
+ * and what an answer engine can actually quote.
+ */
+export function topicToMarkdown(topic: TopicExport): string {
+  const kindWord = topic.kind === "THEME" ? "theme" : "motif";
+
+  const head = frontMatter([
+    ["title", topic.name],
+    ["type", "topic"],
+    ["kind", kindWord],
+    ["definition", topic.description ?? undefined],
+    ["films_in_library", topic.films.length],
+    ["canonical", absUrl(`/topics/${topic.slug}`)],
+    ["updated", isoDay(topic.updatedAt)],
+    ["publisher", SITE_NAME],
+  ]);
+
+  const lines: (string | null)[] = [
+    head,
+    "",
+    `# ${topic.name}`,
+    "",
+    `A ${kindWord} in the ${SITE_NAME} taxonomy${topic.description ? `: ${topic.description.trim()}` : "."}`,
+    "",
+  ];
+
+  if (topic.essay) lines.push(exportMarkdownBody(topic.essay).trim(), "");
+
+  lines.push(`## Films carrying this ${kindWord}`, "");
+  if (topic.films.length === 0) {
+    lines.push("No films assigned yet.", "");
+  } else {
+    for (const f of [...topic.films].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))) {
+      lines.push(
+        `- ${f.year ?? "—"} · [${f.title}](${absUrl(`/movies/${f.slug}`)})` +
+          (f.average != null
+            ? ` · **${f.average.toFixed(1)}/10** from ${f.reviewCount} review${f.reviewCount === 1 ? "" : "s"}`
+            : "") +
+          (f.note ? ` — ${f.note.trim()}` : ""),
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    `Source: ${absUrl(`/topics/${topic.slug}`)}`,
+    "The taxonomy, its definitions and every per-film note are editorial work by this site's members — nothing here is imported.",
+  );
+
+  return `${lines.filter((l) => l !== null).join("\n")}\n`;
+}
+
 /** Response shape shared by every Markdown endpoint. */
 export function markdownResponse(body: string, maxAge = 600): Response {
   return new Response(body, {

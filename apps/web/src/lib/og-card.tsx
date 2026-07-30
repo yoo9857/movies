@@ -422,6 +422,72 @@ export function SiteCard(input: {
   );
 }
 
+/**
+ * A topic or motif: the term set large, its definition, and the posters of the
+ * films behind it — the card version of the page's claim-plus-evidence shape.
+ */
+export function TopicCard(input: {
+  name: string;
+  kind: "THEME" | "MOTIF";
+  description?: string | null;
+  filmCount: number;
+  /** Absolute poster URLs, at most three render. */
+  posters: string[];
+}): ReactElement {
+  return (
+    <Card>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        <Eyebrow>{input.kind === "THEME" ? "Theme" : "Motif"}</Eyebrow>
+        <div
+          style={{
+            display: "flex",
+            fontSize: 76,
+            fontWeight: 700,
+            lineHeight: 1.05,
+            letterSpacing: -2,
+            maxWidth: 1000,
+          }}
+        >
+          {clampText(input.name, 44)}
+        </div>
+        {input.description && (
+          <div style={{ display: "flex", fontSize: 28, lineHeight: 1.35, color: MUTED, maxWidth: 960 }}>
+            {clampText(input.description, 150)}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+          <div style={{ display: "flex", gap: 12 }}>
+            {input.posters.slice(0, 3).map((src, i) => (
+              // eslint-disable-next-line @next/next/no-img-element -- satori raster
+              <img
+                key={i}
+                src={src}
+                alt=""
+                width={92}
+                height={138}
+                style={{
+                  width: 92,
+                  height: 138,
+                  objectFit: "cover",
+                  borderRadius: 10,
+                  border: `1px solid ${SURFACE}`,
+                }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: 26, color: MUTED }}>
+            {input.filmCount} film{input.filmCount === 1 ? "" : "s"} in the library
+          </span>
+        </div>
+        <Footer note="themes & motifs, argued film by film" />
+      </div>
+    </Card>
+  );
+}
+
 export function PersonCard(input: {
   name: string;
   role?: string | null;
