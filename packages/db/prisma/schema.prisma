@@ -153,15 +153,32 @@ model Person {
   tmdbProfilePath String?
 
   /// ── Everything below is ours to write ──
-  /// Who they are, in our words.
+  /// Who they are, in our words. Never filled from an encyclopedia: the facts
+  /// below can be imported, the prose is the site.
   bio       String?
   /// Career notes, recurring collaborators, what to watch first.
   notes     String?
   birthDate DateTime? @db.Date
   deathDate DateTime? @db.Date
   birthPlace String?
+  /// Occupations as labels ("film director", "screenwriter"), from Wikidata.
+  occupations String[]
   /// Off-site profiles for schema.org sameAs — identity claims, so real ones only.
   links     Json?
+
+  /// ── Provenance ──
+  /// Wikidata Q-id and the Wikipedia article, when we have matched them. These
+  /// make a later re-enrichment unambiguous and give the page real sources.
+  wikidataId   String? @unique
+  wikipediaUrl String?
+  imdbId       String?
+  /// Credit for `image`, carried because a Commons photo is licensed, not free
+  /// of obligation. Shown on the page; an image with no credit is a claim we
+  /// cannot back.
+  imageCredit     String?
+  imageLicense    String?
+  imageLicenseUrl String?
+  imageSourceUrl  String?
 
   castRoles MovieCast[]
   crewRoles MovieCrew[]

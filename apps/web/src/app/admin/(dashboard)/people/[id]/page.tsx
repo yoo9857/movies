@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { PersonIdentityFinder } from "@/components/admin/PersonIdentityFinder";
 import { PersonPhotoManager } from "@/components/admin/PersonPhotoManager";
+import { WikiEnricher } from "@/components/admin/WikiEnricher";
 import { PersonPortrait } from "@/components/PersonPortrait";
 
 export const dynamic = "force-dynamic";
@@ -78,12 +79,25 @@ export default async function AdminPersonPage(props: { params: Promise<{ id: str
         </p>
         <div className="mt-3 space-y-3">
           <PersonPhotoManager personId={person.id} hasImage={Boolean(person.image)} />
+          {/* Wikipedia first: no key needed, the photograph is licensed, and the
+              facts come with it. The film database is the fallback. */}
+          <WikiEnricher
+            personId={person.id}
+            name={person.name}
+            linked={person.wikidataId !== null}
+          />
           <PersonIdentityFinder
             personId={person.id}
             name={person.name}
             linked={person.tmdbId !== null}
           />
         </div>
+        {person.imageCredit && (
+          <p className="mt-3 text-[11px] text-muted">
+            Credit stored: {person.imageCredit}
+            {person.imageLicense ? ` · ${person.imageLicense}` : ""}
+          </p>
+        )}
       </section>
 
       <PersonForm
