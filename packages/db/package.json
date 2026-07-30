@@ -15,6 +15,7 @@
     "status": "prisma migrate status",
     "seed": "tsx prisma/seed.ts",
     "seed:library": "tsx prisma/seed-movies.ts && tsx prisma/seed-details.ts && tsx prisma/seed-artwork.ts",
+    "refresh-library": "tsx prisma/refresh-library.ts",
     "studio": "prisma studio"
   },
   "dependencies": {

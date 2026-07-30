@@ -40,6 +40,11 @@ npm run db:seed:library  # 9 films with cast, crew and verified artwork — no A
 npm run dev              # http://localhost:3000
 ```
 
+With `TMDB_API_KEY` set, `npm run db:refresh-library` fills in what the seeds
+deliberately leave out — every actor's photo, key crew portraits, and artwork
+for films that have none. Cast and crew are replaced; curated media is only
+ever added to, never overwritten.
+
 Admin lives at `/admin` (login with the seeded credentials). `db:seed` is
 idempotent: re-running it leaves an existing admin's password untouched and
 prints no banner, so the credential from the first run stays the valid one. Set
