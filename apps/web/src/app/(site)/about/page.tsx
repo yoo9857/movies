@@ -52,6 +52,10 @@ const FAQ = [
     a: "Films are ranked by average rating weighted by review count, using avg × n/(n+2). The weighting means a single enthusiastic review cannot outrank a film that many writers have argued for.",
   },
   {
+    q: "What are themes and motifs here?",
+    a: "A theme is what a film is about — a class divide, the cost of ambition. A motif is what recurs on screen — stairs, rising water, a rehearsal room. Both are editorial: the axis, its definition and the sentence explaining how it shows up in a particular film are written by members of this site, and a film joins an axis only with that sentence attached. Imported keyword lists are shown separately and labelled as such.",
+  },
+  {
     q: "Who can publish a review on CinePixo?",
     a: "Any member with an account can publish. Reviews are written in Markdown, signed with the author's name, and are not ordered by an algorithmic feed — the index is chronological and the rankings are stated arithmetic.",
   },

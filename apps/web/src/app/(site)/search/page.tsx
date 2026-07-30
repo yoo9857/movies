@@ -1,4 +1,5 @@
 import { prisma } from "@cinepixo/db";
+import { TOPIC_KIND_LABELS } from "@cinepixo/shared";
 import { PersonPortrait } from "@/components/PersonPortrait";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -19,7 +20,7 @@ export async function generateMetadata(props: {
     // otherwise mint an unbounded number of thin, near-duplicate URLs.
     path: "/search",
     title: q ? `Search — ${q}` : "Search",
-    description: "Search reviews, films and critics on CinePixo.",
+    description: "Search reviews, films, people, themes and critics on CinePixo.",
     // Results pages are excluded from the index but still followed, so the
     // reviews and films they link to keep being discovered through them.
     noIndex: true,
@@ -36,7 +37,7 @@ export default async function SearchPage(props: {
   // exist precisely for this; see the search API route for the history.
   const ci = (value: string) => ({ contains: value, mode: "insensitive" as const });
 
-  const [reviews, movies, critics, people] = q
+  const [reviews, movies, critics, people, topics] = q
     ? await Promise.all([
         prisma.review.findMany({
           where: {
@@ -82,15 +83,30 @@ export default async function SearchPage(props: {
             _count: { select: { castRoles: true, crewRoles: true } },
           },
         }),
+        // Axes with films behind them; the definition is searched too, so
+        // "stairs" reaches the motif about height as status.
+        prisma.topic.findMany({
+          where: { movies: { some: {} }, OR: [{ name: ci(q) }, { description: ci(q) }] },
+          orderBy: [{ kind: "asc" }, { name: "asc" }],
+          take: 10,
+          select: {
+            slug: true,
+            name: true,
+            kind: true,
+            description: true,
+            _count: { select: { movies: true } },
+          },
+        }),
       ])
-    : [[], [], [], []];
+    : [[], [], [], [], []];
 
   const empty =
     q &&
     reviews.length === 0 &&
     movies.length === 0 &&
     critics.length === 0 &&
-    people.length === 0;
+    people.length === 0 &&
+    topics.length === 0;
 
   return (
     <div>
@@ -100,7 +116,7 @@ export default async function SearchPage(props: {
           name="q"
           defaultValue={q}
           maxLength={100}
-          placeholder="Reviews, movies, people, critics…"
+          placeholder="Reviews, films, people, themes…"
           className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
         />
         <button
@@ -189,6 +205,37 @@ export default async function SearchPage(props: {
               </Link>
             ))}
           </div>
+        </section>
+      )}
+
+      {topics.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold uppercase text-muted">Themes &amp; motifs</h2>
+          <ul className="mt-3 space-y-2">
+            {topics.map((t) => (
+              <li key={t.slug}>
+                <Link
+                  href={`/topics/${t.slug}`}
+                  className="group block rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-accent-dim"
+                >
+                  <p className="flex items-baseline gap-2">
+                    <span className="font-medium transition-colors group-hover:text-accent">
+                      {t.name}
+                    </span>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
+                      {TOPIC_KIND_LABELS[t.kind]}
+                    </span>
+                    <span className="font-mono text-[10px] text-muted tabular-nums">
+                      {t._count.movies} film{t._count.movies === 1 ? "" : "s"}
+                    </span>
+                  </p>
+                  {t.description && (
+                    <p className="line-clamp-1 text-xs text-muted">{t.description}</p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

@@ -18,7 +18,7 @@ export const GET = handle(async (request: Request) => {
   const url = new URL(request.url);
   const q = querySchema.parse(url.searchParams.get("q") ?? "");
 
-  const [reviews, movies, critics, people] = await Promise.all([
+  const [reviews, movies, critics, people, topics] = await Promise.all([
     prisma.review.findMany({
       where: {
         status: "PUBLISHED",
@@ -61,12 +61,34 @@ export const GET = handle(async (request: Request) => {
         _count: { select: { castRoles: true, crewRoles: true } },
       },
     }),
+    // The definition is searched as well as the name: someone typing "stairs"
+    // should find the motif whose definition is about height as status, even
+    // though the word is not in its title.
+    prisma.topic.findMany({
+      where: { movies: { some: {} }, OR: [{ name: ci(q) }, { description: ci(q) }] },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+      take: 10,
+      select: {
+        slug: true,
+        name: true,
+        kind: true,
+        description: true,
+        _count: { select: { movies: true } },
+      },
+    }),
   ]);
 
   return json({
     reviews,
     movies,
     critics,
+    topics: topics.map((t) => ({
+      slug: t.slug,
+      name: t.name,
+      kind: t.kind,
+      description: t.description,
+      films: t._count.movies,
+    })),
     people: people.map((p) => ({
       slug: p.slug,
       name: p.name,

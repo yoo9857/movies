@@ -8,6 +8,7 @@ const NAV = [
   { href: "/reviews", label: "Reviews" },
   { href: "/movies", label: "Movies" },
   { href: "/people", label: "People" },
+  { href: "/topics", label: "Topics" },
   { href: "/critics", label: "Critics" },
   { href: "/stats", label: "Stats" },
 ];

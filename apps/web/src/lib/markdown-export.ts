@@ -212,6 +212,13 @@ export interface MovieExport {
   // across films instead of a fresh string per document.
   cast: readonly { name: string; character: Nullable<string>; personSlug?: Nullable<string> }[];
   crew: readonly { name: string; job: string; personSlug?: Nullable<string> }[];
+  /** Our axes, with the sentence that placed this film on each — not imported. */
+  topics?: readonly {
+    slug: string;
+    name: string;
+    kind: "THEME" | "MOTIF";
+    note: Nullable<string>;
+  }[];
   reviews: readonly {
     slug: string;
     title: string;
@@ -237,6 +244,9 @@ export function movieToMarkdown(movie: MovieExport): string {
     ["certification", movie.certification],
     ["genres", [...movie.genres]],
     ["countries", [...movie.countries]],
+    // Ours, and named as such: `themes` is the editorial taxonomy, while the
+    // TMDB keyword list stays under its own label further down.
+    ["themes", (movie.topics ?? []).map((t) => t.name)],
     ["canonical", absUrl(`/movies/${movie.slug}`)],
     ["review_count", movie.reviews.length],
     ["fandom_rating", avg != null ? `${avg.toFixed(2)}/10` : undefined],
@@ -299,6 +309,20 @@ export function movieToMarkdown(movie: MovieExport): string {
     lines.push("");
   }
 
+  // Before the criticism, because it is the same kind of claim: written here,
+  // about this film, by a person. Each line carries the axis, its kind and the
+  // sentence — quotable on its own, and linked to the page that defines it.
+  if (movie.topics && movie.topics.length > 0) {
+    lines.push("## Themes & motifs", "");
+    for (const t of movie.topics) {
+      lines.push(
+        `- [${t.name}](${absUrl(`/topics/${t.slug}`)}) (${t.kind === "THEME" ? "theme" : "motif"})` +
+          (t.note ? ` — ${t.note.trim()}` : ""),
+      );
+    }
+    lines.push("", "Editorial, not imported: every axis and every sentence above was written here.", "");
+  }
+
   lines.push(`## Criticism on ${SITE_NAME}`, "");
   if (movie.reviews.length === 0) {
     lines.push("No reviews published yet.", "");
@@ -319,8 +343,10 @@ export function movieToMarkdown(movie: MovieExport): string {
     lines.push("");
   }
 
+  // Labelled by its source. This line used to read "Themes:", which handed a
+  // machine reader TMDB's keyword list as though it were our reading of the film.
   if (movie.keywords.length > 0) {
-    lines.push(`Themes: ${movie.keywords.join(", ")}`, "");
+    lines.push(`TMDB keywords: ${movie.keywords.join(", ")}`, "");
   }
 
   lines.push(

@@ -15,6 +15,10 @@ const include = {
     include: { person: { select: { slug: true } } },
   },
   crew: { include: { person: { select: { slug: true } } } },
+  topics: {
+    orderBy: { createdAt: "asc" as const },
+    select: { note: true, topic: { select: { slug: true, name: true, kind: true } } },
+  },
   reviews: {
     where: { status: "PUBLISHED" as const },
     orderBy: { publishedAt: "desc" as const },
@@ -50,6 +54,7 @@ export async function GET(
       ...movie,
       cast: movie.cast.map((c) => ({ ...c, personSlug: c.person?.slug })),
       crew: movie.crew.map((c) => ({ ...c, personSlug: c.person?.slug })),
+      topics: movie.topics.map((mt) => ({ ...mt.topic, note: mt.note })),
     }),
   );
 }

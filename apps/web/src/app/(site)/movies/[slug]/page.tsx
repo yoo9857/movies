@@ -1,4 +1,5 @@
 import { prisma } from "@cinepixo/db";
+import { TOPIC_KIND_LABELS } from "@cinepixo/shared";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -28,6 +29,7 @@ import {
   posterUrl,
   reviewEntityId,
   reviewNode,
+  topicEntityId,
   webPageNode,
 } from "@/lib/seo";
 
@@ -58,6 +60,14 @@ const movieInclude = {
     include: { person: { select: { slug: true, image: true } } },
   },
   crew: { include: { person: { select: { slug: true } } } },
+  // The axes we placed this film on, each with the sentence that justifies it.
+  topics: {
+    orderBy: { createdAt: "asc" as const },
+    select: {
+      note: true,
+      topic: { select: { slug: true, name: true, kind: true } },
+    },
+  },
   videos: { orderBy: { sort: "asc" as const } },
   images: { orderBy: [{ kind: "asc" as const }, { sort: "asc" as const }] },
   reviews: {
@@ -127,6 +137,9 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
   if (movie.slug !== slug) permanentRedirect(`/movies/${movie.slug}`);
 
   const { genres, keywords, countries } = movie;
+  // Ours, so they lead: themes and motifs are argued film by film, while the
+  // keyword strip further down is imported metadata about this film alone.
+  const topics = movie.topics.map((mt) => ({ ...mt.topic, note: mt.note }));
   const ratings = movie.reviews.map((r) => r.rating);
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
 
@@ -221,7 +234,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       hasBreadcrumb: true,
       aboutId: movieEntityId(movie.slug),
       mainEntityId: movieEntityId(movie.slug),
-      keywords: [movie.title, ...genres],
+      keywords: [movie.title, ...genres, ...topics.map((t) => t.name)],
       markdownUrl: `${path}.md`,
     }),
     breadcrumbNode(path, trail),
@@ -234,6 +247,9 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       videos: movie.videos,
       fandom,
       reviewIds: movie.reviews.map((r) => reviewEntityId(r.slug)),
+      // References only — the DefinedTerm node with the definition in it lives
+      // on the topic's page, which is where the definition is rendered.
+      topicIds: topics.map((t) => topicEntityId(t.slug)),
     }),
     // Each review as its own node: identity, author and score, but no body —
     // the body belongs to the review's own page, and duplicating it here would
@@ -344,6 +360,38 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
                 {movie.overview}
               </p>
             </>
+          )}
+          {/* Ours before the imported: the axes this film sits on, each with
+              the sentence that put it there. A film page that showed only TMDB
+              keywords was linking out to nothing and arguing nothing. */}
+          {topics.length > 0 && (
+            <section className="mt-9">
+              <SectionHead
+                action={
+                  <Link href="/topics" className="font-mono text-[10px] text-muted hover:text-accent">
+                    the taxonomy ↗
+                  </Link>
+                }
+              >
+                Themes &amp; motifs
+              </SectionHead>
+              <ul className="mt-3 space-y-3">
+                {topics.map((t) => (
+                  <li key={t.slug} className="text-sm leading-relaxed">
+                    <Link
+                      href={`/topics/${t.slug}`}
+                      className="font-semibold transition-colors hover:text-accent"
+                    >
+                      {t.name}
+                    </Link>
+                    <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted">
+                      {TOPIC_KIND_LABELS[t.kind]}
+                    </span>
+                    {t.note && <span className="mt-0.5 block text-muted">{t.note}</span>}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
           {keywords.length > 0 && (
             <p className="mt-6 border-t border-line pt-3 font-mono text-xs text-muted">

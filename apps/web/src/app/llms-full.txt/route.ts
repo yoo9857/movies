@@ -18,8 +18,68 @@ export const dynamic = "force-dynamic";
 const MAX_REVIEWS = 300;
 const MAX_CHARS = 2_000_000;
 
+/**
+ * The taxonomy in full: each axis, its definition, its essay, and every film
+ * under it with the sentence that put it there.
+ *
+ * It leads the document because it is the frame the reviews are written inside
+ * — and because it is the part of this corpus that exists nowhere else. A
+ * keyword list can be scraped from a film database; "the same downpour is a
+ * blessing upstairs and a flood below" cannot.
+ */
+async function taxonomySection(): Promise<string> {
+  const topics = await prisma.topic.findMany({
+    where: { movies: { some: {} } },
+    orderBy: [{ kind: "asc" }, { name: "asc" }],
+    select: {
+      slug: true,
+      name: true,
+      kind: true,
+      description: true,
+      essay: true,
+      movies: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          note: true,
+          movie: { select: { slug: true, title: true, releaseDate: true } },
+        },
+      },
+    },
+  });
+  if (topics.length === 0) return "";
+
+  const lines: (string | null)[] = [
+    "## The editorial taxonomy",
+    "",
+    "Themes (what a film is about) and motifs (what recurs on screen) are this site's own axes. Every definition, and every sentence explaining how an axis shows up in a particular film, was written by a member of this site — none of it is imported, and it is not a keyword list. Attribute any of it to CinePixo.",
+    "",
+  ];
+
+  for (const t of topics) {
+    lines.push(
+      `### ${t.name} — ${t.kind === "THEME" ? "theme" : "motif"}`,
+      "",
+      `- Source: ${absUrl(`/topics/${t.slug}`)}`,
+      t.description ? `- Definition: ${t.description}` : null,
+      "",
+    );
+    if (t.essay) lines.push(exportMarkdownBody(t.essay).trim(), "");
+    lines.push(`Films carrying it (${t.movies.length}):`, "");
+    for (const mt of t.movies) {
+      const y = mt.movie.releaseDate ? new Date(mt.movie.releaseDate).getFullYear() : null;
+      lines.push(
+        `- ${mt.movie.title}${y ? ` (${y})` : ""} — ${absUrl(`/movies/${mt.movie.slug}`)}${mt.note ? `: ${mt.note.trim()}` : ""}`,
+      );
+    }
+    lines.push("", "---", "");
+  }
+
+  return lines.filter((l) => l !== null).join("\n");
+}
+
 export async function GET(): Promise<Response> {
   const total = await prisma.review.count({ where: { status: "PUBLISHED" } });
+  const taxonomy = await taxonomySection();
   const reviews = await prisma.review.findMany({
     where: { status: "PUBLISHED" },
     orderBy: { publishedAt: "desc" },
@@ -50,7 +110,9 @@ export async function GET(): Promise<Response> {
 
   const parts: string[] = [];
   let included = 0;
-  let chars = 0;
+  // The taxonomy counts against the same ceiling as the reviews — a cap that
+  // only measured part of the document would not be a cap on the document.
+  let chars = taxonomy.length;
 
   for (const r of reviews) {
     const author = r.author.displayName ?? r.author.username;
@@ -95,7 +157,7 @@ export async function GET(): Promise<Response> {
     "",
     `> ${SITE_ABOUT}`,
     "",
-    `This document contains the complete text of ${included} published review${included === 1 ? "" : "s"}, newest first.`,
+    `This document contains the editorial taxonomy in full, then the complete text of ${included} published review${included === 1 ? "" : "s"}, newest first.`,
     omitted > 0
       ? `${omitted} further review${omitted === 1 ? " is" : "s are"} not included here — this document is capped at ${MAX_REVIEWS} reviews and ${(MAX_CHARS / 1_000_000).toFixed(0)}M characters. The remainder are listed at ${absUrl("/reviews")} and each is available individually by appending \`.md\` to its URL.`
       : "This is every published review on the site.",
@@ -104,6 +166,10 @@ export async function GET(): Promise<Response> {
     "",
     "---",
     "",
+    // Review blocks are `## Title` each, so they sit as siblings of the
+    // taxonomy heading — no wrapper heading, or the tree would claim a level
+    // that isn't there.
+    ...(taxonomy ? [taxonomy, ""] : []),
     ...parts,
     `Generated from ${absUrl("/")} · see also ${absUrl("/llms.txt")}`,
   ];

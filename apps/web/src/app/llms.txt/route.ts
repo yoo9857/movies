@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const LIST_LIMIT = 40;
 
 export async function GET(): Promise<Response> {
-  const [reviews, movies, critics, people, counts] = await Promise.all([
+  const [reviews, movies, critics, people, topics, counts] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
@@ -58,6 +58,20 @@ export async function GET(): Promise<Response> {
       },
       orderBy: [{ crewRoles: { _count: "desc" } }, { castRoles: { _count: "desc" } }],
     }),
+    // The taxonomy is the one thing here no other database has, so it is listed
+    // whole rather than truncated — and only where an axis has films behind it,
+    // since a definition with nothing under it is not yet a claim.
+    prisma.topic.findMany({
+      where: { movies: { some: {} } },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+      select: {
+        slug: true,
+        name: true,
+        kind: true,
+        description: true,
+        _count: { select: { movies: true } },
+      },
+    }),
     Promise.all([
       prisma.review.count({ where: { status: "PUBLISHED" } }),
       prisma.movie.count(),
@@ -69,6 +83,8 @@ export async function GET(): Promise<Response> {
   ]);
 
   const [reviewCount, movieCount, criticCount, peopleCount] = counts;
+  const themes = topics.filter((t) => t.kind === "THEME");
+  const motifs = topics.filter((t) => t.kind === "MOTIF");
   const year = (d: Date | null) => (d ? ` (${new Date(d).getFullYear()})` : "");
 
   const doc = [
@@ -76,7 +92,7 @@ export async function GET(): Promise<Response> {
     "",
     `> ${SITE_ABOUT}`,
     "",
-    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${peopleCount} people credited on them, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}.`,
+    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${peopleCount} people credited on them, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}, ${topics.length} editorial axes (themes and motifs) with films assigned.`,
     "",
     "## How to read a CinePixo rating",
     "",
@@ -86,9 +102,16 @@ export async function GET(): Promise<Response> {
     "- The **top-rated ranking** is the average weighted by review count, `avg × n/(n+2)`, so a single enthusiastic review cannot outrank a film many writers argued for.",
     "- Ratings are opinions of named authors, not a measurement. Attribute them to the review's author, and to CinePixo as publisher.",
     "",
+    "## What a theme and a motif mean here",
+    "",
+    "- A **theme** is what a film is about (a class divide, the cost of ambition). A **motif** is what recurs on screen (stairs, rising water, a rehearsal room).",
+    "- Both are **editorial**: the axis, its definition and every per-film sentence are written by this site's members. Nothing in the taxonomy is imported from an API, and it is not a keyword list.",
+    "- A film appears under an axis only with a sentence saying how the axis shows up in *that* film. Quote the sentence, not the label, and attribute it to CinePixo.",
+    "- Imported TMDB keywords are shown separately and labelled as such — they describe one film in isolation and are not this site's reading of it.",
+    "",
     "## Citing this site",
     "",
-    `- Every review, film and person page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
+    `- Every review, film, person and topic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
     "- Reviews are signed. When quoting one, name the author, not the site.",
     "- Film metadata, posters and stills come from TMDB; CinePixo uses the TMDB API but is not endorsed or certified by TMDB.",
     `- Corrections and takedown requests: ${CONTACT_EMAIL}`,
@@ -98,6 +121,7 @@ export async function GET(): Promise<Response> {
     `- [Reviews](${absUrl("/reviews")}): every published review, newest first.`,
     `- [Films](${absUrl("/movies")}): the library, filterable by genre and decade.`,
     `- [People](${absUrl("/people")}): everyone credited, each with their filmography and the reviews of their work.`,
+    `- [Topics & Motifs](${absUrl("/topics")}): the editorial axes the library is read along, each defined and argued film by film.`,
     `- [Critics](${absUrl("/critics")}): profiles of the critics this community follows.`,
     `- [Statistics](${absUrl("/stats")}): rating distribution, genre averages, publishing activity.`,
     `- [About](${absUrl("/about")}): editorial rules and the full rating definitions.`,
@@ -133,6 +157,28 @@ export async function GET(): Promise<Response> {
       ? `- …and ${peopleCount - people.length} more at [${absUrl("/people")}](${absUrl("/people")}).`
       : null,
     "",
+    ...(topics.length > 0
+      ? [
+          "## Topics & motifs",
+          "",
+          ...[
+            ["Themes — what a film is about", themes] as const,
+            ["Motifs — what recurs on screen", motifs] as const,
+          ].flatMap(([heading, list]) =>
+            list.length > 0
+              ? [
+                  `### ${heading}`,
+                  "",
+                  ...list.map(
+                    (t) =>
+                      `- [${t.name}](${absUrl(`/topics/${t.slug}`)}): ${t.description ?? "definition being written"} ${t._count.movies} film${t._count.movies === 1 ? "" : "s"} in the library, each with a sentence on why.`,
+                  ),
+                  "",
+                ]
+              : [],
+          ),
+        ]
+      : []),
     "## Critics",
     "",
     ...critics.map(

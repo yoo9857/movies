@@ -438,6 +438,15 @@ export interface MovieNodeOptions {
   fandom?: { averageStars: number; reviewCount: number } | null;
   /** `@id`s of review nodes present in the same graph. */
   reviewIds?: readonly string[];
+  /**
+   * `@id`s of the DefinedTerms this film carries — `topicEntityId(slug)`.
+   *
+   * References only, never inline nodes: the definition of a theme is rendered
+   * on the topic's own page, not here, and the rule is that a page never claims
+   * what it does not show. The `@id` is what lets a crawler follow the axis to
+   * the page that does define it.
+   */
+  topicIds?: readonly string[];
   /** Reference-only node: identity plus name, for use from another page. */
   brief?: boolean;
 }
@@ -517,6 +526,9 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
     sameAs,
     aggregateRating: fandomRating(opts.fandom, url),
     review: opts.reviewIds?.map(ref),
+    // Our taxonomy, not TMDB's keyword list: `keywords` above carries the
+    // imported strings, `about` carries the axes we argued for by hand.
+    about: opts.topicIds?.length ? opts.topicIds.map(ref) : undefined,
     subjectOf: ref(pageId(`/movies/${movie.slug}`)),
   });
 }

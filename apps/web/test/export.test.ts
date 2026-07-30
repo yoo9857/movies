@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { exportMarkdownBody, personToMarkdown } from "@/lib/markdown-export";
+import {
+  exportMarkdownBody,
+  movieToMarkdown,
+  personToMarkdown,
+  topicToMarkdown,
+} from "@/lib/markdown-export";
 import { plainText } from "@/lib/seo";
 
 /**
@@ -115,6 +120,171 @@ describe("personToMarkdown", () => {
     expect(md).toContain("Our own words about him.");
     expect(md).toContain("## Notes from the fandom");
     expect(md).toContain("Watch Whiplash first.");
+  });
+});
+
+describe("movieToMarkdown: ours versus imported", () => {
+  const film = {
+    id: "m1",
+    slug: "parasite-2019",
+    title: "Parasite",
+    originalTitle: null,
+    tagline: null,
+    overview: null,
+    releaseDate: new Date("2019-05-30"),
+    runtime: 133,
+    certification: "R",
+    director: "Bong Joon-ho",
+    genres: ["Drama"],
+    keywords: ["basement", "class"],
+    countries: ["South Korea"],
+    posterPath: null,
+    imdbId: null,
+    homepage: null,
+    collectionName: null,
+    updatedAt: new Date("2026-07-30"),
+    cast: [],
+    crew: [],
+    reviews: [],
+    topics: [
+      {
+        slug: "class-divide",
+        name: "Class Divide",
+        kind: "THEME" as const,
+        note: "One downpour, two addresses.",
+      },
+      {
+        slug: "stairs-and-levels",
+        name: "Stairs and Levels",
+        kind: "MOTIF" as const,
+        note: null,
+      },
+    ],
+  };
+
+  it("labels the TMDB keyword list as TMDB's", () => {
+    // This line used to read "Themes:", handing a machine reader an imported
+    // keyword list as though it were this site's reading of the film.
+    const md = movieToMarkdown(film);
+    expect(md).toContain("TMDB keywords: basement, class");
+    expect(md).not.toContain("Themes: basement");
+  });
+
+  it("puts our axes in the front matter under `themes`", () => {
+    const md = movieToMarkdown(film);
+    expect(md).toContain("themes:\n  - 'Class Divide'\n  - 'Stairs and Levels'");
+  });
+
+  it("gives each axis its kind, its link and its sentence", () => {
+    const md = movieToMarkdown(film);
+    expect(md).toContain("## Themes & motifs");
+    expect(md).toContain(
+      "- [Class Divide](http://localhost:3000/topics/class-divide) (theme) — One downpour, two addresses.",
+    );
+    // No note yet: the axis is still listed, with no dash left dangling after it.
+    expect(md).toContain(
+      "- [Stairs and Levels](http://localhost:3000/topics/stairs-and-levels) (motif)\n",
+    );
+    expect(md).toContain("Editorial, not imported");
+  });
+
+  it("omits the section, and the front-matter key, for a film on no axis", () => {
+    const md = movieToMarkdown({ ...film, topics: [] });
+    expect(md).not.toContain("## Themes & motifs");
+    expect(md).not.toContain("themes:");
+    // The imported keywords still ship, under their own label.
+    expect(md).toContain("TMDB keywords:");
+  });
+});
+
+describe("topicToMarkdown", () => {
+  const topic = {
+    slug: "water-that-rises",
+    name: "Water That Rises",
+    kind: "MOTIF" as const,
+    description: "Rain and flood as verdict rather than weather — the film's water isn't neutral.",
+    essay: "The asymmetry is the point.",
+    updatedAt: new Date("2026-07-30"),
+    films: [
+      {
+        slug: "parasite-2019",
+        title: "Parasite",
+        year: 2019,
+        note: "One downpour, two addresses, opposite meanings.",
+        average: 9.5,
+        reviewCount: 2,
+      },
+      {
+        slug: "interstellar-2014",
+        title: "Interstellar",
+        year: 2014,
+        note: "Mountains that turn out to be waves.",
+        average: null,
+        reviewCount: 0,
+      },
+    ],
+  };
+
+  it("declares the axis and its kind in the front matter", () => {
+    const md = topicToMarkdown(topic);
+    expect(md).toContain("type: 'topic'");
+    expect(md).toContain("kind: 'motif'");
+    expect(md).toContain("films_in_library: 2");
+    expect(md).toContain("canonical: 'http://localhost:3000/topics/water-that-rises'");
+    expect(md).toContain("updated: '2026-07-30'");
+  });
+
+  it("doubles an apostrophe rather than breaking the YAML quoting", () => {
+    // "the film's water" inside a single-quoted scalar has to become "film''s",
+    // or every consumer's parser stops at the apostrophe.
+    expect(topicToMarkdown(topic)).toContain("the film''s water isn''t neutral.'");
+  });
+
+  it("carries the definition into the prose, not just the metadata", () => {
+    expect(topicToMarkdown(topic)).toContain(
+      "A motif in the CinePixo taxonomy: Rain and flood as verdict",
+    );
+  });
+
+  it("lists films newest first, with this site's numbers and the note", () => {
+    const md = topicToMarkdown(topic);
+    const parasite = md.indexOf("Parasite");
+    const interstellar = md.indexOf("Interstellar");
+    expect(parasite).toBeGreaterThan(-1);
+    expect(parasite).toBeLessThan(interstellar);
+    expect(md).toContain("- 2019 · [Parasite](http://localhost:3000/movies/parasite-2019)");
+    expect(md).toContain("**9.5/10** from 2 reviews");
+    expect(md).toContain("— One downpour, two addresses, opposite meanings.");
+  });
+
+  it("keeps an unreviewed film and its note, without inventing a rating", () => {
+    const md = topicToMarkdown(topic);
+    expect(md).toContain("[Interstellar](http://localhost:3000/movies/interstellar-2014)");
+    expect(md).toContain("— Mountains that turn out to be waves.");
+    // The only rating in the file is Parasite's.
+    expect(md.match(/\/10\*\*/g)).toHaveLength(1);
+  });
+
+  it("runs the essay through the export rules, so nothing page-only leaves", () => {
+    const md = topicToMarkdown({
+      ...topic,
+      essay: "See [Parasite](/movies/parasite-2019).\n:::still 2\nThe flood is the argument.",
+    });
+    expect(md).toContain("](http://localhost:3000/movies/parasite-2019)");
+    expect(md).not.toContain(":::");
+    expect(md).toContain("The flood is the argument.");
+  });
+
+  it("says an empty axis is empty instead of shipping a bare heading", () => {
+    const md = topicToMarkdown({ ...topic, films: [], essay: null });
+    expect(md).toContain("films_in_library: 0");
+    expect(md).toContain("No films assigned yet.");
+  });
+
+  it("ends on the provenance claim, because the notes are the payload", () => {
+    const md = topicToMarkdown(topic);
+    expect(md).toContain("Source: http://localhost:3000/topics/water-that-rises");
+    expect(md).toContain("nothing here is imported");
   });
 });
 
