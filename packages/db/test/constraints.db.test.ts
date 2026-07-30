@@ -19,7 +19,14 @@ let db: Client;
 const USER = "user-fixture-0000000000";
 const MOVIE = "movie-fixture-000000000";
 
-const SQLSTATE = { check: "23514", unique: "23505", fk: "23503", notNull: "23502" } as const;
+const SQLSTATE = {
+  check: "23514",
+  unique: "23505",
+  fk: "23503",
+  notNull: "23502",
+  /** invalid_text_representation — what a real enum answers to a bad label. */
+  badEnum: "22P02",
+} as const;
 
 /** Insert a Review, letting the caller override any column. */
 function insertReview(over: Record<string, unknown> = {}) {
@@ -253,6 +260,154 @@ describe("referential integrity", () => {
   it("refuses a review pointing at a missing author or movie", async () => {
     await rejects(() => insertReview({ authorId: "nobody" }), SQLSTATE.fk);
     await rejects(() => insertReview({ movieId: "nothing" }), SQLSTATE.fk);
+  });
+});
+
+describe("Topic identity", () => {
+  const key = () => Math.random().toString(36).slice(2, 10);
+
+  /** Insert a Topic, letting the caller override any column. */
+  const topic = (over: Record<string, unknown> = {}) => {
+    const k = key();
+    const row = { id: `t-${k}`, slug: `axis-${k}`, name: `Axis ${k}`, kind: "THEME", ...over };
+    const cols = Object.keys(row);
+    return db.query(
+      `INSERT INTO "Topic" (${cols.map((c) => `"${c}"`).join(", ")}, "updatedAt")
+       VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}, CURRENT_TIMESTAMP)`,
+      Object.values(row) as never[],
+    );
+  };
+
+  it.each(["Upper-Case", "-leading", "trailing-", "double--hyphen", "has space", ""])(
+    "rejects slug %j by shape",
+    async (slug) => {
+      // Topic_slug_shape — a topic slug is a public URL like every other one.
+      await rejects(() => topic({ slug }), SQLSTATE.check);
+    },
+  );
+
+  it("rejects a duplicate slug", async () => {
+    await topic({ slug: "class-divide" });
+    await rejects(() => topic({ slug: "class-divide" }), SQLSTATE.unique);
+  });
+
+  it("rejects a name differing only in case", async () => {
+    // Topic_name_lower_key. The admin screen looks for a clash
+    // case-insensitively, so "Class Divide" and "class divide" must not be able
+    // to become two rows behind its back — they are one editorial idea twice.
+    await topic({ name: "Stairs and Levels" });
+    await rejects(() => topic({ name: "stairs and levels" }), SQLSTATE.unique);
+    await rejects(() => topic({ name: "STAIRS AND LEVELS" }), SQLSTATE.unique);
+  });
+
+  it("accepts both kinds and refuses a third", async () => {
+    await expect(topic({ kind: "THEME" })).resolves.toBeTruthy();
+    await expect(topic({ kind: "MOTIF" })).resolves.toBeTruthy();
+    // TopicKind is a real PostgreSQL enum here, unlike the string columns the
+    // SQLite era left behind — so an invented kind never reaches a page.
+    await rejects(() => topic({ kind: "GENRE" }), SQLSTATE.badEnum);
+  });
+
+  it("indexes Topic.name with GIN/trgm, like every other searchable name", async () => {
+    const { rows } = await db.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE indexname = 'Topic_name_trgm'`,
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe("MovieTopic assignments", () => {
+  const key = () => Math.random().toString(36).slice(2, 10);
+
+  /** A topic to hang assignments on, returned as its id. */
+  async function newTopic(): Promise<string> {
+    const id = `t-${key()}`;
+    await db.query(
+      `INSERT INTO "Topic" ("id","slug","name","kind","updatedAt")
+       VALUES ($1,$2,$3,'MOTIF',CURRENT_TIMESTAMP)`,
+      [id, `axis-${key()}`, `Axis ${key()}`],
+    );
+    return id;
+  }
+
+  async function newMovie(): Promise<string> {
+    const id = `m-${key()}`;
+    await db.query(
+      `INSERT INTO "Movie" ("id","slug","title","genres","updatedAt")
+       VALUES ($1,$2,'T',ARRAY[]::TEXT[],CURRENT_TIMESTAMP)`,
+      [id, `film-${key()}`],
+    );
+    return id;
+  }
+
+  const assign = (topicId: string, movieId: string, note: unknown) =>
+    db.query(`INSERT INTO "MovieTopic" ("movieId","topicId","note") VALUES ($1,$2,$3)`, [
+      movieId,
+      topicId,
+      note,
+    ] as never[]);
+
+  it("accepts a note, and NULL for an assignment not yet argued", async () => {
+    const [t, m1, m2] = await Promise.all([newTopic(), newMovie(), newMovie()]);
+    await expect(assign(t, m1, "One downpour, two addresses.")).resolves.toBeTruthy();
+    await expect(assign(t, m2, null)).resolves.toBeTruthy();
+  });
+
+  it.each(["", "   "])("rejects note %j, which is not a note", async (note) => {
+    // MovieTopic_note_meaningful. An empty string would render as a film listed
+    // with a dash after it — the page claiming an argument it does not have.
+    //
+    // Only spaces, deliberately: one-argument btrim() strips spaces and nothing
+    // else, so a tab-only note would pass this CHECK. zod's .trim() is what
+    // catches that on the way in, and every write goes through it.
+    const [t, m] = await Promise.all([newTopic(), newMovie()]);
+    await rejects(() => assign(t, m, note), SQLSTATE.check);
+  });
+
+  it("accepts a note at 500 characters and rejects 501", async () => {
+    const [t, m1, m2] = await Promise.all([newTopic(), newMovie(), newMovie()]);
+    await expect(assign(t, m1, "x".repeat(500))).resolves.toBeTruthy();
+    await rejects(() => assign(t, m2, "y".repeat(501)), SQLSTATE.check);
+  });
+
+  it("refuses the same film twice on one topic", async () => {
+    // The composite primary key is what makes the film list a set, so the
+    // wholesale PUT cannot produce a page listing a film twice.
+    const [t, m] = await Promise.all([newTopic(), newMovie()]);
+    await assign(t, m, "First reading.");
+    await rejects(() => assign(t, m, "Second reading."), SQLSTATE.unique);
+  });
+
+  it("refuses an assignment pointing at a missing film or topic", async () => {
+    const [t, m] = await Promise.all([newTopic(), newMovie()]);
+    await rejects(() => assign(t, "no-such-movie", null), SQLSTATE.fk);
+    await rejects(() => assign("no-such-topic", m, null), SQLSTATE.fk);
+  });
+
+  const countFor = async (column: '"topicId"' | '"movieId"', id: string) => {
+    const { rows } = await db.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM "MovieTopic" WHERE ${column} = $1`,
+      [id],
+    );
+    return Number(rows[0].n);
+  };
+
+  it("deletes assignments with the topic, and leaves the film alone", async () => {
+    const [t, m] = await Promise.all([newTopic(), newMovie()]);
+    await assign(t, m, "The reading.");
+    await db.query(`DELETE FROM "Topic" WHERE "id" = $1`, [t]);
+    expect(await countFor('"topicId"', t)).toBe(0);
+    const { rows } = await db.query(`SELECT 1 FROM "Movie" WHERE "id" = $1`, [m]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("deletes assignments with the film, so a topic page cannot cite a ghost", async () => {
+    const [t, m] = await Promise.all([newTopic(), newMovie()]);
+    await assign(t, m, "The reading.");
+    await db.query(`DELETE FROM "Movie" WHERE "id" = $1`, [m]);
+    expect(await countFor('"movieId"', m)).toBe(0);
+    const { rows } = await db.query(`SELECT 1 FROM "Topic" WHERE "id" = $1`, [t]);
+    expect(rows).toHaveLength(1);
   });
 });
 
