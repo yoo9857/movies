@@ -1,6 +1,7 @@
 // The rest of a film page: synopsis, language, companies, rating, trailer, series.
 //
-//   npm run db:import-wikidata-details -- --limit=2000
+//   npm run db:import-wikidata-details -- --limit=2000              # synopsis + facts
+//   npm run db:import-wikidata-details -- --facts-only --limit=50000  # facts only, fast
 //
 // The bulk import filled identity and the credit pass filled the cast. What was
 // still missing is everything that makes a film page read like a page rather than
@@ -42,35 +43,57 @@ const BATCH = Math.min(arg("batch", 60), 150);
 /** Milliseconds between Wikipedia summaries. Their API is generous; be polite. */
 const PACE = arg("pace", 250);
 const DRY = process.argv.includes("--dry");
+/**
+ * Facts only, and pick the films by what facts they are missing.
+ *
+ * The default pass selects films with no synopsis, which was right for the field
+ * it exists for and wrong for everything else: the 5,883 films that had already
+ * received a synopsis were then excluded from ever getting a language, a rating or
+ * a production company. This mode asks the other question — "who has no facts?" —
+ * and skips Wikipedia entirely, so it moves at the speed of one query per sixty
+ * films rather than one request per film.
+ */
+const FACTS_ONLY = process.argv.includes("--facts-only");
 
 type Binding = Record<string, { value: string } | undefined>;
 
 /**
  * Facts, one query per batch.
  *
+ * Labels are joined explicitly, with a language FILTER, and **not** taken from
+ * `SERVICE wikibase:label`. The service does not bind `?xLabel` for a variable
+ * that only appears inside an aggregate, so the first version of this query —
+ * `SAMPLE(?languageLabel)` with the service at the bottom — returned an empty
+ * column for every film and filled nothing: 0 languages where 107,609 exist. It
+ * looked like a coverage problem and was a SPARQL one. Verified both ways against
+ * three films before rewriting.
+ *
  * `wdt:P1651` is a YouTube video id — usually the trailer, which is what the
  * player on the page expects. `P1657` is the MPAA rating as an item, so its label
  * ("R", "PG-13") is what gets stored, matching what the TMDB rows carry.
+ *
+ * Languages are concatenated rather than sampled: P364 often has several, and
+ * SAMPLE picked "Italian" for The Godfather. Listing what the film is actually in
+ * beats asserting one of them at random.
  */
 function factsQuery(qids: string[]): string {
   const values = qids.map((q) => `wd:${q}`).join(" ");
   return `
 SELECT ?film
-       (SAMPLE(?languageLabel) AS ?language)
-       (SAMPLE(?ratingLabel) AS ?rating)
-       (SAMPLE(?seriesLabel) AS ?series)
+       (GROUP_CONCAT(DISTINCT ?languageName; separator="; ") AS ?languages)
+       (SAMPLE(?ratingName) AS ?rating)
+       (SAMPLE(?seriesName) AS ?series)
        (SAMPLE(?site) AS ?website)
        (SAMPLE(?youtube) AS ?trailer)
-       (GROUP_CONCAT(DISTINCT ?companyLabel; separator="; ") AS ?companies)
+       (GROUP_CONCAT(DISTINCT ?companyName; separator="; ") AS ?companies)
 WHERE {
   VALUES ?film { ${values} }
-  OPTIONAL { ?film wdt:P364 ?language }
-  OPTIONAL { ?film wdt:P1657 ?rating }
-  OPTIONAL { ?film wdt:P179 ?series }
+  OPTIONAL { ?film wdt:P364 ?language . ?language rdfs:label ?languageName . FILTER(LANG(?languageName) = "en") }
+  OPTIONAL { ?film wdt:P1657 ?ratingItem . ?ratingItem rdfs:label ?ratingName . FILTER(LANG(?ratingName) = "en") }
+  OPTIONAL { ?film wdt:P179 ?seriesItem . ?seriesItem rdfs:label ?seriesName . FILTER(LANG(?seriesName) = "en") }
   OPTIONAL { ?film wdt:P856 ?site }
   OPTIONAL { ?film wdt:P1651 ?youtube }
-  OPTIONAL { ?film wdt:P272 ?company }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+  OPTIONAL { ?film wdt:P272 ?company . ?company rdfs:label ?companyName . FILTER(LANG(?companyName) = "en") }
 }
 GROUP BY ?film
 `;
@@ -145,16 +168,27 @@ async function main() {
 
   // Most-documented first, and only rows still missing the synopsis — the field
   // this pass exists for. Nothing already filled is touched.
-  const films = await prisma.$queryRaw<
-    { id: string; wikidataId: string; title: string; wikipediaUrl: string | null }[]
-  >`
-    SELECT id, "wikidataId", title, "wikipediaUrl"
-    FROM "Movie"
-    WHERE "wikidataId" IS NOT NULL
-      AND overview IS NULL
-    ORDER BY "wikidataSitelinks" DESC NULLS LAST, "releaseDate" DESC NULLS LAST
-    LIMIT ${LIMIT}
-  `;
+  const films = FACTS_ONLY
+    ? await prisma.$queryRaw<
+        { id: string; wikidataId: string; title: string; wikipediaUrl: string | null }[]
+      >`
+        SELECT id, "wikidataId", title, "wikipediaUrl"
+        FROM "Movie"
+        WHERE "wikidataId" IS NOT NULL
+          AND "originalLanguage" IS NULL
+        ORDER BY "wikidataSitelinks" DESC NULLS LAST, "releaseDate" DESC NULLS LAST
+        LIMIT ${LIMIT}
+      `
+    : await prisma.$queryRaw<
+        { id: string; wikidataId: string; title: string; wikipediaUrl: string | null }[]
+      >`
+        SELECT id, "wikidataId", title, "wikipediaUrl"
+        FROM "Movie"
+        WHERE "wikidataId" IS NOT NULL
+          AND overview IS NULL
+        ORDER BY "wikidataSitelinks" DESC NULLS LAST, "releaseDate" DESC NULLS LAST
+        LIMIT ${LIMIT}
+      `;
 
   if (films.length === 0) {
     console.log("Every film with a QID already has a synopsis. Nothing to do.");
@@ -188,7 +222,7 @@ async function main() {
       // derived from its Wikidata sitelink, which the query below asks for only
       // when we do not already have it.
       let articleUrl = film.wikipediaUrl;
-      if (!articleUrl) {
+      if (!articleUrl && !FACTS_ONLY) {
         try {
           const rows = await ask(`
 SELECT ?article WHERE {
@@ -210,7 +244,14 @@ LIMIT 1`);
         .map((name) => ({ name, logoPath: null }));
 
       const data: Record<string, unknown> = {};
-      const language = labelled(b?.language?.value);
+      // Every language the film is in, up to three: "English, Italian".
+      const language =
+        (b?.languages?.value ?? "")
+          .split(";")
+          .map((l) => l.trim())
+          .filter((l) => l && !/^Q[1-9][0-9]*$/.test(l))
+          .slice(0, 3)
+          .join(", ") || null;
       const rating = labelled(b?.rating?.value);
       const series = labelled(b?.series?.value);
       const website = b?.website?.value;
@@ -223,7 +264,7 @@ LIMIT 1`);
       if (companies.length > 0) data.companies = companies;
       if (articleUrl) data.wikipediaUrl = articleUrl;
 
-      if (articleUrl) {
+      if (articleUrl && !FACTS_ONLY) {
         const s = await summary(articleUrl);
         if (s?.extract) {
           data.overview = s.extract;
@@ -232,7 +273,7 @@ LIMIT 1`);
           data.overviewLicense = WIKI_LICENSE;
         }
         await new Promise((r) => setTimeout(r, PACE));
-      } else {
+      } else if (!articleUrl) {
         noArticle += 1;
       }
 
