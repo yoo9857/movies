@@ -97,8 +97,18 @@ model Movie {
   originalTitle String?
   tagline       String?
   overview      String?
+  /// TMDB's paths — a source their CDN completes, never something we host.
   posterPath    String?
   backdropPath  String?
+  /// Artwork on our own storage: a real, freely licensed poster or still, fetched
+  /// once and re-encoded. Preferred over posterPath wherever a poster is shown.
+  /// The credit columns are not decoration — a free licence requires them, and a
+  /// CHECK constraint refuses a file without a source URL.
+  image           String?
+  imageCredit     String?
+  imageLicense    String?
+  imageLicenseUrl String?
+  imageSourceUrl  String?
   releaseDate   DateTime? @db.Date
   runtime       Int?
   director      String?

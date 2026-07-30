@@ -9,6 +9,8 @@ export interface MovieCardData {
   slug: string;
   title: string;
   posterPath: string | null;
+  /** Freely licensed artwork on our own storage, preferred over the TMDB path. */
+  image?: string | null;
   releaseDate: Date | string | null;
   director: string | null;
   genres: string[];
@@ -25,6 +27,7 @@ export function MovieCard({ movie, rank }: { movie: MovieCardData; rank?: number
       <div className="relative overflow-hidden rounded-xl border border-line bg-surface-raised">
         <Poster
           path={movie.posterPath}
+          image={movie.image}
           title={movie.title}
           year={year}
           director={movie.director}

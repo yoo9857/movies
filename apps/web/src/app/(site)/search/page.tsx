@@ -60,7 +60,15 @@ export default async function SearchPage(props: {
             OR: [{ title: ci(q) }, { originalTitle: ci(q) }, { director: ci(q) }],
           },
           take: 10,
-          select: { id: true, slug: true, title: true, posterPath: true, releaseDate: true, director: true },
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            posterPath: true,
+            image: true,
+            releaseDate: true,
+            director: true,
+          },
         }),
         prisma.critic.findMany({
           where: { name: ci(q) },
@@ -196,6 +204,7 @@ export default async function SearchPage(props: {
               <Link key={m.id} href={`/movies/${m.slug}`} className="group">
                 <Poster
                   path={m.posterPath}
+                  image={m.image}
                   title={m.title}
                   year={m.releaseDate ? new Date(m.releaseDate).getFullYear() : null}
                   director={m.director}

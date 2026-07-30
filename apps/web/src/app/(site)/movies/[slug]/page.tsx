@@ -18,6 +18,7 @@ import { ScoreBand } from "@/components/ScoreBand";
 import { TrailerEmbed } from "@/components/TrailerEmbed";
 import { VideoGallery } from "@/components/VideoGallery";
 import {
+  absUrl,
   backdropUrl,
   breadcrumbNode,
   type Crumb,
@@ -183,7 +184,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
     ? await prisma.movie.findMany({
         where: { collectionId: movie.collectionId, NOT: { id: movie.id } },
         orderBy: { releaseDate: "asc" },
-        select: { id: true, slug: true, title: true, posterPath: true, releaseDate: true },
+        select: { id: true, slug: true, title: true, posterPath: true, image: true, releaseDate: true },
       })
     : [];
 
@@ -259,7 +260,11 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       name: year ? `${movie.title} (${year})` : movie.title,
       description: movie.overview ?? movie.tagline,
       kind: "ItemPage",
-      image: backdropUrl(movie.backdropPath, "w1280") ?? posterUrl(movie.posterPath, "w780"),
+      // Ours first: the file we host is the one we can name a licence for.
+      image:
+        (movie.image ? absUrl(movie.image) : null) ??
+        backdropUrl(movie.backdropPath, "w1280") ??
+        posterUrl(movie.posterPath, "w780"),
       dateModified: modified,
       hasBreadcrumb: true,
       aboutId: movieEntityId(movie.slug),
@@ -374,6 +379,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         <div className="absolute -top-36 left-0 hidden w-36 sm:block">
           <Poster
             path={movie.posterPath}
+            image={movie.image}
             title={movie.title}
             year={year}
             director={director}

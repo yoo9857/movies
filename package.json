@@ -26,6 +26,7 @@
     "db:import-wikidata-credits": "npm run import-wikidata-credits -w @cinepixo/db --",
     "db:import-wikidata-people": "npm run import-wikidata-people -w @cinepixo/db --",
     "portraits": "npm run portraits -w web --",
+    "artwork": "npm run artwork -w web --",
     "db:refresh-library": "npm run refresh-library -w @cinepixo/db",
     "db:studio": "npm run studio -w @cinepixo/db",
     "db:deploy": "npm run deploy -w @cinepixo/db",

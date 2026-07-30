@@ -1,8 +1,8 @@
 import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
 import { ImageResponse } from "next/og";
-import { MovieCard, OG_CONTENT_TYPE, OG_SIZE, ogFontOptions } from "@/lib/og-card";
-import { posterUrl } from "@/lib/seo";
+import { MovieCard, OG_CONTENT_TYPE, OG_SIZE, ogFontOptions, ourImageAsPng } from "@/lib/og-card";
+import { absUrl, posterUrl } from "@/lib/seo";
 
 export const alt = "A film in the CinePixo library";
 export const size = OG_SIZE;
@@ -21,6 +21,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     releaseDate: true,
     director: true,
     posterPath: true,
+    image: true,
     crew: { where: { job: "Director" }, select: { name: true } },
     reviews: { where: { status: "PUBLISHED" as const }, select: { rating: true } },
   };
@@ -47,7 +48,12 @@ export default async function Image({ params }: { params: Promise<{ slug: string
       director: movie.crew[0]?.name ?? movie.director,
       fandomStars: average != null ? toStarScale(average) : null,
       reviewCount: ratings.length,
-      poster: posterUrl(movie.posterPath, "w500"),
+      // Our own file when we have one — but re-encoded to PNG first: the upload
+      // pipeline writes WebP, which satori cannot decode, and a card with a blank
+      // plate where the poster should be is worse than one without a plate.
+      poster: movie.image
+        ? await ourImageAsPng(absUrl(movie.image), 500)
+        : posterUrl(movie.posterPath, "w500"),
     }),
     await ogFontOptions(),
   );

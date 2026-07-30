@@ -50,6 +50,7 @@ const movieSelect = {
   slug: true,
   title: true,
   posterPath: true,
+  image: true,
   releaseDate: true,
   reviews: {
     where: { status: "PUBLISHED" as const },
@@ -512,6 +513,7 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
                   </span>
                   <Poster
                     path={f.movie.posterPath}
+                    image={f.movie.image}
                     title={f.movie.title}
                     size="thumb"
                     className="aspect-2/3 w-full rounded border border-line object-cover"

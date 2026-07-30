@@ -151,7 +151,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
         slug: true,
         title: true,
         rating: true,
-        movie: { select: { title: true, posterPath: true } },
+        movie: { select: { title: true, posterPath: true, image: true } },
       },
     }),
   ]);
@@ -272,6 +272,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
               genres: movie.genres,
               countries: movie.countries,
               posterPath: movie.posterPath,
+              image: movie.image,
             }}
           />
         </div>
@@ -351,6 +352,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
                       >
                         <Poster
                           path={r.movie.posterPath}
+                          image={r.movie.image}
                           title={r.movie.title}
                           className="h-10 w-7 shrink-0 rounded object-cover"
                         />

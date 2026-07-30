@@ -49,6 +49,7 @@ const getTopic = cache(async (slug: string) => {
               slug: true,
               title: true,
               posterPath: true,
+              image: true,
               releaseDate: true,
               director: true,
               reviews: { where: { status: "PUBLISHED" as const }, select: { rating: true } },
@@ -199,6 +200,7 @@ export default async function TopicPage(props: { params: Promise<{ slug: string 
                   >
                     <Poster
                       path={f.movie.posterPath}
+                      image={f.movie.image}
                       title={f.movie.title}
                       year={f.year}
                       size="thumb"

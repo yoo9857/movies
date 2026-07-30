@@ -82,6 +82,7 @@ function HousePoster({
 
 export function Poster({
   path,
+  image,
   title,
   year,
   director,
@@ -91,8 +92,15 @@ export function Poster({
   priority = false,
 }: {
   path: string | null;
+  /**
+   * A real poster or still on our own storage, from a freely licensed Commons
+   * file. Preferred over TMDB's path: it is the same picture of the same film,
+   * served from our origin at the size we asked for, and it is the only artwork
+   * here we can point at a licence for.
+   */
+  image?: string | null;
   title: string;
-  /** For the house card, when there is no poster to show. */
+  /** For the house card, when there is no poster of any kind to show. */
   year?: number | null;
   director?: string | null;
   className?: string;
@@ -101,11 +109,26 @@ export function Poster({
   sizes?: string;
   priority?: boolean;
 }) {
+  const v = VARIANTS[size];
+
+  if (image) {
+    return (
+      <Image
+        src={image}
+        alt={`${title} poster`}
+        width={v.w}
+        height={v.h}
+        sizes={sizes ?? `${v.w}px`}
+        priority={priority}
+        className={`object-cover ${className}`}
+      />
+    );
+  }
+
   if (!path || !path.startsWith("/")) {
     return <HousePoster title={title} year={year} director={director} className={className} />;
   }
 
-  const v = VARIANTS[size];
   return (
     <Image
       src={`https://image.tmdb.org/t/p/${v.file}${path}`}

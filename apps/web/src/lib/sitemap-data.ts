@@ -82,6 +82,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
           updatedAt: true,
           posterPath: true,
           backdropPath: true,
+          image: true,
           // A film page renders the axes it carries and the sentence written for
           // each, so an assignment — or an edit to an axis it sits on — changes
           // the page while the Movie row is untouched. Reporting only
@@ -98,9 +99,13 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         ]),
         changeFrequency: "weekly",
         priority: 0.7,
-        images: [posterUrl(m.posterPath, "w780"), backdropUrl(m.backdropPath, "w1280")].filter(
-          (u): u is string => Boolean(u),
-        ),
+        // Our own file first — an image on our origin is one Google can attribute
+        // to this page rather than to every site using the same CDN path.
+        images: [
+          m.image ? absUrl(m.image) : undefined,
+          posterUrl(m.posterPath, "w780"),
+          backdropUrl(m.backdropPath, "w1280"),
+        ].filter((u): u is string => Boolean(u)),
       }));
     }
     case "people": {

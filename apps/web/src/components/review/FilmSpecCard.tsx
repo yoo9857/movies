@@ -16,6 +16,8 @@ export interface FilmSpec {
   genres: string[];
   countries: string[];
   posterPath: string | null;
+  /** Freely licensed artwork we host, preferred over the TMDB path. */
+  image?: string | null;
 }
 
 function runtimeLabel(min: number): string {
@@ -40,6 +42,7 @@ export function FilmSpecCard({ film }: { film: FilmSpec }) {
       <Link href={`/movies/${film.slug}`} className="shrink-0">
         <Poster
           path={film.posterPath}
+          image={film.image}
           title={film.title}
           size="thumb"
           className="h-36 w-24 rounded-lg border border-line object-cover transition-opacity hover:opacity-90"
