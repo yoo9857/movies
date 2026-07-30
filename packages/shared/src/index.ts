@@ -172,6 +172,27 @@ export const criticInputSchema = z.object({
 });
 export type CriticInput = z.infer<typeof criticInputSchema>;
 
+// ── People ───────────────────────────────────────────────────────
+
+/** A date we typed, not a timestamp — "1969-09-14", or nothing. */
+const optionalDay = z
+  .union([z.literal(""), z.iso.date()])
+  .transform((v) => (v === "" ? undefined : v))
+  .optional();
+
+export const personInputSchema = z.object({
+  slug: slugSchema,
+  name: z.string().trim().min(1).max(120),
+  bio: optionalText(2000),
+  /** Career notes: collaborators, what to watch first — our editorial voice. */
+  notes: optionalText(4000),
+  birthPlace: optionalText(160),
+  birthDate: optionalDay,
+  deathDate: optionalDay,
+  links: z.array(criticLinkSchema).max(10).default([]),
+});
+export type PersonInput = z.infer<typeof personInputSchema>;
+
 // ── Movies ───────────────────────────────────────────────────────
 
 /**
