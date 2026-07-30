@@ -65,7 +65,10 @@ const movieInclude = {
     orderBy: { createdAt: "asc" as const },
     select: {
       note: true,
-      topic: { select: { slug: true, name: true, kind: true } },
+      // Timestamps, because they are part of when *this page* last changed —
+      // see `dateModified` below.
+      createdAt: true,
+      topic: { select: { slug: true, name: true, kind: true, updatedAt: true } },
     },
   },
   videos: { orderBy: { sort: "asc" as const } },
@@ -140,6 +143,12 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
   // Ours, so they lead: themes and motifs are argued film by film, while the
   // keyword strip further down is imported metadata about this film alone.
   const topics = movie.topics.map((mt) => ({ ...mt.topic, note: mt.note }));
+  // What this page last changed, not what the Movie row last changed: assigning
+  // an axis, or editing one this film carries, rewrites a section of it.
+  const modified = [
+    ...movie.topics.map((mt) => mt.createdAt),
+    ...movie.topics.map((mt) => mt.topic.updatedAt),
+  ].reduce((latest, d) => (d > latest ? d : latest), movie.updatedAt);
   const ratings = movie.reviews.map((r) => r.rating);
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
 
@@ -230,7 +239,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       description: movie.overview ?? movie.tagline,
       kind: "ItemPage",
       image: backdropUrl(movie.backdropPath, "w1280") ?? posterUrl(movie.posterPath, "w780"),
-      dateModified: movie.updatedAt,
+      dateModified: modified,
       hasBreadcrumb: true,
       aboutId: movieEntityId(movie.slug),
       mainEntityId: movieEntityId(movie.slug),

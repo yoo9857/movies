@@ -68,11 +68,25 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
     case "movies": {
       const movies = await prisma.movie.findMany({
         orderBy: { updatedAt: "desc" },
-        select: { slug: true, updatedAt: true, posterPath: true, backdropPath: true },
+        select: {
+          slug: true,
+          updatedAt: true,
+          posterPath: true,
+          backdropPath: true,
+          // A film page renders the axes it carries and the sentence written for
+          // each, so an assignment — or an edit to an axis it sits on — changes
+          // the page while the Movie row is untouched. Reporting only
+          // Movie.updatedAt told crawlers nothing had changed on the day every
+          // film page gained a section.
+          topics: { select: { createdAt: true, topic: { select: { updatedAt: true } } } },
+        },
       });
       return movies.map((m) => ({
         url: absUrl(`/movies/${m.slug}`),
-        lastModified: m.updatedAt,
+        lastModified: newest([
+          m.updatedAt,
+          ...m.topics.flatMap((t) => [t.createdAt, t.topic.updatedAt]),
+        ]),
         changeFrequency: "weekly",
         priority: 0.7,
         images: [posterUrl(m.posterPath, "w780"), backdropUrl(m.backdropPath, "w1280")].filter(
@@ -103,13 +117,26 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       const topics = await prisma.topic.findMany({
         where: { movies: { some: {} } },
         orderBy: { updatedAt: "desc" },
-        select: { slug: true, updatedAt: true },
+        select: {
+          slug: true,
+          updatedAt: true,
+          movies: {
+            orderBy: { createdAt: "asc" },
+            take: 3,
+            select: { movie: { select: { posterPath: true } } },
+          },
+        },
       });
       return topics.map((t) => ({
         url: absUrl(`/topics/${t.slug}`),
         lastModified: t.updatedAt,
         changeFrequency: "monthly",
         priority: 0.6,
+        // w185 is the size the page actually renders these at; advertising a
+        // larger file would list an image that appears nowhere.
+        images: t.movies
+          .map((m) => posterUrl(m.movie.posterPath, "w185"))
+          .filter((u): u is string => Boolean(u)),
       }));
     }
     case "critics": {
@@ -129,7 +156,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       // The handful of listing pages. Their lastmod is derived from the newest
       // row they list, not `new Date()` — claiming freshness on every fetch
       // means nothing.
-      const [review, movie, critic, person, topic] = await Promise.all([
+      const [review, movie, critic, person, topic, browse] = await Promise.all([
         prisma.review.findFirst({
           where: { status: "PUBLISHED" },
           orderBy: { updatedAt: "desc" },
@@ -139,6 +166,10 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         prisma.critic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.person.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.topic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+        // One column of every film, to build the browse states below. Cheap now
+        // and still cheap at a few thousand rows; a GROUP BY over unnest() would
+        // be faster and much harder to read.
+        prisma.movie.findMany({ select: { genres: true, releaseDate: true, updatedAt: true } }),
       ]);
       const anything = newest([
         review?.updatedAt,
@@ -147,7 +178,53 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         person?.updatedAt,
         topic?.updatedAt,
       ]);
+
+      // Genre and decade change *which* films are listed, so /movies gives each
+      // its own canonical URL and marks it indexable — and until now nothing
+      // announced them. These are the long-tail entry points ("korean thriller
+      // films", "films from the 1990s"), and a crawler could only reach them by
+      // guessing at query strings.
+      //
+      // Sort order and grid-vs-index canonicalise away on that page, so they are
+      // deliberately absent here: listing them would submit URLs that declare a
+      // different address as their canonical.
+      const browseUrl = (params: Record<string, string>) =>
+        absUrl(`/movies?${new URLSearchParams(params).toString()}`);
+
+      const genres = new Map<string, Date | undefined>();
+      const decades = new Map<number, Date | undefined>();
+      for (const film of browse) {
+        for (const g of film.genres) genres.set(g, newest([genres.get(g), film.updatedAt]));
+        if (film.releaseDate) {
+          const decade = Math.floor(film.releaseDate.getUTCFullYear() / 10) * 10;
+          decades.set(decade, newest([decades.get(decade), film.updatedAt]));
+        }
+      }
+
+      const browseStates: SitemapUrl[] = [
+        ...[...genres.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([genre, lastModified]) => ({
+            url: browseUrl({ genre }),
+            lastModified,
+            changeFrequency: "weekly" as const,
+            priority: 0.6,
+          })),
+        ...[...decades.entries()]
+          .sort(([a], [b]) => b - a)
+          .map(([decade, lastModified]) => ({
+            url: browseUrl({ decade: String(decade) }),
+            lastModified,
+            changeFrequency: "weekly" as const,
+            priority: 0.5,
+          })),
+      ];
+
       return [
+        // `https://host/` here against `https://host` in the rendered canonical:
+        // the same resource by RFC 3986 (an empty path is "/"), and both are
+        // normalised to one URL before anything indexes them. Left as the root
+        // spelling a sitemap conventionally carries.
         { url: absUrl("/"), lastModified: anything, changeFrequency: "daily", priority: 1 },
         { url: absUrl("/reviews"), lastModified: review?.updatedAt, changeFrequency: "daily", priority: 0.9 },
         { url: absUrl("/movies"), lastModified: movie?.updatedAt, changeFrequency: "weekly", priority: 0.8 },
@@ -156,6 +233,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         { url: absUrl("/critics"), lastModified: critic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
         { url: absUrl("/stats"), lastModified: review?.updatedAt, changeFrequency: "weekly", priority: 0.5 },
         { url: absUrl("/about"), lastModified: critic?.updatedAt, changeFrequency: "monthly", priority: 0.6 },
+        ...browseStates,
       ];
     }
   }
@@ -163,7 +241,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
 
 /** Section lastmods for the index — one cheap query per shelf. */
 export async function sectionLastmods(): Promise<Record<Section, Date | undefined>> {
-  const [review, movie, critic, person, topic] = await Promise.all([
+  const [review, movie, critic, person, topic, assignment] = await Promise.all([
     prisma.review.findFirst({
       where: { status: "PUBLISHED" },
       orderBy: { updatedAt: "desc" },
@@ -172,11 +250,20 @@ export async function sectionLastmods(): Promise<Record<Section, Date | undefine
     prisma.movie.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     prisma.critic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
     prisma.person.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
-    prisma.topic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    // Only axes with films, so this matches what the topics section contains.
+    prisma.topic.findFirst({
+      where: { movies: { some: {} } },
+      orderBy: { updatedAt: "desc" },
+      select: { updatedAt: true },
+    }),
+    prisma.movieTopic.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
   ]);
+  // The film shelf moves when an assignment lands, not only when a Movie row is
+  // written — same reason the per-URL lastmod above folds these in.
+  const films = newest([movie?.updatedAt, assignment?.createdAt, topic?.updatedAt]);
   const anything = newest([
     review?.updatedAt,
-    movie?.updatedAt,
+    films,
     critic?.updatedAt,
     person?.updatedAt,
     topic?.updatedAt,
@@ -184,7 +271,7 @@ export async function sectionLastmods(): Promise<Record<Section, Date | undefine
   return {
     pages: anything,
     reviews: review?.updatedAt,
-    movies: movie?.updatedAt,
+    movies: films,
     people: person?.updatedAt,
     topics: topic?.updatedAt,
     critics: critic?.updatedAt,

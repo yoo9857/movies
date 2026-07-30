@@ -38,9 +38,16 @@ async function goldTransparent() {
 
 // Square canvas with breathing room, so the mark is never clipped by a
 // circular OS mask.
+//
+// The padding is rounded *first* and the inner box derived from it. Rounding the
+// inner box first and halving the remainder shipped icons one pixel too large —
+// 257×257 for `icon.png`, 193×193 for the file the manifest declares as
+// 192×192, 1025 for the logo. A PWA audit reads that as a size mismatch, and an
+// odd-sided icon has no clean 16px downscale, which is the size a browser tab
+// actually paints.
 function fit(buf, size, padRatio, background) {
-  const inner = Math.round(size * (1 - padRatio * 2));
-  const pad = Math.round((size - inner) / 2);
+  const pad = Math.round(size * padRatio);
+  const inner = size - pad * 2;
   return sharp(buf)
     .resize(inner, inner, { fit: "contain", background: { ...GOLD, alpha: 0 } })
     .extend({
@@ -53,6 +60,41 @@ function fit(buf, size, padRatio, background) {
     // palette + quantisation: a two-tone mark needs nowhere near 24-bit colour
     .png({ compressionLevel: 9, palette: true, colours: 64, effort: 10 })
     .toBuffer();
+}
+
+/**
+ * A multi-size .ico from PNG frames.
+ *
+ * Written by hand because sharp has no .ico encoder and the format needs no
+ * library: a 6-byte header, one 16-byte directory entry per frame, then the
+ * frames themselves. PNG-compressed frames inside an ICO are understood by
+ * every browser still in service.
+ */
+function ico(frames) {
+  const HEADER = 6;
+  const ENTRY = 16;
+  const header = Buffer.alloc(HEADER);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // 1 = icon
+  header.writeUInt16LE(frames.length, 4);
+
+  let offset = HEADER + ENTRY * frames.length;
+  const entries = frames.map(({ size, data }) => {
+    const e = Buffer.alloc(ENTRY);
+    // 0 means 256 in this field; nothing here is larger than that.
+    e.writeUInt8(size >= 256 ? 0 : size, 0);
+    e.writeUInt8(size >= 256 ? 0 : size, 1);
+    e.writeUInt8(0, 2); // palette size — 0 for "not a palette image index"
+    e.writeUInt8(0, 3); // reserved
+    e.writeUInt16LE(1, 4); // colour planes
+    e.writeUInt16LE(32, 6); // bits per pixel
+    e.writeUInt32LE(data.length, 8);
+    e.writeUInt32LE(offset, 12);
+    offset += data.length;
+    return e;
+  });
+
+  return Buffer.concat([header, ...entries, ...frames.map((f) => f.data)]);
 }
 
 async function main() {
@@ -72,6 +114,22 @@ async function main() {
     // maskable needs 20% safe padding on the brand ground
     [path.join(PUB, "icon-maskable-512.png"), await fit(mark, 512, 0.2, { ...INK, alpha: 1 })],
   ];
+  // favicon.ico — the one icon every browser and Google's favicon crawler ask
+  // for by path, and the one that was missing from the repository: production
+  // had a 256×256 single-frame file left behind by an old deploy, which any
+  // fresh checkout would simply not have. Four frames, because a tab paints at
+  // 16 and Google's own guidance asks for a square multiple of 48.
+  //
+  // On the ink ground, not transparent: gold on Chrome's light tab strip is
+  // under 2:1 contrast, while the dark tile reads in light and dark chrome
+  // alike. The knockout type is unreadable at 16px by design — the silhouette
+  // is what identifies the tab.
+  const icoFrames = [];
+  for (const size of [16, 32, 48, 64]) {
+    icoFrames.push({ size, data: await fit(mark, size, 0.06, { ...INK, alpha: 1 }) });
+  }
+  out.push([path.join(APP, "favicon.ico"), ico(icoFrames)]);
+
   for (const [file, buf] of out) await writeFile(file, buf);
 
   // Social card: mark on the brand ground, left of centre so the title text
