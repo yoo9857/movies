@@ -132,21 +132,31 @@ const fold = (s: string) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
-/** The one film that is unambiguously the one asked for, or null. */
+/**
+ * The one film that is unambiguously the one asked for, or null.
+ *
+ * The year is a filter, not an assertion: TMDB's primary release date is
+ * whichever national release came first, so a film everyone dates to 2014 can
+ * sit under 2015. A year either side is accepted, with the exact year preferred,
+ * and the title still has to match exactly once folded. Two exact matches is a
+ * real ambiguity (same-year remakes exist) — refuse rather than pick.
+ */
 async function resolve(title: string, year: number): Promise<SearchHit | null> {
   const { results } = await tmdb<{ results: SearchHit[] }>("/search/movie", {
     query: title,
-    year: String(year),
     include_adult: "false",
   });
   const wanted = fold(title);
-  const inYear = results.filter((r) => r.release_date?.startsWith(String(year)));
-  const exact = inYear.filter(
+  const exact = results.filter(
     (r) => fold(r.title) === wanted || fold(r.original_title) === wanted,
   );
-  // More than one exact match in the same year is a genuine ambiguity (remakes
-  // released the same year exist); refuse rather than pick.
-  return exact.length === 1 ? exact[0] : null;
+  const yearOf = (r: SearchHit) => Number(r.release_date?.slice(0, 4) ?? 0);
+  for (const tolerance of [0, 1]) {
+    const near = exact.filter((r) => Math.abs(yearOf(r) - year) <= tolerance);
+    if (near.length === 1) return near[0];
+    if (near.length > 1) return null;
+  }
+  return null;
 }
 
 function certification(d: Detail): string | null {
@@ -170,7 +180,9 @@ async function mintSlug(title: string, releaseDate: Date | null, tmdbId: number)
   }
 }
 
-async function importFilm(hit: SearchHit): Promise<{ title: string; cast: number; crew: number }> {
+async function importFilm(
+  hit: SearchHit,
+): Promise<{ title: string; slug: string; cast: number; crew: number }> {
   const d = await tmdb<Detail>(`/movie/${hit.id}`, {
     append_to_response: "credits,videos,images,keywords,release_dates,external_ids",
     include_image_language: "en,null",
@@ -302,7 +314,12 @@ async function importFilm(hit: SearchHit): Promise<{ title: string; cast: number
     await linkCreditsToPeople(tx, movie.id);
   });
 
-  return { title: `${d.title} (${releaseDate?.getUTCFullYear() ?? "—"})`, cast: cast.length, crew: crew.length };
+  return {
+    title: `${d.title} (${releaseDate?.getUTCFullYear() ?? "—"})`,
+    slug,
+    cast: cast.length,
+    crew: crew.length,
+  };
 }
 
 async function main() {
@@ -331,7 +348,10 @@ async function main() {
 
     const done = await importFilm(hit);
     added += 1;
-    console.log(`+  ${done.title} — ${done.cast} cast, ${done.crew} crew`);
+    // The slug is printed because it is the film's public identity from now on,
+    // and because the topic seed matches on title and year — a title TMDB spells
+    // differently is visible here rather than as a silently skipped assignment.
+    console.log(`+  ${done.title} — /movies/${done.slug} — ${done.cast} cast, ${done.crew} crew`);
     // Well under TMDB's rate limit, and this runs twice per film.
     await new Promise((r) => setTimeout(r, 300));
   }

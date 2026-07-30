@@ -18,10 +18,13 @@ type Kind = "THEME" | "MOTIF";
  * A film on an axis, identified by whichever handle is stable for it.
  *
  * `tmdbId` for the films the seeds themselves put in the library — that is the
- * key seed-movies.ts upserts on. `slug` for everything imported from TMDB by
- * add-films.ts, whose ids are resolved at run time and are not knowable here.
+ * key seed-movies.ts upserts on. `title` + `year` for everything add-films.ts
+ * imports: its ids and slugs are minted at run time from whatever TMDB returns,
+ * and neither is knowable here. Matching is on a folded title (case, accents and
+ * punctuation removed) against both title and original title, within a year of
+ * the one given — national release dates routinely disagree by one.
  */
-type FilmRef = ({ tmdbId: number } | { slug: string }) & { note: string };
+type FilmRef = ({ tmdbId: number } | { title: string; year: number }) & { note: string };
 
 interface SeedTopic {
   slug: string;
@@ -66,6 +69,26 @@ const TOPICS: SeedTopic[] = [
         tmdbId: SPIRITED_AWAY,
         note: "The bathhouse runs on contracts and names: Chihiro signs hers away to earn the right to stay, and the spirits soaking upstairs are served by a workforce that must keep proving it is useful.",
       },
+      {
+        title: "Do the Right Thing",
+        year: 1989,
+        note: "A block where the businesses belong to people who do not live on it; the film spends one hot day itemising who takes money out of a neighbourhood and who only occupies it.",
+      },
+      {
+        title: "City of God",
+        year: 2002,
+        note: "Rocket's camera is the only exit the film offers, and it works for exactly one reason — the world outside will pay for pictures of the inside.",
+      },
+      {
+        title: "There Will Be Blood",
+        year: 2007,
+        note: "Plainview buys a town's land, then its church, then its silence; capital here is a physical force that reshapes the ground it stands on.",
+      },
+      {
+        title: "Moonlight",
+        year: 2016,
+        note: "Chiron's poverty is never discussed and never absent — it is the empty kitchen, the dealer who feeds him, and the fact that nobody had taught him to swim.",
+      },
     ],
   },
   {
@@ -89,6 +112,21 @@ const TOPICS: SeedTopic[] = [
         tmdbId: DARK_KNIGHT,
         note: "Harvey Dent wants to be the city's white knight without touching its rot, and the tragedy is that he half-succeeds — his ambition outlives him as a lie Gordon and Batman agree to keep telling.",
       },
+      {
+        title: "Citizen Kane",
+        year: 1941,
+        note: "The film opens with the man already dead and spends two hours asking what he traded for the empire; the answer is a word nobody in the room hears the meaning of.",
+      },
+      {
+        title: "Goodfellas",
+        year: 1990,
+        note: "Henry gets the life he wanted since he was thirteen, and the last act prices it: the schnooks he pitied end up holding the one thing he cannot buy back.",
+      },
+      {
+        title: "There Will Be Blood",
+        year: 2007,
+        note: "Plainview wins every negotiation in the picture and finishes it alone in a private bowling alley — the ambition is granted in full, which is the horror.",
+      },
     ],
   },
   {
@@ -109,6 +147,21 @@ const TOPICS: SeedTopic[] = [
       {
         tmdbId: SPIRITED_AWAY,
         note: "The parents are turned into pigs within ten minutes and are no use for the rest; what follows is a study of what a child does once the adults have disqualified themselves.",
+      },
+      {
+        title: "Tokyo Story",
+        year: 1953,
+        note: "Ozu films the visit and the silence around it: grown children too busy for parents who travelled a long way, and a widowed daughter-in-law who is kinder than either son.",
+      },
+      {
+        title: "Yi Yi",
+        year: 2000,
+        note: "Three generations get equal screen time and the same question, and the boy photographing the backs of people's heads is doing to them what the film does to his family.",
+      },
+      {
+        title: "Moonlight",
+        year: 2016,
+        note: "A mother who cannot mother and a dealer who does: the film keeps asking what a parent is by tracking who actually shows up.",
       },
     ],
   },
@@ -133,6 +186,31 @@ const TOPICS: SeedTopic[] = [
         tmdbId: PARASITE,
         note: "Ki-taek's line about the plan that never fails is the film auditing its own first hour, in which every scheme works beautifully right up until it rains.",
       },
+      {
+        title: "Seven Samurai",
+        year: 1954,
+        note: "The plan is the film: a village fortified, a battle rehearsed to the last fence post, and then rain and mud in which the plan's own authors are killed.",
+      },
+      {
+        title: "Apocalypse Now",
+        year: 1979,
+        note: "Military order thins out with every mile upriver until command is one man in the dark reciting poetry — the chain of command as a thing that evaporates.",
+      },
+      {
+        title: "Do the Right Thing",
+        year: 1989,
+        note: "The heat rises all day over a set of rules nobody states aloud, and the film is exact about the moment they stop holding.",
+      },
+      {
+        title: "Memories of Murder",
+        year: 2003,
+        note: "A procedural whose procedures fail one by one — forensics, coercion, intuition — until the case is simply left open, staring back.",
+      },
+      {
+        title: "No Country for Old Men",
+        year: 2007,
+        note: "Chigurh's coin is the thesis: a man who believes he is fate's instrument, in a film that keeps handing the last word to accident.",
+      },
     ],
   },
   {
@@ -149,6 +227,16 @@ const TOPICS: SeedTopic[] = [
       {
         tmdbId: INTERSTELLAR,
         note: "TARS is the anti-HAL: an adjustable honesty setting played first as a joke and then as the film's most reliable relationship, in a crew where the humans are the failure points.",
+      },
+      {
+        title: "Her",
+        year: 2013,
+        note: "Samantha outgrows Theodore in the most ordinary way — she keeps learning while he stays himself — and the break-up arrives as a problem of scale rather than of love.",
+      },
+      {
+        title: "Ex Machina",
+        year: 2014,
+        note: "The question is never whether Ava can think, but whether she can use a man who is certain he is the one running the test.",
       },
     ],
   },
@@ -168,6 +256,11 @@ const TOPICS: SeedTopic[] = [
       {
         tmdbId: SPIRITED_AWAY,
         note: "The bathhouse is read vertically — boiler room, guest floors, Yubaba's suite at the top — and Chihiro's standing at any moment is legible from the level she is on.",
+      },
+      {
+        title: "Citizen Kane",
+        year: 1941,
+        note: "Welles shoots Kane from below until the ceilings press down on him, then strands Susan at the foot of Xanadu's staircase: rank measured in where the camera has to stand.",
       },
     ],
   },
@@ -189,6 +282,26 @@ const TOPICS: SeedTopic[] = [
       {
         tmdbId: PARASITE,
         note: "Two families of four, one below ground and one above it, each certain it is the exception; the cruelty of the film is how exactly they rhyme.",
+      },
+      {
+        title: "Vertigo",
+        year: 1958,
+        note: "Scottie remakes one woman into another and never notices they are the same person — the double here is a man's fantasy issued a second body.",
+      },
+      {
+        title: "Taxi Driver",
+        year: 1976,
+        note: "\"You talkin' to me?\" is a man rehearsing himself in a mirror; the only person Travis ever really negotiates with is the reflection.",
+      },
+      {
+        title: "Mulholland Drive",
+        year: 2001,
+        note: "Betty and Diane, Rita and Camilla: the same two faces reassigned, so the second half plays as an autopsy of the first.",
+      },
+      {
+        title: "Ex Machina",
+        year: 2014,
+        note: "Ava is assembled out of the search histories of the men assessing her, which is why Caleb mistakes his own reflection for love.",
       },
     ],
   },
@@ -213,6 +326,16 @@ const TOPICS: SeedTopic[] = [
         tmdbId: SPIRITED_AWAY,
         note: "The rail line that surfaces once the valley floods, running over a sea on one-way tickets, turns a flood into the calmest and saddest passage in the film.",
       },
+      {
+        title: "Stalker",
+        year: 1979,
+        note: "The Zone's rooms stand ankle-deep and never stop dripping; Tarkovsky lets water hold the frame for minutes at a time, and it is never weather.",
+      },
+      {
+        title: "Apocalypse Now",
+        year: 1979,
+        note: "The river is the plot — a current that runs one way only, and every mile it carries them is a mile that cannot be taken back.",
+      },
     ],
   },
   {
@@ -229,6 +352,16 @@ const TOPICS: SeedTopic[] = [
       {
         tmdbId: LA_LA_LAND,
         note: "Audition rooms, a club stage, an upright piano in a cramped apartment: the film keeps returning to plain rooms and shoots them as unsparingly as it shoots the fantasy numbers.",
+      },
+      {
+        title: "Seven Samurai",
+        year: 1954,
+        note: "Kambei drills farmers into a defence, and Kurosawa gives the training as much screen time as the battle, because the training is the argument.",
+      },
+      {
+        title: "Portrait of a Lady on Fire",
+        year: 2019,
+        note: "The sittings are the love story: looking, correcting, scraping the paint back — Sciamma shoots the work of making a likeness as the work of knowing someone.",
       },
     ],
   },
@@ -257,6 +390,16 @@ const TOPICS: SeedTopic[] = [
         tmdbId: EEAAO,
         note: "An everything bagel is nihilism made edible: if all of it fits on one thing, then none of it counts — and the film answers that with a plate of laundromat food eaten in company.",
       },
+      {
+        title: "Goodfellas",
+        year: 1990,
+        note: "Garlic sliced thin with a razor in a prison cell, a Sunday sauce, and the one thing Henry misses at the end: food is how the film measures belonging.",
+      },
+      {
+        title: "In the Mood for Love",
+        year: 2000,
+        note: "Noodles carried up a stairwell, dinners ordered for two people pretending to be alone: the meal is where the affair both happens and does not.",
+      },
     ],
   },
   {
@@ -278,6 +421,21 @@ const TOPICS: SeedTopic[] = [
         tmdbId: INTERSTELLAR,
         note: "Time is the antagonist and the structure at once — an hour on one surface costs decades at home, and the last act folds the first scene into its own ending.",
       },
+      {
+        title: "Rashomon",
+        year: 1950,
+        note: "Four accounts of one killing, each internally airtight: the form is the argument that testimony is authorship.",
+      },
+      {
+        title: "Citizen Kane",
+        year: 1941,
+        note: "The life arrives in fragments, ordered by whoever happens to be remembering it — the newsreel first, so the shape is known before the man is.",
+      },
+      {
+        title: "Mulholland Drive",
+        year: 2001,
+        note: "The dream is screened before the facts, and the second order rewrites everything the first one appeared to mean.",
+      },
     ],
   },
   {
@@ -295,18 +453,63 @@ const TOPICS: SeedTopic[] = [
         tmdbId: SPIRITED_AWAY,
         note: "The train sequence is minutes of water, light and a girl sitting still: Miyazaki's ma, and the reason the noise everywhere else in the film lands.",
       },
+      {
+        title: "Tokyo Story",
+        year: 1953,
+        note: "Ozu holds on a corridor, a wall, laundry on a line after the people have left; the grief lands in those held shots rather than in any line of dialogue.",
+      },
+      {
+        title: "Vertigo",
+        year: 1958,
+        note: "The first act is close to wordless surveillance — a man following a woman across San Francisco — and Hitchcock trusts the looking to carry all of it.",
+      },
+      {
+        title: "Stalker",
+        year: 1979,
+        note: "Long dialogue-free passages of water, wind and a camera that will not hurry: the journey is measured in duration, and the duration is the meaning.",
+      },
+      {
+        title: "In the Mood for Love",
+        year: 2000,
+        note: "Whole scenes pass in slow motion with nothing but Yumeji's Theme over them — what the two of them never say is the entire film.",
+      },
     ],
   },
 ];
 
+/** Fold case, accents and punctuation: "Rashômon" and "Rashomon" are one film. */
+const fold = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
 /** The film this reference points at, or null when it is not in the library. */
 async function findFilm(ref: FilmRef): Promise<{ id: string } | null> {
-  return "tmdbId" in ref
-    ? prisma.movie.findUnique({ where: { tmdbId: ref.tmdbId }, select: { id: true } })
-    : prisma.movie.findUnique({ where: { slug: ref.slug }, select: { id: true } });
+  if ("tmdbId" in ref) {
+    return prisma.movie.findUnique({ where: { tmdbId: ref.tmdbId }, select: { id: true } });
+  }
+  const candidates = await prisma.movie.findMany({
+    where: {
+      releaseDate: {
+        gte: new Date(Date.UTC(ref.year - 1, 0, 1)),
+        lt: new Date(Date.UTC(ref.year + 2, 0, 1)),
+      },
+    },
+    select: { id: true, title: true, originalTitle: true },
+  });
+  const wanted = fold(ref.title);
+  return (
+    candidates.find(
+      (m) => fold(m.title) === wanted || (m.originalTitle && fold(m.originalTitle) === wanted),
+    ) ?? null
+  );
 }
 
-const refLabel = (ref: FilmRef) => ("tmdbId" in ref ? `tmdb:${ref.tmdbId}` : ref.slug);
+const refLabel = (ref: FilmRef) =>
+  "tmdbId" in ref ? `tmdb:${ref.tmdbId}` : `${ref.title} (${ref.year})`;
 
 async function main() {
   let assignments = 0;
