@@ -267,6 +267,15 @@ async function assertPublicHost(url: URL): Promise<void> {
 
 const MAX_REDIRECTS = 5;
 
+/**
+ * Who we say we are when fetching someone else's file.
+ *
+ * Not politeness: Wikimedia's User-Agent policy is enforced, and an anonymous
+ * bulk fetcher gets 429s — which is exactly what a portrait and artwork run hit,
+ * seven films in twenty-five, until this was sent.
+ */
+const IMPORT_USER_AGENT = "CinePixo/0.1 (+https://cinepixo.com; devoh@signpost.kr)";
+
 export async function fetchRemoteImage(url: string): Promise<Buffer> {
   let current: URL;
   try {
@@ -285,7 +294,11 @@ export async function fetchRemoteImage(url: string): Promise<Buffer> {
     await assertPublicHost(current);
 
     try {
-      res = await fetch(current, { redirect: "manual", signal: AbortSignal.timeout(15_000) });
+      res = await fetch(current, {
+        redirect: "manual",
+        headers: { "User-Agent": IMPORT_USER_AGENT },
+        signal: AbortSignal.timeout(15_000),
+      });
     } catch {
       throw new ApiError(502, "Could not reach that image");
     }

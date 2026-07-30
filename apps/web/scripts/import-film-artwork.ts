@@ -2,14 +2,15 @@
 //
 //   npm run artwork -w web -- --limit=500
 //
-// Not a generated card: an actual poster or still for the film, where one exists
-// under a licence that allows it. Wikidata records two claims worth asking for —
-// P3383 (film poster) first, then P18 (image) — and both point at Commons files
-// whose licence and author Commons will state.
+// Not a generated card: the film's actual poster, where one exists under a licence
+// that allows it. Wikidata's P3383 is exactly that claim, and it points at a
+// Commons file whose licence and author Commons will state.
 //
 // Measured before writing this, over the 188,486 films the bulk import covers:
-// 2,467 have a poster claim and 11,909 have an image claim. That is the ceiling,
-// and it is worth being exact about why, because it looks like a bug and is not:
+// 2,467 have a poster claim (P3383). An image claim (P18) exists for 11,909 more
+// and is deliberately not used — sampled, those are cast photographs, logos and
+// one screensaver graphic, none of them the film's poster. Coverage is therefore
+// about 1.3%, and it is worth being exact about why, because it looks like a bug:
 // a theatrical poster is copyrighted. The posters on Wikipedia are non-free files
 // uploaded with a fair-use rationale for one article, which does not travel to
 // another site — so they are not ours to re-host or hotlink, and nothing here
@@ -42,19 +43,24 @@ const DRY = process.argv.includes("--dry");
 type Binding = Record<string, { value: string } | undefined>;
 
 /**
- * The file name of a film's free artwork, poster claim preferred.
+ * The film's poster claim, and only that.
  *
- * Both properties are asked for in one query per batch; P3383 is the poster and
- * P18 is whatever image the item leads with, which for a film is usually a still
- * or a frame. Either is a real picture of the film — a generated card is not.
+ * P18 ("image") was asked for too at first, on the assumption that a film's lead
+ * image would be a poster or a still. Sampled, it is neither: Inception's is a
+ * photograph of the cast at a press event, The Godfather's is a logo, The
+ * Matrix's is a screensaver graphic. Putting any of those in a poster slot is
+ * worse than showing no poster — it is showing the wrong picture and calling it
+ * the film's. P3383 is the property that means "film poster", and it is the only
+ * one used.
+ *
+ * The cost of that honesty is coverage: 2,467 films of 188,486 have the claim.
  */
 function query(qids: string[]): string {
   const values = qids.map((q) => `wd:${q}`).join(" ");
   return `
-SELECT ?film (SAMPLE(?poster) AS ?posterFile) (SAMPLE(?image) AS ?imageFile) WHERE {
+SELECT ?film (SAMPLE(?poster) AS ?posterFile) WHERE {
   VALUES ?film { ${values} }
-  OPTIONAL { ?film wdt:P3383 ?poster }
-  OPTIONAL { ?film wdt:P18 ?image }
+  ?film wdt:P3383 ?poster .
 }
 GROUP BY ?film
 `;
@@ -140,7 +146,7 @@ async function main() {
       const film = qid ? byQid.get(qid) : undefined;
       if (!film) continue;
 
-      const fileUrl = b.posterFile?.value ?? b.imageFile?.value;
+      const fileUrl = b.posterFile?.value;
       if (!fileUrl) {
         noFreeArtwork += 1;
         continue;
