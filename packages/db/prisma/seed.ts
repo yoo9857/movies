@@ -1,3 +1,4 @@
+import "./env";
 import { randomBytes } from "node:crypto";
 import { prisma } from "../src/index";
 import { hashPassword } from "../src/password";
@@ -5,26 +6,36 @@ import { hashPassword } from "../src/password";
 async function main() {
   // Admin account — password comes from env, or a random one is generated
   // and printed ONCE so no default credential ever ships.
+  //
+  // A password is only minted when the account is actually created. This used
+  // to be an upsert with `update: {}`, which leaves an existing hash alone —
+  // so re-seeding generated and printed a credential it had never written, and
+  // the password that still worked was the one from the very first seed. A
+  // login banner that lies is worse than no banner.
   const adminEmail = process.env.ADMIN_EMAIL ?? "admin@cinepixo.local";
-  let adminPassword = process.env.ADMIN_PASSWORD;
-  let generated = false;
-  if (!adminPassword) {
-    adminPassword = randomBytes(18).toString("base64url");
-    generated = true;
-  }
 
-  const admin = await prisma.user.upsert({
+  let admin = await prisma.user.findUnique({
     where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      username: "cinepixo",
-      passwordHash: await hashPassword(adminPassword),
-      role: "ADMIN",
-      displayName: "CinePixo",
-      bio: "Founder of CinePixo — a home for film-critic fandom.",
-    },
+    select: { id: true, username: true },
   });
+  let generatedPassword: string | null = null;
+
+  if (!admin) {
+    const password = process.env.ADMIN_PASSWORD ?? randomBytes(18).toString("base64url");
+    if (!process.env.ADMIN_PASSWORD) generatedPassword = password;
+
+    admin = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        username: "cinepixo",
+        passwordHash: await hashPassword(password),
+        role: "ADMIN",
+        displayName: "CinePixo",
+        bio: "Founder of CinePixo — a home for film-critic fandom.",
+      },
+      select: { id: true, username: true },
+    });
+  }
 
   const critic = await prisma.critic.upsert({
     where: { slug: "roger-ebert" },
@@ -82,11 +93,11 @@ async function main() {
   });
 
   console.log(`Seeded: admin user "${admin.username}", critic "${critic.name}", 1 movie, 1 review`);
-  if (generated) {
+  if (generatedPassword) {
     console.log("");
     console.log("  ADMIN LOGIN (save this — it is shown only once)");
     console.log(`  email:    ${adminEmail}`);
-    console.log(`  password: ${adminPassword}`);
+    console.log(`  password: ${generatedPassword}`);
     console.log("");
   }
 }

@@ -2,6 +2,7 @@
 // against image.tmdb.org (HTTP 200) before being committed — nothing is
 // guessed, so no broken frames ship. Actors without a verified path keep the
 // initial-letter fallback until a TMDB refresh fills them in.
+import "./env";
 import { prisma } from "../src/index";
 
 // actor name → verified TMDB profile path

@@ -2,6 +2,7 @@
 // movie pages are complete even before a TMDB API key is configured.
 // Text only — no image paths are invented here; the cast rail falls back to
 // initials, and a later TMDB "Refresh" fills in photos, artwork and videos.
+import "./env";
 import { prisma } from "../src/index";
 
 interface Detail {

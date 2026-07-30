@@ -1,5 +1,6 @@
 // Extra library seed — real films with image paths verified against
 // image.tmdb.org (HTTP 200) before inclusion. Idempotent (upsert by tmdbId).
+import "./env";
 import { prisma } from "../src/index";
 
 
