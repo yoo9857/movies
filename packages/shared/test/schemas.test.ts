@@ -73,9 +73,25 @@ describe("movieSlug", () => {
   });
 
   it("always satisfies the slug shape the database enforces", () => {
-    for (const title of ["Parasite", "  spaced  out  ", "!!!", "Ça: c'est ★"]) {
+    for (const title of [
+      "Parasite",
+      "  spaced  out  ",
+      "!!!",
+      "Ça: c'est ★",
+      // Real titles that begin or end with punctuation the strip leaves as a
+      // hyphen. "-30-" (1959) is the one that took down a 500-film insert: it
+      // slugged to "-30-1959", which the CHECK constraint refuses.
+      "-30-",
+      "—Ashes—",
+      "...And Justice for All",
+      "- - -",
+    ]) {
       expect(movieSlug(title, new Date("2020-01-01"))).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     }
+  });
+
+  it("keeps the digits of a title that is only punctuation and a number", () => {
+    expect(movieSlug("-30-", new Date("1959-01-01"))).toBe("30-1959");
   });
 });
 

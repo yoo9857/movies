@@ -362,6 +362,7 @@ async function main() {
   let inserted = 0;
   let known = 0;
   const failedYears: number[] = [];
+  const rejected: string[] = [];
 
   for (let year = FROM; year <= TO; year++) {
     let rows: Row[];
@@ -403,10 +404,26 @@ async function main() {
       // Chunked: one 5,000-row INSERT is a long transaction holding locks for no
       // reason. skipDuplicates covers the case of two QIDs racing to the same
       // slug across an interrupted run.
+      //
+      // A batch that fails is retried row by row, because a single unacceptable
+      // row used to take 499 good ones with it and end the whole run — which is
+      // how "-30-" (1959) stopped an import at year 59 of 127. The offending row
+      // is named and skipped rather than silently dropped.
       for (let i = 0; i < data.length; i += 500) {
         const batch = data.slice(i, i + 500);
-        const { count } = await prisma.movie.createMany({ data: batch, skipDuplicates: true });
-        inserted += count;
+        try {
+          const { count } = await prisma.movie.createMany({ data: batch, skipDuplicates: true });
+          inserted += count;
+        } catch {
+          for (const row of batch) {
+            try {
+              await prisma.movie.create({ data: row });
+              inserted += 1;
+            } catch (e) {
+              rejected.push(`${row.title} (${row.wikidataId}): ${(e as Error).message.split("\n").pop()}`);
+            }
+          }
+        }
       }
     }
 
@@ -425,6 +442,11 @@ async function main() {
   console.log(`Library now holds ${total.toLocaleString("en-US")} films.`);
   if (failedYears.length > 0) {
     console.warn(`Years that did not answer: ${failedYears.join(", ")} — rerun to pick them up.`);
+  }
+  if (rejected.length > 0) {
+    console.warn(`\n${rejected.length} row(s) the database refused:`);
+    for (const line of rejected.slice(0, 20)) console.warn(`  ${line}`);
+    if (rejected.length > 20) console.warn(`  …and ${rejected.length - 20} more`);
   }
 }
 

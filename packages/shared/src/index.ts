@@ -245,6 +245,11 @@ export type TopicFilmsInput = z.infer<typeof topicFilmsSchema>;
  * (see the import route). A title that romanises to nothing (an all-CJK title
  * with no Latin release name) falls back to "film" plus the year rather than
  * an empty slug.
+ *
+ * Hyphens are trimmed from **both** ends. Only the trailing side was, which held
+ * up until a bulk import met "-30-", a real 1959 film: its slug came out as
+ * `-30-1959`, the CHECK constraint that requires `^[a-z0-9]…` rejected the row,
+ * and a 500-film batch went down with it.
  */
 export function movieSlug(title: string, releaseDate?: Date | string | null): string {
   const base =
@@ -256,7 +261,7 @@ export function movieSlug(title: string, releaseDate?: Date | string | null): st
       .trim()
       .replace(/[\s-]+/g, "-")
       .slice(0, 100)
-      .replace(/-+$/, "") || "film";
+      .replace(/^-+|-+$/g, "") || "film";
   const year = releaseDate ? new Date(releaseDate).getUTCFullYear() : null;
   return year ? `${base}-${year}` : base;
 }
