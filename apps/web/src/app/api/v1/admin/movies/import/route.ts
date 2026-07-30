@@ -1,4 +1,5 @@
 import { prisma } from "@cinepixo/db";
+import { movieSlug } from "@cinepixo/shared";
 import { z } from "zod";
 import { handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
@@ -69,12 +70,23 @@ export const POST = handle(async (request: Request) => {
   const videos = extractVideos(d);
   const { posters, backdrops } = extractImages(d);
 
+  // The URL slug is minted once, on first import. A refresh never rewrites it:
+  // the URL is the film's public identity, and TMDB retitling a film must not
+  // orphan every link to it. Collisions (three Suspirias) take -2, -3….
+  const candidate = movieSlug(data.title, data.releaseDate);
+  let slug = candidate;
+  for (let n = 2; ; n++) {
+    const holder = await prisma.movie.findUnique({ where: { slug }, select: { tmdbId: true } });
+    if (!holder || holder.tmdbId === tmdbId) break;
+    slug = `${candidate}-${n}`;
+  }
+
   // Idempotent refresh: replace cast/crew atomically with the movie upsert.
   const movie = await prisma.$transaction(async (tx) => {
     const m = await tx.movie.upsert({
       where: { tmdbId },
       update: data,
-      create: { tmdbId, ...data },
+      create: { tmdbId, slug, ...data },
     });
     await tx.movieCast.deleteMany({ where: { movieId: m.id } });
     await tx.movieCrew.deleteMany({ where: { movieId: m.id } });

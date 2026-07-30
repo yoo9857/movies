@@ -36,7 +36,7 @@ export default async function StatsPage() {
       select: {
         rating: true,
         publishedAt: true,
-        movie: { select: { id: true, title: true, genres: true } },
+        movie: { select: { id: true, slug: true, title: true, genres: true } },
       },
     }),
     prisma.user.count(),
@@ -79,9 +79,10 @@ export default async function StatsPage() {
   // measured us against a crowd; this one measures the criticism against itself,
   // which is the more interesting number on a site about criticism — and it needs
   // no outside data to be true.
-  const perMovie = new Map<string, { title: string; ratings: number[] }>();
+  const perMovie = new Map<string, { slug: string; title: string; ratings: number[] }>();
   for (const r of reviews) {
-    const cur = perMovie.get(r.movie.id) ?? { title: r.movie.title, ratings: [] };
+    const cur =
+      perMovie.get(r.movie.id) ?? { slug: r.movie.slug, title: r.movie.title, ratings: [] };
     cur.ratings.push(r.rating);
     perMovie.set(r.movie.id, cur);
   }
@@ -94,6 +95,7 @@ export default async function StatsPage() {
       const high = toStarScale(Math.max(...m.ratings));
       return {
         id,
+        slug: m.slug,
         title: m.title,
         n: m.ratings.length,
         low,
@@ -280,7 +282,7 @@ export default async function StatsPage() {
                 {contested.map((d) => (
                   <Link
                     key={d.id}
-                    href={`/movies/${d.id}`}
+                    href={`/movies/${d.slug}`}
                     className="group grid grid-cols-[minmax(0,10rem)_1fr_3.5rem] items-center gap-3 text-sm"
                   >
                     <span className="truncate text-muted group-hover:text-foreground transition-colors">

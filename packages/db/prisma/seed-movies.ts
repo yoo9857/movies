@@ -1,6 +1,7 @@
 // Extra library seed — real films with image paths verified against
 // image.tmdb.org (HTTP 200) before inclusion. Idempotent (upsert by tmdbId).
 import "./env";
+import { movieSlug } from "../../shared/src/index";
 import { prisma } from "../src/index";
 
 
@@ -254,7 +255,12 @@ async function main() {
 
   for (const m of MOVIES) {
     const { tmdbId, ...data } = m;
-    await prisma.movie.upsert({ where: { tmdbId }, update: data, create: { tmdbId, ...data } });
+    await prisma.movie.upsert({
+      where: { tmdbId },
+      update: data,
+      // Slug only on create — the URL identity never churns on a re-seed.
+      create: { tmdbId, slug: movieSlug(m.title, m.releaseDate), ...data },
+    });
   }
   console.log(`Movies upserted: ${MOVIES.length}`);
 

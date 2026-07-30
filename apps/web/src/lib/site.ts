@@ -67,3 +67,8 @@ export const VERIFICATION = {
   bing: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION,
   yandex: process.env.NEXT_PUBLIC_YANDEX_SITE_VERIFICATION,
 } as const;
+
+/// AdSense publisher id (ca-pub-…), when configured. Emits the account meta
+/// tag AdSense uses to match the site to the account — public by design, but
+/// env-driven so a fork of this code never ships someone else's id.
+export const ADSENSE_ACCOUNT = process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_ACCOUNT;

@@ -71,20 +71,43 @@ export const SpoilerBlock = Node.create({
 });
 
 /** The linked film's trailer, inline in the argument. A leaf: all it *is* is a marker. */
-export const TrailerBlock = Node.create({
+export const TrailerBlock = Node.create<{ trailerKey: string | null }>({
   name: "trailer",
   group: "block",
   atom: true,
+
+  addOptions() {
+    // The film's YouTube key, when the editor knows it — the node then shows
+    // the real thumbnail instead of a labelled slot. Markdown is unaffected:
+    // the key lives with the film, never in the text.
+    return { trailerKey: null };
+  },
 
   parseHTML() {
     return [{ tag: "div[data-type='trailer']" }];
   },
 
   renderHTML() {
+    const key = this.options.trailerKey;
+    if (!key) {
+      return [
+        "div",
+        { "data-type": "trailer", class: "cx-edit-media" },
+        "▶ Trailer — plays this film's trailer here",
+      ];
+    }
     return [
       "div",
-      { "data-type": "trailer", class: "cx-edit-media" },
-      "▶ Trailer — plays this film's trailer here",
+      { "data-type": "trailer", class: "cx-edit-media cx-edit-media-preview" },
+      [
+        "img",
+        {
+          src: `https://i.ytimg.com/vi/${key}/hqdefault.jpg`,
+          alt: "",
+          draggable: "false",
+        },
+      ],
+      ["span", {}, "▶ Trailer — plays inline on the page"],
     ];
   },
 
@@ -111,10 +134,16 @@ export const TrailerBlock = Node.create({
 });
 
 /** Still #N from the film's gallery. 1-based, like the grammar it writes. */
-export const StillBlock = Node.create({
+export const StillBlock = Node.create<{ stills: string[] }>({
   name: "still",
   group: "block",
   atom: true,
+
+  addOptions() {
+    // TMDB paths for the chosen film's stills, when the editor knows them —
+    // the node then shows the actual frame it refers to.
+    return { stills: [] };
+  },
 
   addAttributes() {
     return {
@@ -131,10 +160,27 @@ export const StillBlock = Node.create({
   },
 
   renderHTML({ node }) {
+    const index = Number(node.attrs.index) || 1;
+    const path = this.options.stills[index - 1];
+    const base = {
+      "data-type": "still",
+      "data-index": String(index),
+    };
+    if (!path) {
+      return [
+        "div",
+        { ...base, class: "cx-edit-media" },
+        `🖼 Still #${index} — this film's still, full width`,
+      ];
+    }
     return [
       "div",
-      { "data-type": "still", "data-index": String(node.attrs.index), class: "cx-edit-media" },
-      `🖼 Still #${node.attrs.index} — this film's still, full width`,
+      { ...base, class: "cx-edit-media cx-edit-media-preview" },
+      [
+        "img",
+        { src: `https://image.tmdb.org/t/p/w300${path}`, alt: "", draggable: "false" },
+      ],
+      ["span", {}, `🖼 Still #${index} — full width on the page`],
     ];
   },
 

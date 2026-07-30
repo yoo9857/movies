@@ -6,6 +6,7 @@ import { Poster } from "../Poster";
 
 export interface FilmSpec {
   id: string;
+  slug: string;
   title: string;
   originalTitle: string | null;
   releaseDate: Date | string | null;
@@ -36,7 +37,7 @@ export function FilmSpecCard({ film }: { film: FilmSpec }) {
 
   return (
     <aside className="flex gap-5 border-y border-line py-5">
-      <Link href={`/movies/${film.id}`} className="shrink-0">
+      <Link href={`/movies/${film.slug}`} className="shrink-0">
         <Poster
           path={film.posterPath}
           title={film.title}
@@ -45,7 +46,7 @@ export function FilmSpecCard({ film }: { film: FilmSpec }) {
         />
       </Link>
       <div className="min-w-0 flex-1">
-        <Link href={`/movies/${film.id}`} className="group">
+        <Link href={`/movies/${film.slug}`} className="group">
           <h2 className="text-lg font-bold leading-tight transition-colors group-hover:text-accent">
             {film.title}
             {year && <span className="ml-2 font-normal text-muted">({year})</span>}

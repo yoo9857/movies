@@ -174,6 +174,31 @@ export type CriticInput = z.infer<typeof criticInputSchema>;
 
 // ── Movies ───────────────────────────────────────────────────────
 
+/**
+ * The URL slug for a film: `parasite-2019`.
+ *
+ * Title plus release year, because titles collide constantly (three Suspirias,
+ * two Dunes) and the year is how people disambiguate them in speech. Uniqueness
+ * is still enforced by the database — callers append `-2`, `-3`… on conflict
+ * (see the import route). A title that romanises to nothing (an all-CJK title
+ * with no Latin release name) falls back to "film" plus the year rather than
+ * an empty slug.
+ */
+export function movieSlug(title: string, releaseDate?: Date | string | null): string {
+  const base =
+    title
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "") // combining accents: Amélie → amelie
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/[\s-]+/g, "-")
+      .slice(0, 100)
+      .replace(/-+$/, "") || "film";
+  const year = releaseDate ? new Date(releaseDate).getUTCFullYear() : null;
+  return year ? `${base}-${year}` : base;
+}
+
 export const movieInputSchema = z.object({
   tmdbId: z.number().int().positive().optional(),
   title: z.string().trim().min(1).max(200),

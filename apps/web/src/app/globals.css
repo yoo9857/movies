@@ -408,3 +408,57 @@ body {
 .cx-richtext ul[data-type="taskList"] li > label {
   margin-top: 0.35rem;
 }
+
+/* Slash command menu — anchored to the caret by slash-menu.tsx */
+.cx-slash-menu {
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  padding: 0.25rem 0;
+}
+
+/* Media previews inside the editor: the real frame, sized as a slot */
+.cx-richtext .cx-edit-media-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.6rem;
+}
+.cx-richtext .cx-edit-media-preview img {
+  width: 132px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  margin: 0;
+}
+
+/* Tables while editing — mirror the published look, plus selection state */
+.cx-richtext table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+.cx-richtext th,
+.cx-richtext td {
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  min-width: 3rem;
+  position: relative;
+}
+.cx-richtext th {
+  background: var(--surface-raised);
+  font-weight: 600;
+}
+.cx-richtext .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  pointer-events: none;
+}

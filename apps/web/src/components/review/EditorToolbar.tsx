@@ -149,4 +149,36 @@ export const Glyphs = {
       <path d="M6 7h12M6 17h12" opacity="0.35" />
     </svg>
   ),
+  orderedList: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <path d="M4 5l1.5-1v4M3.5 11.5c.5-1 2-1 2.3 0 .2.8-.7 1.4-2.3 2.5h2.7M3.5 17h1.2a1.2 1.2 0 1 1 0 2.4H4a1.2 1.2 0 1 0 .7 2.2" />
+    </svg>
+  ),
+  task: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <rect x="3" y="5" width="6" height="6" rx="1.5" />
+      <path d="M4.6 8l1.2 1.2L8 7" />
+      <rect x="3" y="14" width="6" height="6" rx="1.5" />
+      <path d="M13 8h8M13 17h8" />
+    </svg>
+  ),
+  table: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 10h18M9 10v9M15 10v9" />
+    </svg>
+  ),
+  undo: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M8 7L4 11l4 4" />
+      <path d="M4 11h10a6 6 0 0 1 6 6v1" />
+    </svg>
+  ),
+  redo: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M16 7l4 4-4 4" />
+      <path d="M20 11H10a6 6 0 0 0-6 6v1" />
+    </svg>
+  ),
 };

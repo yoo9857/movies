@@ -99,6 +99,7 @@ export interface ReviewExport {
   author: { username: string; displayName: Nullable<string> };
   movie: {
     id: string;
+    slug: string;
     title: string;
     originalTitle: Nullable<string>;
     releaseDate: Nullable<Date>;
@@ -128,7 +129,7 @@ export function reviewToMarkdown(review: ReviewExport): string {
     ["published", isoDay(review.publishedAt)],
     ["updated", isoDay(review.updatedAt)],
     ["canonical", absUrl(`/reviews/${review.slug}`)],
-    ["film_url", absUrl(`/movies/${m.id}`)],
+    ["film_url", absUrl(`/movies/${m.slug}`)],
     ["publisher", SITE_NAME],
     ["genres", [...m.genres]],
     [
@@ -189,6 +190,7 @@ export function reviewToMarkdown(review: ReviewExport): string {
 
 export interface MovieExport {
   id: string;
+  slug: string;
   title: string;
   originalTitle: Nullable<string>;
   tagline: Nullable<string>;
@@ -232,7 +234,7 @@ export function movieToMarkdown(movie: MovieExport): string {
     ["certification", movie.certification],
     ["genres", [...movie.genres]],
     ["countries", [...movie.countries]],
-    ["canonical", absUrl(`/movies/${movie.id}`)],
+    ["canonical", absUrl(`/movies/${movie.slug}`)],
     ["review_count", movie.reviews.length],
     ["fandom_rating", avg != null ? `${avg.toFixed(2)}/10` : undefined],
     ["fandom_stars", avg != null ? `${stars(avg)}/5` : undefined],
@@ -317,7 +319,7 @@ export function movieToMarkdown(movie: MovieExport): string {
 
   lines.push(
     movie.homepage ? `Official site: ${movie.homepage}` : null,
-    `Source: ${absUrl(`/movies/${movie.id}`)}`,
+    `Source: ${absUrl(`/movies/${movie.slug}`)}`,
     "Film metadata supplied by TMDB. Reviews are the work of their authors.",
   );
 

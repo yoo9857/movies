@@ -75,6 +75,9 @@ model Critic {
 /// A film — imported from TMDB or added manually.
 model Movie {
   id            String    @id @default(cuid())
+  /// URL identity: title-year ("parasite-2019"). The id stays the relational
+  /// key; the slug is what appears in every public URL. Old id URLs 301 here.
+  slug          String    @unique
   tmdbId        Int?      @unique
   imdbId        String?
   title         String

@@ -30,8 +30,7 @@ function mount(md: string) {
         onChange={() => {}}
         onSaveShortcut={() => {}}
         uploadImage={async () => null}
-        hasTrailer={true}
-        stillCount={3}
+        media={{ trailerKey: "abc123", stills: ["/a.jpg", "/b.jpg", "/c.jpg"] }}
       />,
     );
   });

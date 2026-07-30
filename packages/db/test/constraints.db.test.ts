@@ -58,8 +58,8 @@ beforeAll(async () => {
     [USER],
   );
   await db.query(
-    `INSERT INTO "Movie" ("id","title","genres","updatedAt")
-     VALUES ($1,'Parasite',ARRAY['Drama'],CURRENT_TIMESTAMP)`,
+    `INSERT INTO "Movie" ("id","slug","title","genres","updatedAt")
+     VALUES ($1,'parasite-2019','Parasite',ARRAY['Drama'],CURRENT_TIMESTAMP)`,
     [MOVIE],
   );
 });
@@ -155,7 +155,8 @@ describe("slug shape", () => {
 
 describe("Movie sanity constraints", () => {
   const movie = (over: Record<string, unknown>) => {
-    const row = { id: `m-${Math.random().toString(36).slice(2, 10)}`, title: "T", ...over };
+    const key = Math.random().toString(36).slice(2, 10);
+    const row = { id: `m-${key}`, slug: `film-${key}`, title: "T", ...over };
     const cols = Object.keys(row);
     return db.query(
       `INSERT INTO "Movie" (${cols.map((c) => `"${c}"`).join(", ")}, "genres", "updatedAt")
@@ -183,6 +184,18 @@ describe("Movie sanity constraints", () => {
 
   it("allows the boundaries", async () => {
     await expect(movie({ runtime: 1000, voteAverage: 10, budget: 0 })).resolves.toBeTruthy();
+  });
+
+  it("rejects a malformed slug by shape", async () => {
+    // Movie_slug_shape — same grammar as review slugs, because both end up in
+    // URLs and in the .md rewrite pattern.
+    await rejects(() => movie({ slug: "Upper-Case" }), SQLSTATE.check);
+    await rejects(() => movie({ slug: "double--hyphen" }), SQLSTATE.check);
+  });
+
+  it("rejects a duplicate slug", async () => {
+    await movie({ slug: "taken-2019" });
+    await rejects(() => movie({ slug: "taken-2019" }), SQLSTATE.unique);
   });
 });
 

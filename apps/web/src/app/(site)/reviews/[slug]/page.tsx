@@ -57,11 +57,11 @@ const getReview = cache(async (rawSlug: string) => {
 /** Trail shared by the visible breadcrumbs and the BreadcrumbList node. */
 function trailFor(review: {
   title: string;
-  movie: { id: string; title: string };
+  movie: { slug: string; title: string };
 }): Crumb[] {
   return [
     { name: "Reviews", path: "/reviews" },
-    { name: review.movie.title, path: `/movies/${review.movie.id}` },
+    { name: review.movie.title, path: `/movies/${review.movie.slug}` },
     { name: review.title },
   ];
 }
@@ -179,7 +179,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
       hasBreadcrumb: true,
       // The page *is* the review and is *about* the film — two different claims,
       // and answer engines use both: one to attribute, one to retrieve.
-      aboutId: movieEntityId(movie.id),
+      aboutId: movieEntityId(movie.slug),
       mainEntityId: reviewEntityId(review.slug),
       keywords: [movie.title, ...movie.genres],
       // The verdict, and nothing else — an assistant reading this page aloud
@@ -263,6 +263,7 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
           <FilmSpecCard
             film={{
               id: movie.id,
+              slug: movie.slug,
               title: movie.title,
               originalTitle: movie.originalTitle,
               releaseDate: movie.releaseDate,

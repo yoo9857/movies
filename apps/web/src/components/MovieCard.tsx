@@ -6,6 +6,7 @@ import { Poster } from "./Poster";
 
 export interface MovieCardData {
   id: string;
+  slug: string;
   title: string;
   posterPath: string | null;
   releaseDate: Date | string | null;
@@ -20,7 +21,7 @@ export function MovieCard({ movie, rank }: { movie: MovieCardData; rank?: number
   const stars = movie.fandomAvg != null ? toStarScale(movie.fandomAvg) : null;
 
   return (
-    <Link href={`/movies/${movie.id}`} className="group block">
+    <Link href={`/movies/${movie.slug}`} className="group block">
       <div className="relative overflow-hidden rounded-xl border border-line bg-surface-raised">
         <Poster
           path={movie.posterPath}

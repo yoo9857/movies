@@ -41,6 +41,7 @@ const reviewSelect = {
   movie: {
     select: {
       id: true,
+      slug: true,
       title: true,
       posterPath: true,
       backdropPath: true,
@@ -62,6 +63,7 @@ export default async function HomePage() {
     prisma.movie.findMany({
       select: {
         id: true,
+        slug: true,
         title: true,
         posterPath: true,
         releaseDate: true,
@@ -251,7 +253,7 @@ export default async function HomePage() {
               const n = m.reviews.length;
               const avgR = n > 0 ? m.reviews.reduce((s, r) => s + r.rating, 0) / n : null;
               return (
-                <Link key={m.id} href={`/movies/${m.id}`} className="group w-40">
+                <Link key={m.id} href={`/movies/${m.slug}`} className="group w-40">
                   <Poster
                     path={m.posterPath}
                     title={m.title}
@@ -353,7 +355,7 @@ export default async function HomePage() {
               <StarRating rating={lead.rating} showNumber={false} />
             </p>
           </div>
-          <Link href={`/movies/${lead.movie.id}`} className="hidden sm:block">
+          <Link href={`/movies/${lead.movie.slug}`} className="hidden sm:block">
             <Poster
               path={lead.movie.posterPath}
               title={lead.movie.title}
@@ -374,7 +376,7 @@ export default async function HomePage() {
           }
         >
           {topRated.map((m, i) => (
-              <Link key={m.id} href={`/movies/${m.id}`} className="group relative w-44 pl-10">
+              <Link key={m.id} href={`/movies/${m.slug}`} className="group relative w-44 pl-10">
                 <span
                   aria-hidden="true"
                   className="pointer-events-none absolute -left-2 bottom-4 z-0 select-none text-[7rem] font-black leading-none tracking-tighter text-transparent"

@@ -57,7 +57,7 @@ export default async function SearchPage(props: {
             ],
           },
           take: 10,
-          select: { id: true, title: true, posterPath: true, releaseDate: true, director: true },
+          select: { id: true, slug: true, title: true, posterPath: true, releaseDate: true, director: true },
         }),
         prisma.critic.findMany({
           where: { name: { contains: q } },
@@ -122,7 +122,7 @@ export default async function SearchPage(props: {
           <h2 className="text-sm font-semibold uppercase text-muted">Movies</h2>
           <div className="mt-3 grid grid-cols-3 gap-4 sm:grid-cols-5">
             {movies.map((m) => (
-              <Link key={m.id} href={`/movies/${m.id}`} className="group">
+              <Link key={m.id} href={`/movies/${m.slug}`} className="group">
                 <Poster
                   path={m.posterPath}
                   title={m.title}

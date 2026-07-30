@@ -44,7 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }),
     prisma.movie.findMany({
       orderBy: { updatedAt: "desc" },
-      select: { id: true, updatedAt: true, posterPath: true, backdropPath: true },
+      select: { slug: true, updatedAt: true, posterPath: true, backdropPath: true },
     }),
     prisma.critic.findMany({
       orderBy: { updatedAt: "desc" },
@@ -106,7 +106,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ].filter((u): u is string => Boolean(u)),
     })),
     ...movies.map((m) => ({
-      url: absUrl(`/movies/${m.id}`),
+      url: absUrl(`/movies/${m.slug}`),
       lastModified: m.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.7,

@@ -1147,8 +1147,7 @@ export function ReviewEditor({
               onChange={(md) => set("content", md)}
               onSaveShortcut={() => void saveDraftNow()}
               uploadImage={uploadOne}
-              hasTrailer={Boolean(chosen?.trailerKey)}
-              stillCount={media.stills.length}
+              media={{ trailerKey: chosen?.trailerKey ?? null, stills: media.stills }}
             />
           </div>
         )}

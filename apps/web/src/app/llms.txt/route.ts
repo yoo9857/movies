@@ -37,6 +37,7 @@ export async function GET(): Promise<Response> {
       take: LIST_LIMIT,
       select: {
         id: true,
+        slug: true,
         title: true,
         releaseDate: true,
         director: true,
@@ -99,7 +100,7 @@ export async function GET(): Promise<Response> {
     "",
     ...movies.map(
       (m) =>
-        `- [${m.title}${year(m.releaseDate)}](${absUrl(`/movies/${m.id}`)}): ${m.director ? `directed by ${m.director}, ` : ""}${m._count.reviews} review${m._count.reviews === 1 ? "" : "s"}.`,
+        `- [${m.title}${year(m.releaseDate)}](${absUrl(`/movies/${m.slug}`)}): ${m.director ? `directed by ${m.director}, ` : ""}${m._count.reviews} review${m._count.reviews === 1 ? "" : "s"}.`,
     ),
     movieCount > movies.length
       ? `- …and ${movieCount - movies.length} more at [${absUrl("/movies")}](${absUrl("/movies")}).`

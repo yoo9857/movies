@@ -95,7 +95,15 @@ const nextConfig: NextConfig = {
       // ids are both restricted to [a-z0-9-] by their schemas, so there is no
       // ambiguity about where the extension starts.
       { source: "/reviews/:slug.md", destination: "/md/reviews/:slug" },
-      { source: "/movies/:id.md", destination: "/md/movies/:id" },
+      { source: "/movies/:slug.md", destination: "/md/movies/:slug" },
+      // Pre-slug movie URLs (/movies/<cuid>) must answer a real HTTP 308, and
+      // the page cannot deliver one: Next streams metadata, so by the time a
+      // redirect thrown in the page runs, 200 is already on the wire and the
+      // "redirect" degrades to a meta tag only browsers honour. A cuid is
+      // recognisable by shape (25 chars, no hyphen — every slug carries one),
+      // so those requests are rewritten to a route handler that can still set
+      // the status line. Slugs never match and reach the page untouched.
+      { source: "/movies/:id(c[a-z0-9]{24})", destination: "/legacy/movies/:id" },
     ];
   },
 };

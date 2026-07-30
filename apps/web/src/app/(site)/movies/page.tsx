@@ -135,6 +135,7 @@ export default async function MoviesPage(props: {
 
   const select = {
     id: true,
+    slug: true,
     title: true,
     posterPath: true,
     backdropPath: true,
@@ -213,6 +214,7 @@ export default async function MoviesPage(props: {
 
   const cardData = (m: (typeof listed)[number]) => ({
     id: m.id,
+    slug: m.slug,
     title: m.title,
     posterPath: m.posterPath,
     releaseDate: m.releaseDate,
@@ -246,10 +248,10 @@ export default async function MoviesPage(props: {
         startAt: (page - 1) * PER_PAGE + 1,
         totalItems: total,
         entries: listed.map((m) => ({
-          path: `/movies/${m.id}`,
+          path: `/movies/${m.slug}`,
           name: m.title,
           image: posterUrl(m.posterPath, "w342"),
-          entityId: movieEntityId(m.id),
+          entityId: movieEntityId(m.slug),
         })),
       }),
   );
@@ -337,7 +339,7 @@ export default async function MoviesPage(props: {
       {/* Editor's pick — asymmetric entry before the index */}
       {featured && featured.count > 0 && (
         <Link
-          href={`/movies/${featured.id}`}
+          href={`/movies/${featured.slug}`}
           className="group relative mt-8 block overflow-hidden rounded-2xl border border-line"
         >
           <div className="relative min-h-[13rem]">
@@ -405,7 +407,7 @@ export default async function MoviesPage(props: {
           {listed.map((m, i) => (
             <Link
               key={m.id}
-              href={`/movies/${m.id}`}
+              href={`/movies/${m.slug}`}
               className="group grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-4 border-b border-line py-3.5 pl-1 pr-2 transition-colors hover:bg-surface/60 sm:grid-cols-[3rem_minmax(0,1fr)_8rem_auto]"
             >
               <span className="font-mono text-lg text-muted tabular-nums">

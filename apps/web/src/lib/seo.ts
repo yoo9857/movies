@@ -156,7 +156,7 @@ export const LOGO_ID = `${SITE_URL}/#logo`;
 
 export const pageId = (path: string) => `${absUrl(path)}#webpage`;
 export const breadcrumbId = (path: string) => `${absUrl(path)}#breadcrumb`;
-export const movieEntityId = (id: string) => `${SITE_URL}/movies/${id}#movie`;
+export const movieEntityId = (slug: string) => `${SITE_URL}/movies/${slug}#movie`;
 export const reviewEntityId = (slug: string) => `${SITE_URL}/reviews/${slug}#review`;
 export const criticEntityId = (slug: string) => `${SITE_URL}/critics/${slug}#person`;
 
@@ -385,6 +385,8 @@ export function criticNode(critic: CriticInput): JsonLdNode {
 
 export interface MovieInput {
   id: string;
+  /** URL identity — every public movie URL is built from this, never the id. */
+  slug: string;
   title: string;
   originalTitle?: Nullable<string>;
   tagline?: Nullable<string>;
@@ -425,8 +427,8 @@ export interface MovieNodeOptions {
 const MPAA = new Set(["G", "PG", "PG-13", "R", "NC-17", "NR", "Unrated"]);
 
 export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonLdNode {
-  const id = movieEntityId(movie.id);
-  const url = absUrl(`/movies/${movie.id}`);
+  const id = movieEntityId(movie.slug);
+  const url = absUrl(`/movies/${movie.slug}`);
   const poster = posterUrl(movie.posterPath, "w500");
 
   if (opts.brief) {
@@ -495,7 +497,7 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
     sameAs,
     aggregateRating: fandomRating(opts.fandom, url),
     review: opts.reviewIds?.map(ref),
-    subjectOf: ref(pageId(`/movies/${movie.id}`)),
+    subjectOf: ref(pageId(`/movies/${movie.slug}`)),
   });
 }
 
@@ -609,7 +611,7 @@ export function reviewNode(review: ReviewInput, opts: ReviewNodeOptions): JsonLd
     publisher: ref(ORG_ID),
     copyrightHolder: memberNode(opts.author),
     itemReviewed: opts.movieById
-      ? ref(movieEntityId(opts.movie.id))
+      ? ref(movieEntityId(opts.movie.slug))
       : movieNode(opts.movie, { brief: true }),
     reviewRating: {
       "@type": "Rating",

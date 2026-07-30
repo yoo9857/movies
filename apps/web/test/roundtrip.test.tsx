@@ -1,15 +1,9 @@
 // @vitest-environment jsdom
 import { Editor } from "@tiptap/core";
-import { Highlight } from "@tiptap/extension-highlight";
-import { Image } from "@tiptap/extension-image";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
-import { Markdown } from "@tiptap/markdown";
-import { StarterKit } from "@tiptap/starter-kit";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ReviewBody, type ReviewMedia } from "@/components/review/ReviewBody";
-import { cjkEmphasisExtensions } from "@/components/review/editor/cjk-emphasis";
-import { directiveExtensions } from "@/components/review/editor/directives";
+import { richExtensions } from "@/components/review/editor/RichEditor";
 
 /**
  * The WYSIWYG editor's one hard obligation: a review opened and saved without
@@ -18,16 +12,9 @@ import { directiveExtensions } from "@/components/review/editor/directives";
  * HTML ReviewBody renders, not on bytes (the serializer may reflow whitespace).
  */
 
-const extensions = [
-  StarterKit.configure({ underline: false, link: { openOnClick: false } }),
-  Highlight,
-  Image,
-  TaskList,
-  TaskItem.configure({ nested: true }),
-  ...directiveExtensions,
-  ...cjkEmphasisExtensions,
-  Markdown,
-];
+// Exactly what the visual editor loads — a drift between this list and the
+// component would make these tests test nothing.
+const extensions = richExtensions();
 
 function roundtrip(md: string): string {
   const editor = new Editor({
@@ -151,6 +138,18 @@ describe("markdown round-trip through the WYSIWYG editor", () => {
     const md = "Intro.\n\n:::spoiler\nnever closed";
     const out = roundtrip(md);
     expect(rendered(out)).toBe(rendered(md));
+  });
+
+  it("tables survive with header and body rows", () => {
+    const out = expectStablePage(
+      [
+        "| Film | Year | Verdict |",
+        "| --- | --- | --- |",
+        "| Parasite | 2019 | masterpiece |",
+        "| Okja | 2017 | uneven |",
+      ].join("\n"),
+    );
+    expect(out).toContain("| Parasite |");
   });
 
   it("a realistic full review body", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   criticInputSchema,
   criticLinkSchema,
+  movieSlug,
   paginationSchema,
   passwordSchema,
   ratingSchema,
@@ -50,6 +51,31 @@ describe("slugSchema", () => {
   it("rejects anything over 120 characters", () => {
     expect(slugSchema.safeParse("a".repeat(120)).success).toBe(true);
     expect(slugSchema.safeParse("a".repeat(121)).success).toBe(false);
+  });
+});
+
+describe("movieSlug", () => {
+  it("builds title-year", () => {
+    expect(movieSlug("Parasite", new Date("2019-05-30"))).toBe("parasite-2019");
+    expect(movieSlug("2001: A Space Odyssey", "1968-04-02")).toBe("2001-a-space-odyssey-1968");
+  });
+
+  it("drops accents rather than dropping the letters", () => {
+    expect(movieSlug("Amélie", new Date("2001-04-25"))).toBe("amelie-2001");
+  });
+
+  it("works without a release date", () => {
+    expect(movieSlug("Dune Part Three")).toBe("dune-part-three");
+  });
+
+  it("falls back to 'film' for a title with no romanisable characters", () => {
+    expect(movieSlug("기생충", new Date("2019-05-30"))).toBe("film-2019");
+  });
+
+  it("always satisfies the slug shape the database enforces", () => {
+    for (const title of ["Parasite", "  spaced  out  ", "!!!", "Ça: c'est ★"]) {
+      expect(movieSlug(title, new Date("2020-01-01"))).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+    }
   });
 });
 

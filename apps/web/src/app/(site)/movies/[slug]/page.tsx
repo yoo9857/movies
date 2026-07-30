@@ -2,7 +2,7 @@ import { prisma } from "@cinepixo/db";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 import { BoxOfficeBand } from "@/components/BoxOfficeBand";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -34,36 +34,53 @@ import {
 export const dynamic = "force-dynamic";
 
 // `cache` so the metadata pass and the render share one query instead of two.
-const getMovie = cache(async (id: string) => {
-  if (!/^[a-z0-9]{1,64}$/i.test(id)) return null;
+//
+// Slug first — that is the public identity. The id fallback keeps every URL
+// minted before slugs existed alive; the page then 301s to the slug, so
+// crawlers transfer what those old links earned instead of splitting it.
+const getMovie = cache(async (param: string) => {
+  if (!/^[a-z0-9-]{1,130}$/i.test(param)) return null;
+  const bySlug = await prisma.movie.findUnique({
+    where: { slug: param },
+    include: movieInclude,
+  });
+  if (bySlug) return bySlug;
   return prisma.movie.findUnique({
-    where: { id },
-    include: {
-      cast: { orderBy: { order: "asc" } },
-      crew: true,
-      videos: { orderBy: { sort: "asc" } },
-      images: { orderBy: [{ kind: "asc" }, { sort: "asc" }] },
-      reviews: {
-        where: { status: "PUBLISHED" },
-        orderBy: { publishedAt: "desc" },
-        select: {
-          slug: true,
-          title: true,
-          rating: true,
-          publishedAt: true,
-          author: { select: { username: true, displayName: true } },
-        },
-      },
-    },
+    where: { id: param },
+    include: movieInclude,
   });
 });
 
+const movieInclude = {
+  cast: { orderBy: { order: "asc" as const } },
+  crew: true,
+  videos: { orderBy: { sort: "asc" as const } },
+  images: { orderBy: [{ kind: "asc" as const }, { sort: "asc" as const }] },
+  reviews: {
+    where: { status: "PUBLISHED" as const },
+    orderBy: { publishedAt: "desc" as const },
+    select: {
+      slug: true,
+      title: true,
+      rating: true,
+      publishedAt: true,
+      author: { select: { username: true, displayName: true } },
+    },
+  },
+};
+
 export async function generateMetadata(props: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { id } = await props.params;
-  const movie = await getMovie(id);
+  const { slug } = await props.params;
+  const movie = await getMovie(slug);
   if (!movie) return { title: "Movie not found", robots: { index: false, follow: false } };
+  // The redirect must fire here, not only in the page body: metadata resolves
+  // before the response streams, so this is the last moment a real 308 status
+  // can still be sent. Thrown from the body, the shell has already flushed as
+  // 200 and the "redirect" degrades to a meta tag only browsers honour —
+  // invisible to the crawlers this move is for.
+  if (movie.slug !== slug) permanentRedirect(`/movies/${movie.slug}`);
 
   const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null;
   const director = movie.crew.find((c) => c.job === "Director")?.name ?? movie.director;
@@ -86,7 +103,7 @@ export async function generateMetadata(props: {
   const poster = posterUrl(movie.posterPath, "w780");
 
   return pageMetadata({
-    path: `/movies/${movie.id}`,
+    path: `/movies/${movie.slug}`,
     title,
     description,
     images: [
@@ -98,14 +115,16 @@ export async function generateMetadata(props: {
     keywords: [movie.title, `${movie.title} review`, ...movie.genres, director ?? ""].filter(
       Boolean,
     ),
-    markdownPath: `/movies/${movie.id}.md`,
+    markdownPath: `/movies/${movie.slug}.md`,
   });
 }
 
-export default async function MoviePage(props: { params: Promise<{ id: string }> }) {
-  const { id } = await props.params;
-  const movie = await getMovie(id);
+export default async function MoviePage(props: { params: Promise<{ slug: string }> }) {
+  const { slug } = await props.params;
+  const movie = await getMovie(slug);
   if (!movie) notFound();
+  // Reached by the old id URL (or any stale alias): one hop to the real one.
+  if (movie.slug !== slug) permanentRedirect(`/movies/${movie.slug}`);
 
   const { genres, keywords, countries } = movie;
   const ratings = movie.reviews.map((r) => r.rating);
@@ -121,7 +140,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
     ? await prisma.movie.findMany({
         where: { collectionId: movie.collectionId, NOT: { id: movie.id } },
         orderBy: { releaseDate: "asc" },
-        select: { id: true, title: true, posterPath: true, releaseDate: true },
+        select: { id: true, slug: true, title: true, posterPath: true, releaseDate: true },
       })
     : [];
 
@@ -144,6 +163,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
             where: { NOT: { id: movie.id } },
             select: {
               id: true,
+              slug: true,
               title: true,
               posterPath: true,
               releaseDate: true,
@@ -171,7 +191,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
     .filter(Boolean)
     .join("  |  ");
 
-  const path = `/movies/${movie.id}`;
+  const path = `/movies/${movie.slug}`;
   const trail: Crumb[] = [
     { name: "Movies", path: "/movies" },
     { name: year ? `${movie.title} (${year})` : movie.title },
@@ -199,8 +219,8 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
       image: backdropUrl(movie.backdropPath, "w1280") ?? posterUrl(movie.posterPath, "w780"),
       dateModified: movie.updatedAt,
       hasBreadcrumb: true,
-      aboutId: movieEntityId(movie.id),
-      mainEntityId: movieEntityId(movie.id),
+      aboutId: movieEntityId(movie.slug),
+      mainEntityId: movieEntityId(movie.slug),
       keywords: [movie.title, ...genres],
       markdownUrl: `${path}.md`,
     }),
@@ -412,7 +432,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
           <SectionHead>{movie.collectionName ?? "Series"}</SectionHead>
           <div className="cx-rail mt-3">
             {seriesEntries.map((s) => (
-              <Link key={s.id} href={`/movies/${s.id}`} className="group w-28">
+              <Link key={s.id} href={`/movies/${s.slug}`} className="group w-28">
                 <Poster
                   path={s.posterPath}
                   title={s.title}
@@ -456,7 +476,7 @@ export default async function MoviePage(props: { params: Promise<{ id: string }>
           <SectionHead>More like this</SectionHead>
           <div className="cx-rail mt-3">
             {similar.map((m) => (
-              <Link key={m.id} href={`/movies/${m.id}`} className="group w-28">
+              <Link key={m.id} href={`/movies/${m.slug}`} className="group w-28">
                 <Poster
                   path={m.posterPath}
                   title={m.title}

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { JsonLd } from "@/components/JsonLd";
 import { absUrl, graph, INDEXABLE, organizationNode, webSiteNode } from "@/lib/seo";
 import {
+  ADSENSE_ACCOUNT,
   SITE_DESCRIPTION,
   SITE_KEYWORDS,
   SITE_LOCALE,
@@ -78,6 +79,8 @@ export const metadata: Metadata = {
     yandex: VERIFICATION.yandex,
     other: VERIFICATION.bing ? { "msvalidate.01": VERIFICATION.bing } : undefined,
   },
+  // AdSense account linkage — not a verification tag, so it lives in `other`.
+  other: ADSENSE_ACCOUNT ? { "google-adsense-account": ADSENSE_ACCOUNT } : undefined,
 };
 
 export const viewport = {

@@ -53,6 +53,7 @@ async function main() {
     update: {},
     create: {
       tmdbId: 496243,
+      slug: "parasite-2019",
       title: "Parasite",
       originalTitle: "기생충",
       overview:
