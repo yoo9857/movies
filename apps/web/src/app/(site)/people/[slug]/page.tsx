@@ -207,6 +207,17 @@ export async function generateMetadata(props: {
     [...new Set(person.crewRoles.map((c) => c.job))][0] ??
     (person.castRoles.length > 0 ? "actor" : "film worker");
 
+  // Everything on this page that is ours: prose we wrote, a portrait we own, or
+  // criticism of their work. With none of it, the page restates a database —
+  // hundreds of thousands of those arrived with the bulk credit import, and
+  // offering them as destinations is how a domain becomes a directory. Reachable
+  // and crawled onward from; not submitted. The sitemap applies the same rule,
+  // and a page graduates the moment someone writes about one of their films.
+  const reviewed = [...person.castRoles, ...person.crewRoles].some(
+    (c) => c.movie.reviews.length > 0,
+  );
+  const ours = Boolean(person.bio || person.notes || person.image) || reviewed;
+
   return pageMetadata({
     path: `/people/${person.slug}`,
     title: person.name,
@@ -214,6 +225,7 @@ export async function generateMetadata(props: {
       person.bio ??
       `${person.name} — ${role}. ${films} film${films === 1 ? "" : "s"} in the CinePixo library, with every review written here about their work.`,
     keywords: [person.name, `${person.name} films`, `${person.name} reviews`, role],
+    noIndex: !ours,
     // A person page is a profile, and it has a clean-markdown sibling.
     ogType: "profile",
     markdownPath: `/people/${person.slug}.md`,

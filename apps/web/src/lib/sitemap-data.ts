@@ -104,10 +104,24 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       }));
     }
     case "people": {
-      // Only people actually credited on something: a person page with an
-      // empty filmography has nothing to index.
+      // Credited *and* carrying something a visitor came for: our prose, a
+      // portrait we own, or a film of theirs that has been reviewed here.
+      //
+      // "Credited on anything" was the bar while the library was hand-built. The
+      // bulk import made it useless — hundreds of thousands of people, each with
+      // a name and a filmography restating a database, would be a sitemap past
+      // the 50,000-URL limit and an index full of pages nobody wrote. The page
+      // metadata marks the rest `noindex, follow`, exactly as it does for films.
       const people = await prisma.person.findMany({
-        where: { OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }] },
+        where: {
+          OR: [
+            { bio: { not: null } },
+            { notes: { not: null } },
+            { image: { not: null } },
+            { castRoles: { some: { movie: { reviews: { some: { status: "PUBLISHED" } } } } } },
+            { crewRoles: { some: { movie: { reviews: { some: { status: "PUBLISHED" } } } } } },
+          ],
+        },
         orderBy: { updatedAt: "desc" },
         select: { slug: true, updatedAt: true, image: true },
       });
