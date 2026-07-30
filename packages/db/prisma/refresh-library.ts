@@ -14,11 +14,15 @@
 import "./env";
 import { prisma } from "../src/index";
 
+// Either TMDB credential works: the v4 Read Access Token (Bearer, their
+// current default) or the older v3 api_key. Same data either way.
+const TOKEN = process.env.TMDB_ACCESS_TOKEN;
 const KEY = process.env.TMDB_API_KEY;
-if (!KEY) {
+if (!TOKEN && !KEY) {
   console.error(
-    "TMDB_API_KEY is not set (apps/web/.env.local). Get a free v3 key at " +
-      "https://www.themoviedb.org/settings/api and set it, then rerun.",
+    "No TMDB credential set (apps/web/.env.local). Get one free at " +
+      "https://www.themoviedb.org/settings/api — either the v4 Read Access " +
+      "Token (TMDB_ACCESS_TOKEN) or the v3 key (TMDB_API_KEY) — then rerun.",
   );
   process.exit(1);
 }
@@ -46,11 +50,13 @@ const VIDEO_TYPES = new Set(["Trailer", "Teaser", "Clip", "Featurette"]);
 
 async function detail(tmdbId: number): Promise<Detail> {
   const url = new URL(`https://api.themoviedb.org/3/movie/${tmdbId}`);
-  url.searchParams.set("api_key", KEY!);
+  if (!TOKEN) url.searchParams.set("api_key", KEY!);
   url.searchParams.set("language", "en-US");
   url.searchParams.set("append_to_response", "credits,videos,images");
   url.searchParams.set("include_image_language", "en,null");
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: TOKEN ? { Authorization: `Bearer ${TOKEN}` } : undefined,
+  });
   if (!res.ok) throw new Error(`TMDB ${res.status} for movie ${tmdbId}`);
   return res.json() as Promise<Detail>;
 }

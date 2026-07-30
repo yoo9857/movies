@@ -72,20 +72,33 @@ export interface TmdbMovieDetail extends TmdbMovieSummary {
   };
 }
 
-function apiKey(): string {
+/**
+ * Authentication, either generation. TMDB hands out two credentials side by
+ * side: the v4 "API Read Access Token" (a JWT sent as a Bearer header — their
+ * current default) and the older v3 key (a query parameter). Same data, same
+ * endpoints; accept whichever the operator has, preferring the newer one.
+ */
+function tmdbAuth(): { header?: string; queryKey?: string } {
+  const token = process.env.TMDB_ACCESS_TOKEN;
+  if (token) return { header: `Bearer ${token}` };
   const key = process.env.TMDB_API_KEY;
-  if (!key) {
-    throw new ApiError(503, "TMDB integration is not configured (set TMDB_API_KEY)");
-  }
-  return key;
+  if (key) return { queryKey: key };
+  throw new ApiError(
+    503,
+    "TMDB integration is not configured (set TMDB_ACCESS_TOKEN or TMDB_API_KEY)",
+  );
 }
 
 async function tmdbFetch<T>(path: string, params: Record<string, string>): Promise<T> {
+  const auth = tmdbAuth();
   const url = new URL(TMDB_BASE + path);
-  url.searchParams.set("api_key", apiKey());
+  if (auth.queryKey) url.searchParams.set("api_key", auth.queryKey);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url, { next: { revalidate: 3600 } });
+  const res = await fetch(url, {
+    headers: auth.header ? { Authorization: auth.header } : undefined,
+    next: { revalidate: 3600 },
+  });
   if (!res.ok) {
     throw new ApiError(502, `TMDB request failed (${res.status})`);
   }
