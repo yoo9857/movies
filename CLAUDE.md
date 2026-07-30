@@ -2,11 +2,17 @@
 
 English-language fandom site for film-critic fans (reviews, ratings, critic profiles). See README.md for stack and commands.
 
-- Monorepo: npm workspaces. `apps/web` (Next.js 16, Turbopack), `packages/db` (Prisma 7 + SQLite adapter), `packages/shared` (zod schemas).
+- Monorepo: npm workspaces. `apps/web` (Next.js 16, Turbopack), `packages/db` (Prisma 7 + `@prisma/adapter-pg`), `packages/shared` (zod schemas).
 - **Next.js 16 has breaking changes** — read `node_modules/next/dist/docs/` before writing Next code (see apps/web/AGENTS.md). Notably: `proxy.ts` not `middleware.ts`; `cookies()`/`params`/`searchParams` are async.
 - **Auth is enforced in `apps/web/src/lib/auth.ts` (DAL)**, called inside every protected route handler and admin layout. Never rely on proxy.ts for security.
 - All API input goes through zod schemas in `packages/shared`. Mutating routes must call `requireSameOrigin(request)`.
-- SQLite has no enums — `Review.status` / `User.role` are strings validated by zod.
+- **PostgreSQL 18 is the only database** — there is no SQLite fallback (removed 2026-07-30). `ops/postgres/README.md` covers the container, pool budget, timeouts, retry classification and backups; read it before touching anything database-shaped.
+- `Review.status` / `User.role` are real PG enums (`ReviewStatus`, `UserRole`); list columns are native `text[]`; every timestamp is `timestamptz`. Constraints Prisma cannot express (CHECKs, `LOWER()` unique indexes, trigram indexes) live in hand-written SQL in `prisma/migrations/*_constraints`.
 - Prisma client is generated to `packages/db/src/generated` (gitignored). After schema changes: `npm run db:migrate` then `npm run db:generate`.
+- `npm run db:*` reads `apps/web/.env.local` via `packages/db/prisma/env.ts` — real environment variables win over the file, so an exported `DATABASE_URL` still points at a scratch database.
 - **SEO/GEO lives in `apps/web/src/lib/seo.ts`** — see the README section. Page metadata goes through `pageMetadata()` (never hand-rolled, or canonicals drift); structured data goes through `graph()` + `<JsonLd>` (one `@graph` per page, `@id`-linked). Never emit a rating, date or count that isn't rendered on the page.
 - Keep `npm audit` at 0: patched transitive versions are pinned in root package.json `overrides`.
+- **Tests**: `npm test` (unit, no database) and `npm run test:db` (PostgreSQL constraints, needs `DATABASE_URL`). Config in `vitest.config.ts` as two projects. The DB suite builds a throwaway `*_test_*` database from the real migration files, so a new hand-written constraint should get a test in `packages/db/test/constraints.db.test.ts` alongside it.
+- Optional prose fields use `optionalText()` in `packages/shared` so `""` becomes `undefined` — the columns are nullable and `verdict ?? excerpt` fallbacks depend on it. Don't reintroduce `.optional().or(z.literal("")...)`; its right-hand side is unreachable.
+- `ReviewBody`'s remark plugins include `remark-cjk-friendly` (+ its gfm-strikethrough twin). They are load-bearing: without them `**기생충!**은`-style emphasis (punctuation then a particle) renders as literal asterisks. Tests in `apps/web/test/review-body.test.tsx` pin this.
+- Review images upload via `POST /api/v1/my/review-images` through the hardened pipeline in `lib/media/` and land in the markdown as `![alt](url)`. Objects are never deleted when text stops referencing them — orphans are cheap, GC is not.

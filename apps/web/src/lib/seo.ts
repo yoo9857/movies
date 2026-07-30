@@ -73,6 +73,7 @@ export const youtubeWatch = (key: string) => `https://www.youtube.com/watch?v=${
 export function plainText(markdown: string): string {
   return markdown
     .replace(/```[\s\S]*?```/g, " ") // fenced code
+    .replace(/^\s{0,3}:::.*$/gm, " ") // authoring directives (:::spoiler / :::still 2)
     .replace(/`([^`]*)`/g, "$1") // inline code
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links → their text

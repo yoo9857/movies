@@ -15,6 +15,50 @@ import { SITE_NAME, SITE_URL } from "./site";
 
 type Nullable<T> = T | null | undefined;
 
+/**
+ * A review body, prepared to leave this origin.
+ *
+ * Two things about the stored source only make sense on our own pages:
+ *
+ *  · `:::spoiler` / `:::trailer` / `:::still N` are CinePixo authoring
+ *    directives. The renderer turns them into a covered region and the film's
+ *    own media; everywhere else they are line noise. Spoiler fences become a
+ *    plain warning line (the hidden text itself stays — /llms-full.txt and the
+ *    .md endpoints exist to carry the full text), and the media placeholders
+ *    are dropped, since the URL they refer to lives in the page, not the text.
+ *
+ *  · uploaded images and internal links are site-relative (`/uploads/…`,
+ *    `/movies/…`). An RSS reader or a crawler that saved the .md has no origin
+ *    to resolve those against, so they are made absolute here.
+ *
+ * Used by every surface that ships the body off-site: the .md endpoints,
+ * feed.xml's content:encoded, and llms-full.txt.
+ */
+export function exportMarkdownBody(source: string): string {
+  const out: string[] = [];
+  let inSpoiler = false;
+
+  for (const line of source.split("\n")) {
+    if (inSpoiler && line.trim() === ":::") {
+      inSpoiler = false;
+      continue;
+    }
+    const open = /^:::\s*(spoiler|trailer|still)\s*(\d+)?\s*$/i.exec(line.trim());
+    if (open) {
+      if (open[1].toLowerCase() === "spoiler") {
+        inSpoiler = true;
+        out.push("**[Spoilers follow.]**", "");
+      }
+      continue; // trailer/still placeholders mean nothing off-site
+    }
+    out.push(line);
+  }
+
+  // `](/x` → `](https://site/x` — images and links alike. `](//host` is
+  // protocol-relative, not site-relative, and is left alone.
+  return out.join("\n").replace(/\]\(\/(?!\/)/g, `](${SITE_URL}/`);
+}
+
 /** Quote a YAML scalar. Single quotes with doubling is safe for any input. */
 function yaml(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
@@ -126,7 +170,7 @@ export function reviewToMarkdown(review: ReviewExport): string {
     spoilerNote ? "" : null,
     "---",
     "",
-    review.content.trim(),
+    exportMarkdownBody(review.content).trim(),
     "",
     "---",
     "",

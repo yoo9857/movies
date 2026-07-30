@@ -8,7 +8,7 @@
 // silently — a truncated corpus that claims to be complete is worse than one that
 // says where it stopped.
 import { prisma } from "@cinepixo/db";
-import { markdownResponse } from "@/lib/markdown-export";
+import { exportMarkdownBody, markdownResponse } from "@/lib/markdown-export";
 import { absUrl, isoDay } from "@/lib/seo";
 import { SITE_ABOUT, SITE_NAME } from "@/lib/site";
 
@@ -74,7 +74,7 @@ export async function GET(): Promise<Response> {
       "",
       r.verdict ? `**Verdict:** ${r.verdict}` : null,
       r.verdict ? "" : null,
-      r.content.trim(),
+      exportMarkdownBody(r.content).trim(),
       "",
       "---",
       "",

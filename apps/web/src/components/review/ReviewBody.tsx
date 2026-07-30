@@ -13,6 +13,13 @@
 import Image from "next/image";
 import { Fragment, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+// CommonMark's emphasis flanking rules were written for space-delimited
+// languages: `**대박!**은` fails to bold because the closing `**` sits between
+// punctuation and a Hangul letter. These two make emphasis and strikethrough
+// resolve the way a Korean or Japanese author expects. They change nothing for
+// English text.
+import remarkCjkFriendly from "remark-cjk-friendly";
+import remarkCjkFriendlyGfmStrikethrough from "remark-cjk-friendly-gfm-strikethrough";
 import remarkGfm from "remark-gfm";
 import { headingSlug } from "@cinepixo/shared";
 import { TrailerEmbed } from "../TrailerEmbed";
@@ -144,11 +151,29 @@ const components: Components = {
       </a>
     );
   },
+  // Author-uploaded images: `![alt](url)`. Framed like the film stills so a
+  // review mixing both reads as one piece. Plain <img>, not next/image — the
+  // markdown carries no dimensions, and uploads are already resized and served
+  // immutable, so there is nothing left for the optimizer to add. Lazy: images
+  // sit mid-essay, below the fold more often than not.
+  img: ({ src, alt }) => (
+    // eslint-disable-next-line @next/next/no-img-element -- deliberate: see above
+    <img
+      src={typeof src === "string" ? src : undefined}
+      alt={alt ?? ""}
+      loading="lazy"
+      decoding="async"
+      className="my-8 w-full rounded-xl border border-line"
+    />
+  ),
 };
 
 function Md({ text }: { text: string }) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkCjkFriendlyGfmStrikethrough]}
+      components={components}
+    >
       {text}
     </ReactMarkdown>
   );

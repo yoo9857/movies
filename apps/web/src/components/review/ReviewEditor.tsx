@@ -100,12 +100,21 @@ export function ReviewEditor({
   reviewId,
   apiBase = "/api/v1/my/reviews",
   doneHref = "/me/reviews",
+  draftSync = true,
 }: {
   movies: PickerMovie[];
   initial?: ReviewDraft;
   reviewId?: string;
   apiBase?: string;
   doneHref?: string;
+  /**
+   * Whether autosave may write to `/api/v1/my/drafts`. That endpoint only
+   * touches the caller's own rows, so on the admin edit page — where the review
+   * usually belongs to someone else — it answered 404 to every autosave, once
+   * every four seconds, forever. Admin pages pass `false`: autosave stays in
+   * this browser and Ctrl+S saves in place through the admin API instead.
+   */
+  draftSync?: boolean;
 }) {
   const router = useRouter();
   const [v, setV] = useState<ReviewDraft>(initial ?? EMPTY);
@@ -131,7 +140,7 @@ export function ReviewEditor({
   // Local autosave key is per-review so a draft and an edit never collide.
   const storeKey = `cinepixo:draft:${reviewId ?? "new"}`;
   // Published reviews are only ever changed through the validated Save path.
-  const serverDrafts = v.status !== "PUBLISHED";
+  const serverDrafts = draftSync && v.status !== "PUBLISHED";
 
   const snapshot = useRef<string | null | undefined>(undefined);
   const storedRaw = useSyncExternalStore(
@@ -242,7 +251,9 @@ export function ReviewEditor({
       const picked = value.slice(s, e) || placeholder;
 
       // Already wrapped? Unwrap instead, so the button toggles rather than
-      // stacking ****bold**** on a second press.
+      // stacking ****bold**** on a second press. Two shapes count as wrapped:
+      // the markers just outside the selection (`**|bold|**`), and the markers
+      // inside it (`|**bold**|`, what a double-click-drag or Ctrl+A selects).
       const outerStart = s - before.length;
       const outerEnd = e + after.length;
       if (
@@ -255,6 +266,15 @@ export function ReviewEditor({
           start: outerStart,
           end: outerStart + inner.length,
         });
+        return;
+      }
+      if (
+        e - s >= before.length + after.length &&
+        value.slice(s, e).startsWith(before) &&
+        value.slice(s, e).endsWith(after)
+      ) {
+        const inner = value.slice(s + before.length, e - after.length);
+        applyEdit(s, e, inner, { start: s, end: s + inner.length });
         return;
       }
 
@@ -277,6 +297,77 @@ export function ReviewEditor({
       applyEdit(s, s, text);
     },
     [applyEdit],
+  );
+
+  /* ── Image upload ──
+   *
+   * The flow is placeholder-first: a token goes in at the caret immediately, the
+   * upload runs, and the token is then replaced with the real `![alt](url)` —
+   * or removed, on failure. Inserting at the *caret's position on completion*
+   * instead would land the image mid-sentence for anyone who kept typing while
+   * a large file uploaded, which is exactly when it matters.
+   */
+  const [uploadsInFlight, setUploadsInFlight] = useState(0);
+  const uploadSeq = useRef(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  /** Replace a placeholder token wherever the author has since moved it. */
+  const replaceToken = useCallback(
+    (token: string, replacement: string) => {
+      const el = area.current;
+      if (!el) return;
+      const idx = el.value.indexOf(token);
+      if (idx === -1) {
+        // The author deleted the placeholder mid-upload: that reads as "never
+        // mind", so a success is dropped rather than re-inserted somewhere
+        // surprising.
+        return;
+      }
+      applyEdit(idx, idx + token.length, replacement);
+    },
+    [applyEdit],
+  );
+
+  const uploadImages = useCallback(
+    async (files: Iterable<File>) => {
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        if (file.size > 20 * 1024 * 1024) {
+          setError(`"${file.name}" is larger than 20 MB.`);
+          continue;
+        }
+
+        // Alt text starts as the filename — the one hint the author has already
+        // typed. Brackets and newlines would break the markdown around it.
+        const alt =
+          file.name
+            .replace(/\.[a-z0-9]+$/i, "")
+            .replace(/[[\]\n\r]/g, " ")
+            .trim() || "image";
+        const token = `![Uploading ${alt}…](upload-${++uploadSeq.current})`;
+        block(`${token}\n\n`);
+
+        setUploadsInFlight((n) => n + 1);
+        try {
+          const body = new FormData();
+          body.append("file", file);
+          const res = await fetch("/api/v1/my/review-images", { method: "POST", body });
+          const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+          if (!res.ok || !data.url) {
+            replaceToken(token, "");
+            setError(data.error ?? `Uploading "${file.name}" failed — try again.`);
+            continue;
+          }
+          replaceToken(token, `![${alt}](${data.url})`);
+        } catch {
+          replaceToken(token, "");
+          setError("Network error during upload — your text is untouched, try again.");
+        } finally {
+          setUploadsInFlight((n) => n - 1);
+        }
+      }
+    },
+    [block, replaceToken],
   );
 
   /* ── Keyboard ── */
@@ -387,6 +478,17 @@ export function ReviewEditor({
    */
   function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const el = e.currentTarget;
+
+    // A pasted image (screenshot, copied picture) uploads directly. Checked
+    // before the URL branch: when both are on the clipboard, the file is the
+    // deliberate payload.
+    const images = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+    if (images.length > 0) {
+      e.preventDefault();
+      void uploadImages(images);
+      return;
+    }
+
     const { selectionStart: s, selectionEnd: t } = el;
     if (s === t) return; // nothing selected — a normal paste
 
@@ -397,6 +499,14 @@ export function ReviewEditor({
     const picked = el.value.slice(s, t);
     const link = `[${picked}](${pasted})`;
     applyEdit(s, t, link, { start: s + 1, end: s + 1 + picked.length });
+  }
+
+  /** Dropping image files onto the text uploads them where they landed. */
+  function onDrop(e: React.DragEvent<HTMLTextAreaElement>) {
+    const images = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return; // dropped text — the browser handles it
+    e.preventDefault();
+    void uploadImages(images);
   }
 
   /* ── Autosave: this browser first (instant, offline-proof) ── */
@@ -510,7 +620,16 @@ export function ReviewEditor({
   // Ctrl+S and the autosave timer share one path, so "saved" always means the
   // same thing.
   async function saveDraftNow() {
-    if (!serverDrafts || !v.movieId) return;
+    if (!serverDrafts) {
+      // No drafts channel here — a published review, or an admin editing
+      // someone else's. Ctrl+S still has to mean "save": it goes through the
+      // validated API in place, without the navigation the Save button does.
+      // It used to silently do nothing, which for a shortcut whose entire job
+      // is reassurance is the worst possible behaviour.
+      await saveInPlace();
+      return;
+    }
+    if (!v.movieId) return;
     setServerState("saving");
     try {
       const res = await fetch("/api/v1/my/drafts", {
@@ -528,6 +647,56 @@ export function ReviewEditor({
       setServerState("saved");
     } catch {
       setServerState("local");
+    }
+  }
+
+  /**
+   * Save through the validated API without leaving the page.
+   *
+   * The API wants the full, valid review (it is the same endpoint the Save
+   * button uses), so this checks completeness first and surfaces the problem
+   * instead of a bare 400.
+   */
+  async function saveInPlace() {
+    const target = reviewId ?? draftId.current;
+    if (!target || busy) return;
+    const problem = firstProblem();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
+    setError(null);
+    setServerState("saving");
+    try {
+      const res = await fetch(`${apiBase}/${target}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...v,
+          excerpt: v.excerpt || undefined,
+          verdict: v.verdict || undefined,
+          rating: Number(v.rating),
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setServerState("local");
+        setError(data.error ?? "Save failed — your text is still in this browser.");
+        return;
+      }
+      dirty.current = false;
+      setIsDirty(false);
+      setSavedAt(new Date().toLocaleTimeString("en-US", { timeStyle: "short" }));
+      setServerState("saved");
+      try {
+        window.localStorage.removeItem(storeKey);
+      } catch {
+        /* storage blocked — nothing to clean up */
+      }
+    } catch {
+      setServerState("local");
+      setError("Network error — your text is saved in this browser, try again.");
     }
   }
 
@@ -743,13 +912,26 @@ export function ReviewEditor({
         id: "still",
         label: "Still",
         hint: media.stills.length
-          ? `still 1 of ${media.stills.length}`
+          ? `${media.stills.length} on file — each press inserts the next`
           : chosen
             ? "no stills on file for this film"
             : "pick a film first",
         disabled: media.stills.length === 0,
         glyph: Glyphs.image,
-        run: () => block(":::still 1\n\n"),
+        run: () => {
+          // Cycle: the first press inserts still 1, the next still 2… so a
+          // review can use the whole set without anyone hand-editing indexes.
+          const text = area.current?.value ?? v.content;
+          const used = (text.match(/^:::\s*still/gim) ?? []).length;
+          block(`:::still ${(used % media.stills.length) + 1}\n\n`);
+        },
+      },
+      {
+        id: "upload",
+        label: "Upload image",
+        hint: "JPEG, PNG, WebP, AVIF or GIF up to 20 MB — or paste / drop one",
+        glyph: Glyphs.upload,
+        run: () => fileInput.current?.click(),
       },
     ],
   ];
@@ -928,6 +1110,11 @@ export function ReviewEditor({
           </div>
           <span className="font-mono text-[11px] text-muted">
             {words.toLocaleString("en-US")} words · {minutes} min read
+            {uploadsInFlight > 0 && (
+              <span className="ml-2 text-accent">
+                uploading {uploadsInFlight} image{uploadsInFlight > 1 ? "s" : ""}…
+              </span>
+            )}
             {saveLabel && <span className="ml-2 text-accent/80">{saveLabel}</span>}
             {!saveLabel && isDirty && <span className="ml-2">unsaved</span>}
           </span>
@@ -937,6 +1124,19 @@ export function ReviewEditor({
           <>
             <div className="mt-3">
               <EditorToolbar groups={toolGroups} />
+              {/* Behind the toolbar's Upload button. Value is reset after each
+                  pick so choosing the same file twice fires change twice. */}
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) void uploadImages(Array.from(e.target.files));
+                  e.target.value = "";
+                }}
+              />
             </div>
 
             <div
@@ -953,6 +1153,11 @@ export function ReviewEditor({
               onChange={(e) => set("content", e.target.value)}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
+              onDrop={onDrop}
+              onDragOver={(e) => {
+                // Without this the browser navigates to the dropped file.
+                if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+              }}
               spellCheck
               placeholder={
                 "## Space is class\n\nIn *Parasite* the camera never stops moving vertically…\n\n> The film never explains class through dialogue. You feel it.\n\n:::trailer\n\n:::spoiler\nThe basement reveal changes everything about the first hour.\n:::"
@@ -985,6 +1190,7 @@ export function ReviewEditor({
                 <li>Enter continues a list, a numbered list, a checklist or a quote</li>
                 <li>Tab / Shift+Tab indents a list item</li>
                 <li>Paste a URL over selected text to link it</li>
+                <li>Paste or drop an image file to upload it — ![alt](url) is inserted</li>
                 <li>## Section · ### Subsection — become the table of contents</li>
                 <li>&gt; line — a pull quote, set large</li>
                 <li>==text== highlight · ~~text~~ strikethrough · `code`</li>

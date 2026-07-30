@@ -8,6 +8,7 @@
 //
 // See /feed.json for the same content without the namespace gymnastics.
 import { prisma } from "@cinepixo/db";
+import { exportMarkdownBody } from "@/lib/markdown-export";
 import { absUrl, clamp, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -69,8 +70,9 @@ export async function GET() {
         `      <guid isPermaLink="true">${xml(url)}</guid>`,
         `      <description>${xml(summary)}</description>`,
         // The piece itself. Markdown, which is the form it is written and served
-        // in — see the .md endpoints.
-        `      <content:encoded>${cdata(r.content)}</content:encoded>`,
+        // in — see the .md endpoints. Normalised for life outside this origin:
+        // directives translated, relative URLs made absolute.
+        `      <content:encoded>${cdata(exportMarkdownBody(r.content))}</content:encoded>`,
         `      <dc:creator>${xml(author)}</dc:creator>`,
         `      <category>${xml(r.movie.title)}</category>`,
         ...r.movie.genres.map((g) => `      <category>${xml(g)}</category>`),

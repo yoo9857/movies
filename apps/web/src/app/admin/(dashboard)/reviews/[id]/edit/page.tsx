@@ -31,6 +31,9 @@ export default async function EditReviewPage(props: { params: Promise<{ id: stri
           reviewId={review.id}
           apiBase="/api/v1/admin/reviews"
           doneHref="/admin/reviews"
+          // The drafts channel only touches the caller's own rows; this review
+          // usually belongs to another author. Ctrl+S saves in place instead.
+          draftSync={false}
           initial={{
             slug: review.slug,
             title: review.title,

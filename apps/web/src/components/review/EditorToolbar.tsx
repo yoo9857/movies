@@ -114,6 +114,13 @@ export const Glyphs = {
       <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
     </svg>
   ),
+  // A picture frame with an arrow rising into it: upload an image.
+  upload: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
+      <path d="M21 14v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="M12 16V5M7.5 9.5 12 5l4.5 4.5" />
+    </svg>
+  ),
   strike: (
     <svg viewBox="0 0 24 24" className="h-4 w-4" {...stroke}>
       <path d="M4 12h16" />

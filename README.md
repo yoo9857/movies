@@ -5,7 +5,7 @@ A fandom home for lovers of film criticism — fans write reviews, rate films, a
 ## Stack
 
 - **Next.js 16.2** (App Router, Turbopack) — site + admin + REST API in one app
-- **Prisma 7** + SQLite (dev) via driver adapter — swap `DATABASE_URL` + adapter for PostgreSQL in production
+- **Prisma 7** + **PostgreSQL 18** via the `@prisma/adapter-pg` driver adapter — bounded pool, layered statement timeouts, SQLSTATE-classified retries (`ops/postgres/README.md`)
 - **zod 4** — every API input validated
 - **jose** JWT sessions in httpOnly cookies, **scrypt** (node:crypto) password hashing
 - **TMDB** integration for movie metadata
@@ -19,24 +19,64 @@ packages/shared     zod schemas + types shared with a future native app
 
 ## Getting started
 
+Copy `.env.example` to `apps/web/.env.local` and fill it in **first** — every `db:*`
+command reads `DATABASE_URL` from there:
+
+- `DATABASE_URL` — PostgreSQL connection string (required; there is no file-based fallback)
+- `SESSION_SECRET` — 32+ chars, or the app refuses to start
+- `TMDB_API_KEY` — optional; without it the site works but `/admin` movie search and import answer 503
+
+You need a PostgreSQL to point at. On the server it is the container in
+`ops/postgres/`; locally, either tunnel to it
+(`ssh -N -L 5435:127.0.0.1:5435 oneday-server`) or run your own cluster and
+create a `cinepixo` database.
+
 ```bash
 npm install
-npm run db:migrate       # create/upgrade the dev SQLite DB
-npm run db:seed          # admin user + sample data (prints admin password ONCE if ADMIN_PASSWORD unset)
+npm run db:generate      # Prisma client → packages/db/src/generated (gitignored)
+npm run db:deploy        # apply existing migrations (db:migrate to author a new one)
+npm run db:seed          # admin user + sample data (prints the password ONCE, on creation only)
+npm run db:seed:library  # 9 films with cast, crew and verified artwork — no API key needed
 npm run dev              # http://localhost:3000
 ```
 
-Copy `.env.example` values into `apps/web/.env.local`:
+Admin lives at `/admin` (login with the seeded credentials). `db:seed` is
+idempotent: re-running it leaves an existing admin's password untouched and
+prints no banner, so the credential from the first run stays the valid one. Set
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` to choose them yourself.
 
-- `SESSION_SECRET` — long random string (required)
-- `TMDB_API_KEY` — enables movie search/import in the admin
+Health, including a real query round trip: `curl -s localhost:3000/api/v1/health`
 
-Admin lives at `/admin` (login with the seeded credentials).
+## Tests
+
+```bash
+npm test          # unit — no database, no network, ~2s
+npm run test:watch
+npm run test:db   # integration — needs DATABASE_URL
+```
+
+The split is deliberate. `npm test` covers what can be checked in memory, so it
+is cheap enough to run on every save:
+
+| Suite | What it pins |
+| --- | --- |
+| `packages/shared` | slug shape (a URL and filename boundary), rating steps, `javascript:`/`data:` URL rejection, empty-string normalisation, pagination bounds, heading anchors |
+| `packages/db` | scrypt format and verification, malformed-hash handling, SQLSTATE classification, retry policy |
+| `apps/web` | Origin checks, error-to-status mapping and what must *not* leak, JSON-LD escaping, session cookie flags and JWT tampering/downgrade/expiry |
+
+`npm run test:db` covers what only exists in PostgreSQL — the CHECK constraints,
+`LOWER()` unique indexes and trigram indexes from
+`prisma/migrations/*_constraints`. It writes bad rows directly, bypassing zod, so
+the claim that the database is the last line of defence is actually tested. Each
+file builds a throwaway database from the real migration files and drops it
+afterwards; the name is always the configured one suffixed with `_test_*`, so it
+cannot touch a development database. Set `TEST_DATABASE_URL` to override.
 
 ## API (v1)
 
 Public: `GET /api/v1/reviews`, `GET /api/v1/reviews/:slug`, `GET /api/v1/critics`, `GET /api/v1/critics/:slug`, `GET /api/v1/movies`
 Auth: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`
+Authors: `POST /api/v1/my/review-images` — multipart image upload for review bodies (probed, re-encoded to WebP, EXIF stripped)
 Admin: `GET|POST /api/v1/admin/reviews`, `GET|PUT|DELETE /api/v1/admin/reviews/:id`, `GET /api/v1/admin/tmdb/search?q=`, `POST /api/v1/admin/movies/import`
 
 A future native app consumes the same `/api/v1` endpoints.
