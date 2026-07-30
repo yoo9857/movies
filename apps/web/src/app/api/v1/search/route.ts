@@ -5,6 +5,13 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const querySchema = z.string().trim().min(1).max(100);
 
+// Case-insensitive on purpose, and a PostgreSQL-migration regression when it
+// wasn't: SQLite's LIKE ignores case, Postgres's does not, so "parasite"
+// suddenly stopped finding "Parasite". `mode: "insensitive"` maps to ILIKE,
+// which is exactly what the trigram indexes in the constraints migration were
+// built to serve.
+const ci = (value: string) => ({ contains: value, mode: "insensitive" as const });
+
 export const GET = handle(async (request: Request) => {
   rateLimit(`search:${clientIp(request)}`, 30, 60_000);
 
@@ -15,7 +22,7 @@ export const GET = handle(async (request: Request) => {
     prisma.review.findMany({
       where: {
         status: "PUBLISHED",
-        OR: [{ title: { contains: q } }, { excerpt: { contains: q } }],
+        OR: [{ title: ci(q) }, { excerpt: ci(q) }],
       },
       orderBy: { publishedAt: "desc" },
       take: 10,
@@ -29,13 +36,13 @@ export const GET = handle(async (request: Request) => {
     }),
     prisma.movie.findMany({
       where: {
-        OR: [{ title: { contains: q } }, { originalTitle: { contains: q } }, { director: { contains: q } }],
+        OR: [{ title: ci(q) }, { originalTitle: ci(q) }, { director: ci(q) }],
       },
       take: 10,
-      select: { id: true, title: true, posterPath: true, releaseDate: true, director: true },
+      select: { id: true, slug: true, title: true, posterPath: true, releaseDate: true, director: true },
     }),
     prisma.critic.findMany({
-      where: { name: { contains: q } },
+      where: { name: ci(q) },
       take: 10,
       select: { slug: true, name: true, bio: true },
     }),

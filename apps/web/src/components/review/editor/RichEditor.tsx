@@ -104,6 +104,7 @@ export function RichEditor({
   onSaveShortcut,
   uploadImage,
   media,
+  onReady,
 }: {
   /** The review body, as markdown. The single source of truth lives above. */
   value: string;
@@ -113,6 +114,8 @@ export function RichEditor({
   uploadImage: (file: File) => Promise<UploadedImage | null>;
   /** The chosen film's media — drives previews and the trailer/still entries. */
   media: EditorMedia;
+  /** Test seam: hands out the editor instance once it exists. */
+  onReady?: (editor: Editor) => void;
 }) {
   // What this component last knew the markdown to be — either because it
   // serialized it, or because it just loaded it. Distinguishes our own
@@ -195,6 +198,10 @@ export function RichEditor({
     editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false });
   }, [editor, value]);
 
+  useEffect(() => {
+    if (editor) onReady?.(editor);
+  }, [editor, onReady]);
+
   async function insertUploads(files: File[]) {
     if (!editor) return;
     for (const file of files) {
@@ -248,11 +255,19 @@ export function RichEditor({
       imageAlt: (ctx.editor?.getAttributes("image").alt as string | undefined) ?? "",
       canUndo: ctx.editor?.can().undo() ?? false,
       canRedo: ctx.editor?.can().redo() ?? false,
+      selectionKey: ctx.editor
+        ? `${ctx.editor.state.selection.from}-${ctx.editor.state.selection.to}`
+        : "",
     }),
   });
 
-  // The link bubble swaps to an input; draft is null when not editing.
-  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  // The link bubble swaps to an input. The draft is pinned to the selection it
+  // was opened for: select something else and the bubble is back to buttons —
+  // no effect needed, a stale draft simply stops matching and is ignored.
+  const [linkDraft, setLinkDraftState] = useState<{ key: string; value: string } | null>(null);
+  const linkEditing = linkDraft !== null && linkDraft.key === active?.selectionKey;
+  const setLinkDraft = (value: string | null) =>
+    setLinkDraftState(value === null ? null : { key: active?.selectionKey ?? "", value });
 
   function applyLink(href: string) {
     if (!editor) return;
@@ -362,17 +377,17 @@ export function RichEditor({
           }}
         >
           <div className={bubbleShell}>
-            {linkDraft !== null ? (
+            {linkEditing ? (
               <form
                 className="flex items-center gap-1"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  applyLink(linkDraft);
+                  applyLink(linkDraft!.value);
                 }}
               >
                 <input
                   autoFocus
-                  value={linkDraft}
+                  value={linkDraft!.value}
                   onChange={(e) => setLinkDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setLinkDraft(null);

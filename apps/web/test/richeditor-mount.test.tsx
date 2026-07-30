@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { Editor } from "@tiptap/react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,10 +20,11 @@ afterEach(() => {
   container.remove();
 });
 
-function mount(md: string) {
+function mount(md: string): { editor: () => Editor } {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  let instance: Editor | null = null;
   act(() => {
     root.render(
       <RichEditor
@@ -31,9 +33,18 @@ function mount(md: string) {
         onSaveShortcut={() => {}}
         uploadImage={async () => null}
         media={{ trailerKey: "abc123", stills: ["/a.jpg", "/b.jpg", "/c.jpg"] }}
+        onReady={(e) => {
+          instance = e;
+        }}
       />,
     );
   });
+  return {
+    editor: () => {
+      expect(instance, "editor did not mount").not.toBeNull();
+      return instance!;
+    },
+  };
 }
 
 describe("RichEditor mounts", () => {
@@ -68,5 +79,39 @@ describe("RichEditor mounts", () => {
     const surface = container.querySelector(".cx-richtext")!;
     expect(surface.textContent).toContain("Trailer");
     expect(surface.textContent).toContain("Still #2");
+  });
+
+  it("shows the film's real frames when media is known", () => {
+    mount(":::still 2");
+    const img = container.querySelector<HTMLImageElement>(".cx-edit-media-preview img");
+    expect(img?.src).toContain("/b.jpg");
+  });
+
+  it("opens the slash menu on / and inserts the chosen block", async () => {
+    const { editor } = mount("");
+    // The editor instance lands a tick after the mount effect; flush it.
+    await act(async () => {});
+    // The suggestion pipeline resolves items asynchronously — flush that too.
+    await act(async () => {
+      editor().chain().focus().insertContent("/").run();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    const menu = document.querySelector(".cx-slash-menu");
+    expect(menu, "slash menu did not open").not.toBeNull();
+    expect(menu!.textContent).toContain("Section heading");
+    // Media entries reflect the film: trailer + still are on file here.
+    expect(menu!.textContent).toContain("Trailer");
+
+    // Choose "Pull quote" by clicking it, as a user would.
+    const item = Array.from(menu!.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Pull quote"),
+    );
+    expect(item).toBeTruthy();
+    act(() => {
+      item!.click();
+    });
+    expect(container.querySelector(".cx-richtext blockquote")).not.toBeNull();
+    // The typed "/" was consumed by the command, not left in the text.
+    expect(container.querySelector(".cx-richtext")!.textContent).not.toContain("/");
   });
 });

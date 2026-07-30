@@ -454,7 +454,12 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       <section>
         <SectionHead
           action={
-            <Link href="/write" className="text-sm text-accent hover:opacity-80">
+            // Preselect this film — arriving from its own page and still having
+            // to find it in the picker is a step nobody should take twice.
+            <Link
+              href={`/write?movie=${movie.id}`}
+              className="text-sm text-accent hover:opacity-80"
+            >
               Write yours →
             </Link>
           }

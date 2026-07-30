@@ -46,10 +46,34 @@ docker cp "$CONTAINER:$inner" "$final"
 size=$(du -h "$final" | cut -f1)
 echo "[backup] wrote $final ($size, $entries entries)"
 
+# ── Uploads ──────────────────────────────────────────────────────
+# User images (avatars, review images) live on disk, not in the database — a
+# dump that restores perfectly still loses every picture without this. Only
+# taken when the local driver is in use; with object storage the bucket is the
+# durable copy. Objects are immutable and never renamed, so tar needs no
+# consistency tricks.
+UPLOADS="${UPLOAD_DIR:-$HOME/cinepixo/var/uploads}"
+if [ -d "$UPLOADS" ] && [ -n "$(ls -A "$UPLOADS" 2>/dev/null)" ]; then
+  uploads_final="$DEST/cinepixo-uploads-$stamp.tar.gz"
+  tar -czf "$uploads_final" -C "$(dirname "$UPLOADS")" "$(basename "$UPLOADS")"
+  # Same rule as the dump: verify before counting it as a backup.
+  if tar -tzf "$uploads_final" >/dev/null 2>&1; then
+    echo "[backup] wrote $uploads_final ($(du -h "$uploads_final" | cut -f1))"
+  else
+    rm -f "$uploads_final"
+    echo "[backup] uploads archive did not verify — not publishing it" >&2
+    exit 1
+  fi
+else
+  echo "[backup] no local uploads directory — skipping uploads archive"
+fi
+
 # Prune old dumps. Retention only ever removes files that were published, so a
 # failed run can never delete a good backup.
 deleted=$(find "$DEST" -maxdepth 1 -name 'cinepixo-*.dump' -type f -mtime "+$RETAIN_DAYS" -print -delete | wc -l)
 echo "[backup] pruned $deleted dump(s) older than ${RETAIN_DAYS}d"
+deleted_uploads=$(find "$DEST" -maxdepth 1 -name 'cinepixo-uploads-*.tar.gz' -type f -mtime "+$RETAIN_DAYS" -print -delete | wc -l)
+echo "[backup] pruned $deleted_uploads uploads archive(s) older than ${RETAIN_DAYS}d"
 
 # An empty backup directory is how people discover they have no backups. Say so.
 count=$(find "$DEST" -maxdepth 1 -name 'cinepixo-*.dump' -type f | wc -l)

@@ -31,12 +31,16 @@ export default async function SearchPage(props: {
   const sp = await props.searchParams;
   const q = (sp.q ?? "").trim().slice(0, 100);
 
+  // ILIKE, not LIKE — "parasite" must find "Parasite". The trigram indexes
+  // exist precisely for this; see the search API route for the history.
+  const ci = (value: string) => ({ contains: value, mode: "insensitive" as const });
+
   const [reviews, movies, critics] = q
     ? await Promise.all([
         prisma.review.findMany({
           where: {
             status: "PUBLISHED",
-            OR: [{ title: { contains: q } }, { excerpt: { contains: q } }],
+            OR: [{ title: ci(q) }, { excerpt: ci(q) }],
           },
           orderBy: { publishedAt: "desc" },
           take: 10,
@@ -50,17 +54,13 @@ export default async function SearchPage(props: {
         }),
         prisma.movie.findMany({
           where: {
-            OR: [
-              { title: { contains: q } },
-              { originalTitle: { contains: q } },
-              { director: { contains: q } },
-            ],
+            OR: [{ title: ci(q) }, { originalTitle: ci(q) }, { director: ci(q) }],
           },
           take: 10,
           select: { id: true, slug: true, title: true, posterPath: true, releaseDate: true, director: true },
         }),
         prisma.critic.findMany({
-          where: { name: { contains: q } },
+          where: { name: ci(q) },
           take: 10,
           select: { slug: true, name: true, bio: true },
         }),
