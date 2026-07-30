@@ -11,7 +11,8 @@ import { useState } from "react";
 interface Batch {
   linked: { name: string; article: string; photo: boolean }[];
   skipped: { name: string; reason: string }[];
-  remaining: number;
+  attempted: number;
+  unlinked: number;
 }
 
 export function EnrichAllButton({ pending }: { pending: number }) {
@@ -29,11 +30,17 @@ export function EnrichAllButton({ pending }: { pending: number }) {
     setSkipped([]);
     setDone(false);
     try {
-      for (let round = 0; round < 40; round++) {
+      // A paged walk, not "until none remain": people the matcher refuses stay
+      // unlinked by design, so a loop keyed on the remaining count never ends.
+      // `skip` advances past everyone already looked at; the walk stops when a
+      // batch has nothing left to look at.
+      const size = 8;
+      let skip = 0;
+      for (let round = 0; round < 60; round++) {
         const res = await fetch("/api/v1/admin/people/enrich-all", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ limit: 8 }),
+          body: JSON.stringify({ limit: size, skip }),
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -43,7 +50,10 @@ export function EnrichAllButton({ pending }: { pending: number }) {
         const batch = (await res.json()) as Batch;
         setLinked((l) => [...l, ...batch.linked]);
         setSkipped((s) => [...s, ...batch.skipped]);
-        if (batch.remaining === 0) break;
+        if (batch.attempted < size) break;
+        // Only the refusals stay in the unlinked set, so the next page starts
+        // after them rather than on top of them.
+        skip += batch.skipped.length;
       }
       setDone(true);
       router.refresh();

@@ -4,6 +4,7 @@ import { handle, json, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { fetchRemoteImage, processImage } from "@/lib/media/image";
 import { buildKey, deleteByUrl, putPublicObject } from "@/lib/media/storage";
+import { foldName } from "@/lib/monogram";
 import { enrich, searchPeople } from "@/lib/wikimedia";
 
 /**
@@ -31,17 +32,16 @@ const bodySchema = z.object({
   // Each person costs a search, a summary, two Wikidata calls and an image
   // re-encode. A batch is bounded so the request finishes.
   limit: z.coerce.number().int().min(1).max(15).default(8),
+  /**
+   * How many to step past.
+   *
+   * Required, because a batch that always takes the first unlinked people never
+   * advances: anyone the matcher refuses stays unlinked and comes back next
+   * round forever. The first run of this did exactly that — it linked 70 people
+   * and then spun through the same 18 refusals thirty more times.
+   */
+  skip: z.coerce.number().int().min(0).max(10_000).default(0),
 });
-
-/** Case, accents and punctuation are not identity. */
-function normalise(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
 
 const FILM_WORDS = [
   "actor", "actress", "film", "director", "filmmaker", "screenwriter",
@@ -57,11 +57,11 @@ interface Verdict {
 
 /** Decide whether a candidate is defensibly the same person. */
 function judge(name: string, candidate: { title: string; description: string | null }): Verdict {
-  const wanted = normalise(name);
-  const got = normalise(candidate.title);
+  const wanted = foldName(name);
+  const got = foldName(candidate.title);
 
   // "Michael Caine (actor)" → the parenthetical is a disambiguator, not a name.
-  const withoutParenthetical = normalise(candidate.title.replace(/\s*\([^)]*\)\s*$/, ""));
+  const withoutParenthetical = foldName(candidate.title.replace(/\s*\([^)]*\)\s*$/, ""));
 
   if (got !== wanted && withoutParenthetical !== wanted) {
     return { title: candidate.title, ok: false, reason: `title is "${candidate.title}", not the name` };
@@ -84,18 +84,21 @@ export const POST = handle(async (request: Request) => {
   requireSameOrigin(request);
   await requireAdmin();
 
-  const { limit } = bodySchema.parse(
+  const { limit, skip } = bodySchema.parse(
     await request.json().catch(() => ({}) as Record<string, unknown>),
   );
 
-  // Never looked up before, and actually credited on something.
+  // Never looked up before, and actually credited on something. Ordered by id
+  // rather than name: names can be edited between batches, and a shifting sort
+  // key under a paged walk skips people.
   const pending = await prisma.person.findMany({
     where: {
       wikidataId: null,
       OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }],
     },
     select: { id: true, name: true, image: true },
-    orderBy: { name: "asc" },
+    orderBy: { id: "asc" },
+    skip,
     take: limit,
   });
 
@@ -200,12 +203,19 @@ export const POST = handle(async (request: Request) => {
     }
   }
 
-  const remaining = await prisma.person.count({
+  const unlinked = await prisma.person.count({
     where: {
       wikidataId: null,
       OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }],
     },
   });
 
-  return json({ linked, skipped, remaining });
+  return json({
+    linked,
+    skipped,
+    /** How many this batch actually looked at — 0 means the walk is over. */
+    attempted: pending.length,
+    /** Still unlinked overall, including the ones a person has to settle. */
+    unlinked,
+  });
 });

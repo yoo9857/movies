@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { foldName } from "@/lib/monogram";
 
 /**
  * The rule that decides whether a Wikipedia article is defensibly the same
@@ -14,15 +15,6 @@ import { describe, expect, it } from "vitest";
  * pure decision is worth testing without a database.
  */
 
-function normalise(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
 const FILM_WORDS = [
   "actor", "actress", "film", "director", "filmmaker", "screenwriter",
   "cinematographer", "producer", "composer", "editor", "animator",
@@ -30,9 +22,9 @@ const FILM_WORDS = [
 ];
 
 function accepts(name: string, candidate: { title: string; description: string | null }): boolean {
-  const wanted = normalise(name);
-  const got = normalise(candidate.title);
-  const withoutParenthetical = normalise(candidate.title.replace(/\s*\([^)]*\)\s*$/, ""));
+  const wanted = foldName(name);
+  const got = foldName(candidate.title);
+  const withoutParenthetical = foldName(candidate.title.replace(/\s*\([^)]*\)\s*$/, ""));
   if (got !== wanted && withoutParenthetical !== wanted) return false;
   if (!candidate.description) return false;
   return FILM_WORDS.some((w) => candidate.description!.toLowerCase().includes(w));
@@ -55,6 +47,20 @@ describe("accepts a defensible match", () => {
         description: "English actor (born 1933)",
       }),
     ).toBe(true);
+  });
+
+  it("matches a letter NFKD cannot decompose", () => {
+    // The real refusal from the first production run: the article spells his
+    // name with l-stroke, which survives NFKD and was then stripped as
+    // punctuation, so "Andrzej Sekula" did not equal "Andrzej Sekula".
+    expect(
+      accepts("Andrzej Sekula", {
+        title: `Andrzej Seku${String.fromCodePoint(0x0142)}a`,
+        description: "Polish cinematographer",
+      }),
+    ).toBe(true);
+    expect(foldName(`Seku${String.fromCodePoint(0x0142)}a`)).toBe("sekula");
+    expect(foldName(`Bj${String.fromCodePoint(0x00f8)}rk`)).toBe("bjork");
   });
 
   it("ignores case, accents and punctuation in the name", () => {
