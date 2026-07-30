@@ -67,6 +67,15 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
     }
     case "movies": {
       const movies = await prisma.movie.findMany({
+        // Only films carrying something of ours — a published review, or a place
+        // on an editorial axis. The library itself is six figures deep and grows
+        // from Wikidata, so submitting every row would mean offering a crawler
+        // tens of thousands of pages that restate a database. The page metadata
+        // marks those `noindex, follow` for the same reason; a film joins this
+        // file the moment someone writes about it.
+        where: {
+          OR: [{ reviews: { some: { status: "PUBLISHED" } } }, { topics: { some: {} } }],
+        },
         orderBy: { updatedAt: "desc" },
         select: {
           slug: true,
@@ -156,7 +165,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       // The handful of listing pages. Their lastmod is derived from the newest
       // row they list, not `new Date()` — claiming freshness on every fetch
       // means nothing.
-      const [review, movie, critic, person, topic, browse] = await Promise.all([
+      const [review, movie, critic, person, topic, genreRows, decadeRows] = await Promise.all([
         prisma.review.findFirst({
           where: { status: "PUBLISHED" },
           orderBy: { updatedAt: "desc" },
@@ -166,10 +175,29 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         prisma.critic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.person.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.topic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
-        // One column of every film, to build the browse states below. Cheap now
-        // and still cheap at a few thousand rows; a GROUP BY over unnest() would
-        // be faster and much harder to read.
-        prisma.movie.findMany({ select: { genres: true, releaseDate: true, updatedAt: true } }),
+        // The browse states, aggregated in the database.
+        //
+        // This used to read one column of every film and group them in JS, which
+        // was fine at nine films and is not at six figures — this file is
+        // force-dynamic, so that was a full-table read per request. A genre needs
+        // a floor of films behind it to be worth submitting: a filter page
+        // listing two titles is a thin page with a canonical URL.
+        prisma.$queryRaw<{ genre: string; films: bigint; last: Date | null }[]>`
+          SELECT g AS genre, COUNT(*) AS films, MAX("updatedAt") AS last
+          FROM "Movie", LATERAL unnest("genres") AS g
+          GROUP BY g
+          HAVING COUNT(*) >= 8
+          ORDER BY g
+        `,
+        prisma.$queryRaw<{ decade: number; films: bigint; last: Date | null }[]>`
+          SELECT (date_part('decade', "releaseDate") * 10)::int AS decade,
+                 COUNT(*) AS films, MAX("updatedAt") AS last
+          FROM "Movie"
+          WHERE "releaseDate" IS NOT NULL
+          GROUP BY 1
+          HAVING COUNT(*) >= 8
+          ORDER BY 1 DESC
+        `,
       ]);
       const anything = newest([
         review?.updatedAt,
@@ -191,33 +219,19 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       const browseUrl = (params: Record<string, string>) =>
         absUrl(`/movies?${new URLSearchParams(params).toString()}`);
 
-      const genres = new Map<string, Date | undefined>();
-      const decades = new Map<number, Date | undefined>();
-      for (const film of browse) {
-        for (const g of film.genres) genres.set(g, newest([genres.get(g), film.updatedAt]));
-        if (film.releaseDate) {
-          const decade = Math.floor(film.releaseDate.getUTCFullYear() / 10) * 10;
-          decades.set(decade, newest([decades.get(decade), film.updatedAt]));
-        }
-      }
-
       const browseStates: SitemapUrl[] = [
-        ...[...genres.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([genre, lastModified]) => ({
-            url: browseUrl({ genre }),
-            lastModified,
-            changeFrequency: "weekly" as const,
-            priority: 0.6,
-          })),
-        ...[...decades.entries()]
-          .sort(([a], [b]) => b - a)
-          .map(([decade, lastModified]) => ({
-            url: browseUrl({ decade: String(decade) }),
-            lastModified,
-            changeFrequency: "weekly" as const,
-            priority: 0.5,
-          })),
+        ...genreRows.map((g) => ({
+          url: browseUrl({ genre: g.genre }),
+          lastModified: g.last ?? undefined,
+          changeFrequency: "weekly" as const,
+          priority: 0.6,
+        })),
+        ...decadeRows.map((d) => ({
+          url: browseUrl({ decade: String(d.decade) }),
+          lastModified: d.last ?? undefined,
+          changeFrequency: "weekly" as const,
+          priority: 0.5,
+        })),
       ];
 
       return [

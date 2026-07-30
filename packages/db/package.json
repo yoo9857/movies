@@ -18,6 +18,7 @@
     "seed:library": "tsx prisma/seed-movies.ts && tsx prisma/seed-details.ts && tsx prisma/seed-artwork.ts && tsx prisma/seed-topics.ts",
     "seed:topics": "tsx prisma/seed-topics.ts",
     "add-films": "tsx prisma/add-films.ts",
+    "import-wikidata": "tsx prisma/import-wikidata.ts",
     "refresh-library": "tsx prisma/refresh-library.ts",
     "studio": "prisma studio"
   },

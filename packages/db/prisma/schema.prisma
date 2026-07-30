@@ -84,6 +84,10 @@ model Movie {
   /// key; the slug is what appears in every public URL. Old id URLs 301 here.
   slug          String    @unique
   tmdbId        Int?      @unique
+  /// Wikidata item id ("Q47703"), for films imported without a TMDB credential.
+  /// The provenance of every fact on those rows, and the key their import is
+  /// idempotent on — a title and a year are not unique enough to be one.
+  wikidataId    String?   @unique
   imdbId        String?
   title         String
   originalTitle String?

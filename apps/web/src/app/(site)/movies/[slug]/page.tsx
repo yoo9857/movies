@@ -125,6 +125,21 @@ export async function generateMetadata(props: {
     path: `/movies/${movie.slug}`,
     title,
     description,
+    /**
+     * A film nobody here has written about yet is not asking to be indexed.
+     *
+     * The library is filled in bulk from Wikidata — six figures of films, each
+     * arriving with facts and no criticism. Submitting all of them would offer a
+     * search engine tens of thousands of pages that restate a database, which is
+     * how a site becomes a thin directory and takes the pages that *are* worth
+     * reading down with it.
+     *
+     * So a film page earns indexing the moment it carries any of our own work: a
+     * published review, or a place on one of the editorial axes. Until then it is
+     * `noindex, follow` — reachable, browsable, linked, crawled onward from, and
+     * not offered as a destination. The sitemap applies the same rule.
+     */
+    noIndex: movie.reviews.length === 0 && movie.topics.length === 0,
     // No `images`: the segment's `opengraph-image.tsx` draws the house card,
     // which carries the fandom score a bare still cannot.
 
