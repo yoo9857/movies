@@ -28,8 +28,24 @@ export const metadata: Metadata = pageMetadata({
 
 const TRAIL: Crumb[] = [{ name: "Critics" }];
 
+/** The desk's own bylines — User rows, not Critic rows, because they publish. */
+const HOUSE = ["vera_lindqvist", "marcus_reid", "amara_osei", "dorothy_kwan"];
+
 export default async function CriticsPage() {
-  const critics = await prisma.critic.findMany({ orderBy: { name: "asc" } });
+  const [critics, house] = await Promise.all([
+    prisma.critic.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      where: { username: { in: HOUSE } },
+      orderBy: { username: "asc" },
+      select: {
+        username: true,
+        displayName: true,
+        bio: true,
+        avatarUrl: true,
+        _count: { select: { reviews: { where: { status: "PUBLISHED" } } } },
+      },
+    }),
+  ]);
 
   const jsonLd = graph(
     webPageNode({
@@ -62,6 +78,61 @@ export default async function CriticsPage() {
       <p className="mt-1 text-sm text-muted">
         The writers whose reviews shaped how this community reads a film.
       </p>
+
+      {/* ── The house desk: the bylines that publish here, each carrying one of
+             the schools below. Links go to their signed work, because a byline's
+             page is its reviews. ── */}
+      {house.length > 0 && (
+        <section className="mt-10">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
+            The house desk
+          </h2>
+          <div className="mt-4 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+            {house.map((u) => (
+              <Link
+                key={u.username}
+                href={`/reviews?author=${u.username}`}
+                className="group flex items-start gap-4"
+              >
+                <span className="relative block size-14 shrink-0 overflow-hidden rounded-full border border-line bg-surface-raised">
+                  {u.avatarUrl ? (
+                    <Image
+                      src={u.avatarUrl}
+                      alt={u.displayName ?? u.username}
+                      fill
+                      sizes="56px"
+                      className="object-cover object-top"
+                    />
+                  ) : (
+                    <span className="grid h-full w-full place-items-center font-mono text-sm font-bold text-accent/85">
+                      {monogram(u.displayName ?? u.username)}
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-baseline gap-2">
+                    <span className="font-semibold transition-colors group-hover:text-accent">
+                      {u.displayName ?? u.username}
+                    </span>
+                    <span className="font-mono text-[11px] text-muted">
+                      {u._count.reviews} review{u._count.reviews === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  {u.bio && (
+                    <span className="mt-1 line-clamp-2 block text-sm leading-relaxed text-muted">
+                      {u.bio}
+                    </span>
+                  )}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <h2 className="mt-12 font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
+        The tradition
+      </h2>
 
       {critics.length === 0 ? (
         <p className="mt-8 text-muted">No critics listed yet.</p>
