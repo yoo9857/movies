@@ -1,6 +1,7 @@
 import { prisma } from "@cinepixo/db";
 import { slugSchema } from "@cinepixo/shared";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -93,7 +94,43 @@ export default async function CriticPage(props: { params: Promise<{ slug: string
     <article className="mx-auto max-w-2xl">
       <JsonLd data={jsonLd} />
       <Breadcrumbs trail={trail} />
-      <h1 className="mt-2.5 text-3xl font-bold">{critic.name}</h1>
+      <div className="mt-2.5 flex items-start gap-6">
+        {critic.avatarUrl && (
+          <span className="relative block size-24 shrink-0 overflow-hidden rounded-full border border-line bg-surface-raised sm:size-28">
+            <Image
+              src={critic.avatarUrl}
+              alt={critic.name}
+              fill
+              sizes="112px"
+              priority
+              className="object-cover object-top"
+            />
+          </span>
+        )}
+        <div className="min-w-0">
+          <h1 className="text-3xl font-bold">{critic.name}</h1>
+          {/* A free licence's terms, rendered with the photograph they cover. */}
+          {critic.avatarUrl && critic.avatarCredit && (
+            <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted">
+              Photo: {critic.avatarCredit}
+              {critic.avatarLicense ? ` · ${critic.avatarLicense}` : ""}
+              {critic.avatarSourceUrl && (
+                <>
+                  {" · "}
+                  <a
+                    href={critic.avatarSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    source
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
       {critic.bio && <p className="mt-4 leading-relaxed text-foreground/90">{critic.bio}</p>}
       {links.length > 0 && (
         <ul className="mt-6 flex flex-wrap gap-3">

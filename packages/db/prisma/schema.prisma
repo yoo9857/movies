@@ -69,6 +69,12 @@ model Critic {
   name      String
   bio       String?
   avatarUrl String?
+  /// Credit for `avatarUrl` when it came from Commons — a free licence's
+  /// terms travel with the file, and a licence without a source is refused.
+  avatarCredit     String?
+  avatarLicense    String?
+  avatarLicenseUrl String?
+  avatarSourceUrl  String?
   /// [{ "label": "YouTube", "url": "..." }]
   links     Json?
   createdAt DateTime @default(now()) @db.Timestamptz(3)
