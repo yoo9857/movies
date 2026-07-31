@@ -388,6 +388,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
             title={movie.title}
             year={year}
             director={director}
+            genres={genres}
             size="hero"
             className="w-full rounded-xl border border-line shadow-2xl"
           />

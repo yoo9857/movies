@@ -56,6 +56,7 @@ const libraryRail = unstable_cache(
         posterPath: true,
         image: true,
         releaseDate: true,
+        genres: true,
         reviews: { where: { status: "PUBLISHED" }, select: { rating: true } },
       },
     }),
@@ -315,6 +316,7 @@ export default async function HomePage() {
                     path={m.posterPath}
                     image={m.image}
                     year={m.releaseDate ? new Date(m.releaseDate).getFullYear() : null}
+                    genres={m.genres}
                     title={m.title}
                     className="aspect-2/3 w-full rounded-lg border border-line shadow-lg transition-transform group-hover:scale-[1.03]"
                   />
