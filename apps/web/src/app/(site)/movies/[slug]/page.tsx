@@ -541,7 +541,9 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         // Only files on our own origin — the imported CDN paths in this table
         // are historical data now, not something the page hands to a browser.
         artwork={movie.images
-          .filter((i) => i.path.startsWith("/"))
+          // "/uploads/" is our origin; a bare "/x.jpg" is an imported CDN
+          // fragment, which also starts with a slash — hence the full prefix.
+          .filter((i) => i.path.startsWith("/uploads/"))
           .map((i) => ({ id: i.id, path: i.path, kind: i.kind }))}
       />
 

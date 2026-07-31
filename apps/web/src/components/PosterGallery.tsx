@@ -30,7 +30,7 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
           <div className="mt-3 flex gap-4">
             <Image
               key={posters[poster].path}
-              src={`https://image.tmdb.org/t/p/w342${posters[poster].path}`}
+              src={posters[poster].path}
               alt={`${title} poster`}
               width={342}
               height={513}
@@ -49,7 +49,7 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
                   }`}
                 >
                   <Image
-                    src={`https://image.tmdb.org/t/p/w185${p.path}`}
+                    src={p.path}
                     alt=""
                     width={185}
                     height={278}
@@ -69,7 +69,7 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
           <div className="mt-3 space-y-2">
             <Image
               key={stills[still].path}
-              src={`https://image.tmdb.org/t/p/w780${stills[still].path}`}
+              src={stills[still].path}
               alt={`${title} still`}
               width={780}
               height={439}
@@ -88,7 +88,7 @@ export function PosterGallery({ artwork, title }: { artwork: ArtworkEntry[]; tit
                     }`}
                   >
                     <Image
-                      src={`https://image.tmdb.org/t/p/w185${s.path}`}
+                      src={s.path}
                       alt=""
                       width={185}
                       height={104}
