@@ -21,9 +21,10 @@ const csp = [
   isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' https://i.ytimg.com${uploadHost ? ` https://${uploadHost}` : ""} data: blob:`,
-  // Trailer files live on our own bucket; without an explicit media-src the
-  // <video> falls back to default-src and a cross-origin file is refused.
-  "media-src 'self' https://pokemon-dive.us-lax-4.linodeobjects.com",
+  // Trailer files live on our own bucket (Osaka — the close region for a
+  // mostly-Korean audience); without an explicit media-src the <video> falls
+  // back to default-src and a cross-origin file is refused.
+  "media-src 'self' https://oneday-trading-assets.jp-osa-1.linodeobjects.com",
   "font-src 'self'",
   "connect-src 'self'",
   // trailer embeds only — loaded on click, privacy-enhanced domain
