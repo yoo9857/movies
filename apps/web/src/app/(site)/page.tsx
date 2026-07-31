@@ -209,17 +209,23 @@ export default async function HomePage() {
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/35 to-black/10" />
             <div className="absolute inset-0 bg-gradient-to-r from-background/65 via-background/10 to-transparent" />
             <div className="cx-perf absolute inset-x-0 bottom-0 z-[1]" aria-hidden="true" />
-            <div className="relative mx-auto w-full max-w-5xl px-4 pb-14">
+            {/* pt matches the pull-up above, so when a long title and excerpt
+                grow the copy block past the stage's min-height, the text opens
+                the stage downward instead of riding up under the nav — that
+                was the "long headline gets clipped top and bottom" bug. The
+                clamps are the second half of the fix: three lines of headline
+                and two of excerpt is a billboard, more is a review page. */}
+            <div className="relative mx-auto w-full max-w-5xl px-4 pb-14 pt-[9.5rem] sm:pt-[7rem]">
               <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
                 Featured review
               </p>
               <Link href={`/reviews/${billboard.slug}`} className="group mt-3 block max-w-2xl">
-                <h1 className="text-balance text-[clamp(1.9rem,7vw,3.75rem)] font-bold leading-[1.08] tracking-tight group-hover:text-accent transition-colors">
+                <h1 className="line-clamp-3 text-balance text-[clamp(1.9rem,7vw,3.75rem)] font-bold leading-[1.08] tracking-tight group-hover:text-accent transition-colors">
                   {billboard.title}
                 </h1>
               </Link>
               {billboard.excerpt && (
-                <p className="mt-4 max-w-xl text-lg leading-relaxed text-foreground/80">
+                <p className="mt-4 line-clamp-2 max-w-xl text-lg leading-relaxed text-foreground/80">
                   {billboard.excerpt}
                 </p>
               )}
