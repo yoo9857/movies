@@ -31,39 +31,41 @@ export function BillboardMedia({
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   /**
-   * Reveal only on the player's own word that it is PLAYING (state 1 over the
-   * widget postMessage channel). Revealing on load-plus-delay showed whatever
-   * the player happened to be at that moment — on browsers that block or
-   * defer autoplay, that was a paused player with its big centre controls,
-   * sitting in the middle of the billboard where no crop can reach. If the
-   * film never rolls, the still simply stays; and if it has not rolled within
-   * ten seconds, the video layer is dismissed for this visit.
+   * The still is the mask; the video is visible only while the player says
+   * PLAYING — not once, but continuously.
+   *
+   * Revealing on load-plus-delay showed whatever the player happened to be:
+   * on autoplay-blocking browsers, a paused player with its big centre
+   * controls, which no edge crop can reach. And a one-shot reveal had a
+   * second hole the owner found by scrolling: browsers pause an off-screen
+   * player, so returning to the top met the same paused chrome. So state 1
+   * fades the film in, any other state fades the still back over it, and a
+   * pause gets one gentle playVideo nudge per few seconds so an off-screen
+   * pause resumes by itself when the player is willing.
    */
+  const lastNudge = useRef(0);
   useEffect(() => {
     if (!showVideo) return;
     function onMessage(e: MessageEvent) {
       if (e.origin !== "https://www.youtube-nocookie.com") return;
       try {
         const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (data?.info?.playerState === 1) setReady(true);
+        const state = data?.info?.playerState;
+        if (typeof state !== "number") return;
+        setReady(state === 1);
+        if (state === 2 && Date.now() - lastNudge.current > 3_000) {
+          lastNudge.current = Date.now();
+          iframeRef.current?.contentWindow?.postMessage(
+            JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+            "https://www.youtube-nocookie.com",
+          );
+        }
       } catch {
         /* other widgets' messages are not our business */
       }
     }
     window.addEventListener("message", onMessage);
-    const giveUp = window.setTimeout(() => {
-      setReady((r) => {
-        if (!r) {
-          setDismissed(true);
-          setShowVideo(false);
-        }
-        return r;
-      });
-    }, 10_000);
-    return () => {
-      window.removeEventListener("message", onMessage);
-      window.clearTimeout(giveUp);
-    };
+    return () => window.removeEventListener("message", onMessage);
   }, [showVideo]);
 
   useEffect(() => {
