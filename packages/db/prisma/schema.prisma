@@ -135,8 +135,9 @@ model Movie {
   popularity    Float?
   /// YouTube key of the primary trailer (the rest live in MovieVideo)
   trailerKey    String?
-  /// A trailer file on our own storage, played by our own <video> — no rented
-  /// player, no third-party chrome. Local path only (CHECK enforces).
+  /// A trailer file on storage we own — local path or our Linode bucket —
+  /// played by our own <video>: no rented player, no third-party chrome.
+  /// The CHECK names our bucket host exactly; anything else is a hotlink.
   trailerFile   String?
   collectionId   Int?
   collectionName String?
