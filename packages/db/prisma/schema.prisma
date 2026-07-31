@@ -145,6 +145,23 @@ model Movie {
   /// played by our own <video>: no rented player, no third-party chrome.
   /// The CHECK names our bucket host exactly; anything else is a hotlink.
   trailerFile   String?
+  /// Terms for `trailerFile` when it came from Commons rather than an operator.
+  /// Licence and source are refused apart; duration is seconds.
+  trailerFileCredit     String?
+  trailerFileLicense    String?
+  trailerFileLicenseUrl String?
+  trailerFileSourceUrl  String?
+  trailerFileDuration   Int?
+  /// The complete film, when it is free (Wikidata P10 → Commons). Our copy on
+  /// our storage, never a hotlink — same CHECK as `trailerFile`. Deliberately
+  /// not that column: a trailer advertises a film, this *is* the film.
+  /// The licence and its source are refused apart; duration is seconds.
+  filmFile           String?
+  filmFileCredit     String?
+  filmFileLicense    String?
+  filmFileLicenseUrl String?
+  filmFileSourceUrl  String?
+  filmFileDuration   Int?
   collectionId   Int?
   collectionName String?
   /// [{ "name": "Barunson E&A", "logoPath": "/x.png" }]

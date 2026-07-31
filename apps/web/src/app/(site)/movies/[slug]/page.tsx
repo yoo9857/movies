@@ -9,6 +9,7 @@ import { BoxOfficeBand } from "@/components/BoxOfficeBand";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CastRail } from "@/components/CastRail";
 import { CrewList } from "@/components/CrewList";
+import { FreeFilmPlayer } from "@/components/FreeFilmPlayer";
 import { JsonLd } from "@/components/JsonLd";
 import { Poster } from "@/components/Poster";
 import { PosterGallery } from "@/components/PosterGallery";
@@ -520,6 +521,27 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       />
 
       {/* ⑦ Videos — picker when a film has several */}
+      {/* Our own file first. A trailer we host plays in our own <video> with no
+          rented chrome and no third-party request — the same reason the
+          billboard prefers it. YouTube is the fallback, not the default. */}
+      {movie.trailerFile && (
+        <FreeFilmPlayer
+          kind="trailer"
+          src={movie.trailerFile}
+          poster={movie.image}
+          title={movie.title}
+          duration={movie.trailerFileDuration}
+          credit={movie.trailerFileCredit}
+          license={movie.trailerFileLicense}
+          licenseUrl={movie.trailerFileLicenseUrl}
+          sourceUrl={movie.trailerFileSourceUrl}
+        />
+      )}
+      {/* The gallery stands on its own rather than in an else-branch: a film can
+          have both our hosted trailer and a shelf of other videos, and an
+          earlier `? :` here silently hid the second from the two films that do.
+          The bare YouTube embed is the only genuine either/or — it is the same
+          single trailer, rented instead of owned. */}
       {movie.videos.length > 0 ? (
         <VideoGallery
           title={movie.title}
@@ -532,7 +554,24 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
           }))}
         />
       ) : (
+        !movie.trailerFile &&
         movie.trailerKey && <TrailerEmbed youtubeKey={movie.trailerKey} title={movie.title} />
+      )}
+
+      {/* ⑦½ The film itself, when it is free. Below the trailer rather than
+          above it: the trailer is what a visitor expects on a film page, and
+          this is the rarer thing they discover under it. */}
+      {movie.filmFile && (
+        <FreeFilmPlayer
+          src={movie.filmFile}
+          poster={movie.image}
+          title={movie.title}
+          duration={movie.filmFileDuration}
+          credit={movie.filmFileCredit}
+          license={movie.filmFileLicense}
+          licenseUrl={movie.filmFileLicenseUrl}
+          sourceUrl={movie.filmFileSourceUrl}
+        />
       )}
 
       {/* ⑧ Artwork gallery */}

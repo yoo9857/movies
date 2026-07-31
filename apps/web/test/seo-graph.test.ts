@@ -95,3 +95,40 @@ describe("the term nodes the topic page owns", () => {
     for (const id of aboutIds(film)) expect(ids.has(id)).toBe(true);
   });
 });
+
+/**
+ * `uploadDate` is a DateTime, not a Date.
+ *
+ * Search Console raised two "video structured data" issues against this site —
+ * "uploadDate의 datetime 값이 잘못됨" and "시간대가 누락됨" — which were one bug:
+ * the property was filled with `isoDay`, so a film released in 1954 emitted
+ * "1954-07-28" where schema.org wants an instant. Both spellings of the trailer
+ * (a YouTube key and a file on our own storage) went through that fallback, so
+ * both are pinned here.
+ */
+describe("VideoObject uploadDate", () => {
+  const RELEASED = new Date("1954-07-28T00:00:00.000Z");
+  const withZone = /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})$/;
+
+  function trailerOf(movie: Record<string, unknown>): Record<string, unknown> {
+    const node = movieNode(movie as never, {}) as unknown as Record<string, unknown>;
+    return node.trailer as Record<string, unknown>;
+  }
+
+  it("carries a zone for a YouTube trailer", () => {
+    const trailer = trailerOf({ ...FILM, releaseDate: RELEASED, trailerKey: "abcdefghijk" });
+    expect(trailer.uploadDate).toMatch(withZone);
+  });
+
+  it("carries a zone for a trailer on our own storage", () => {
+    const trailer = trailerOf({
+      ...FILM,
+      releaseDate: RELEASED,
+      trailerFile: "/uploads/trailers/2026/07/x.webm",
+    });
+    expect(trailer.uploadDate).toMatch(withZone);
+    // Our own file is described by what it is, not by an embed we do not render.
+    expect(trailer.contentUrl).toContain("/uploads/trailers/");
+    expect(trailer.embedUrl).toBeUndefined();
+  });
+});

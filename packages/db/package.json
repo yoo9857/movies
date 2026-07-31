@@ -23,6 +23,8 @@
     "import-wikidata-people": "tsx prisma/import-wikidata-people.ts",
     "import-wikidata-details": "tsx prisma/import-wikidata-details.ts",
     "write-reviews": "tsx prisma/write-reviews.ts",
+    "import-trailers": "tsx prisma/import-trailers.ts",
+    "import-site-trailers": "tsx prisma/import-site-trailers.ts",
     "refresh-library": "tsx prisma/refresh-library.ts",
     "studio": "prisma studio"
   },

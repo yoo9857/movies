@@ -204,6 +204,53 @@ describe("Movie sanity constraints", () => {
     await movie({ slug: "taken-2019" });
     await rejects(() => movie({ slug: "taken-2019" }), SQLSTATE.unique);
   });
+
+  /**
+   * Video columns: the file is ours, and its terms travel with it.
+   *
+   * `trailerFile` and `filmFile` both hold a video we host — a public-domain
+   * trailer or the whole picture, imported from Commons. Three rules are in the
+   * database rather than in the importer, because an incident-time UPDATE goes
+   * through the database and not through the importer.
+   */
+  const OURS = "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/x.webm";
+
+  it.each([["trailerFile"], ["filmFile"]])("%s must be our origin or our bucket", async (col) => {
+    await expect(movie({ [col]: "/uploads/trailers/2026/07/a.webm" })).resolves.toBeTruthy();
+    await expect(movie({ [col]: OURS })).resolves.toBeTruthy();
+    // A hotlink is the case this exists to refuse: a URL we do not control is a
+    // page that breaks when someone else renames a file.
+    await rejects(
+      () => movie({ [col]: "https://upload.wikimedia.org/wikipedia/commons/a/a6/x.webm" }),
+      SQLSTATE.check,
+    );
+  });
+
+  it.each([
+    ["trailerFileLicense", "trailerFileSourceUrl", "trailerFile"],
+    ["filmFileLicense", "filmFileSourceUrl", "filmFile"],
+  ])("%s without %s is refused", async (license, source, file) => {
+    await rejects(() => movie({ [file]: "/uploads/x.webm", [license]: "Public domain" }), SQLSTATE.check);
+    await expect(
+      movie({
+        [file]: "/uploads/x.webm",
+        [license]: "Public domain",
+        [source]: "https://commons.wikimedia.org/wiki/File:X.webm",
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it.each([
+    ["trailerFileDuration", "trailerFile"],
+    ["filmFileDuration", "filmFile"],
+  ])("%s without a file is a number about nothing", async (duration, file) => {
+    await rejects(() => movie({ [duration]: 140 }), SQLSTATE.check);
+    await expect(movie({ [file]: "/uploads/x.webm", [duration]: 140 })).resolves.toBeTruthy();
+  });
+
+  it("lets an operator upload state no licence, so the billboard's own file stays legal", async () => {
+    await expect(movie({ trailerFile: "/uploads/trailers/own.mp4" })).resolves.toBeTruthy();
+  });
 });
 
 describe("User identity", () => {

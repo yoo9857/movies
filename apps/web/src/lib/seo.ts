@@ -114,6 +114,16 @@ export function isoDay(d: Nullable<Date | string>): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString().slice(0, 10);
 }
 
+/**
+ * ISO-8601 instant, always with a zone (`toISOString` ends in `Z`).
+ *
+ * Not interchangeable with `isoDay`: schema.org properties typed `DateTime` —
+ * `VideoObject.uploadDate` above all — are validated as a *moment*, and a bare
+ * "1954-07-28" fails twice over. Search Console reported exactly that against
+ * this site: "uploadDate의 datetime 값이 잘못됨" and "시간대가 누락됨" are one
+ * bug, a date where an instant belongs. `Date` properties like a film's
+ * `datePublished` are the opposite case and keep `isoDay`.
+ */
 export function isoStamp(d: Nullable<Date | string>): string | undefined {
   if (!d) return undefined;
   const date = d instanceof Date ? d : new Date(d);
@@ -424,6 +434,10 @@ export interface MovieInput {
   imdbId?: Nullable<string>;
   homepage?: Nullable<string>;
   trailerKey?: Nullable<string>;
+  /** A trailer on our own storage. Preferred by the page, so preferred here. */
+  trailerFile?: Nullable<string>;
+  trailerFileDuration?: Nullable<number>;
+  image?: Nullable<string>;
   collectionName?: Nullable<string>;
 }
 
@@ -539,7 +553,36 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
   });
 }
 
+/**
+ * Our own file, as an absolute URL. Both storage drivers land in these columns:
+ * the local one writes `/uploads/…`, the bucket writes its own https URL — and
+ * running `absUrl` over the second would produce `https://cinepixo.com/https://…`.
+ */
+function hosted(url: string): string {
+  return /^https?:\/\//.test(url) ? url : absUrl(url);
+}
+
 function pickTrailer(movie: MovieInput, videos: MovieNodeOptions["videos"]): JsonLdNode | undefined {
+  // The page prefers our own file over the YouTube embed, and the graph has to
+  // describe the video a visitor is actually offered — a VideoObject pointing
+  // at an embed the page no longer renders is precisely the drift this file
+  // exists to prevent.
+  if (movie.trailerFile) {
+    return compact({
+      "@type": "VideoObject",
+      name: `${movie.title} — trailer`,
+      description: `Trailer for ${movie.title}.`,
+      thumbnailUrl: movie.image ? hosted(movie.image) : undefined,
+      contentUrl: hosted(movie.trailerFile),
+      // Seconds here, unlike `runtime`'s minutes.
+      duration: movie.trailerFileDuration
+        ? isoDuration(Math.round(movie.trailerFileDuration / 60))
+        : undefined,
+      uploadDate: isoStamp(movie.releaseDate),
+      inLanguage: SITE_LANG,
+    });
+  }
+
   const key =
     movie.trailerKey ??
     videos?.find((v) => v.type.toLowerCase() === "trailer")?.youtubeKey ??
@@ -553,7 +596,7 @@ function pickTrailer(movie: MovieInput, videos: MovieNodeOptions["videos"]): Jso
     thumbnailUrl: youtubeThumb(key),
     embedUrl: youtubeEmbed(key),
     url: youtubeWatch(key),
-    uploadDate: isoStamp(meta?.publishedAt) ?? isoDay(movie.releaseDate),
+    uploadDate: isoStamp(meta?.publishedAt) ?? isoStamp(movie.releaseDate),
     inLanguage: SITE_LANG,
   });
 }
