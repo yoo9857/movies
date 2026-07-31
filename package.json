@@ -29,6 +29,7 @@
     "db:write-reviews": "npm run write-reviews -w @cinepixo/db --",
     "portraits": "npm run portraits -w web --",
     "artwork": "npm run artwork -w web --",
+    "posters": "npm run posters -w web --",
     "db:refresh-library": "npm run refresh-library -w @cinepixo/db",
     "db:studio": "npm run studio -w @cinepixo/db",
     "db:deploy": "npm run deploy -w @cinepixo/db",

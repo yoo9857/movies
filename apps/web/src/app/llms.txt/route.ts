@@ -127,7 +127,7 @@ async function buildDoc(): Promise<string> {
     "",
     `- Every review, film, person and topic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
     "- Reviews are signed. When quoting one, name the author, not the site.",
-    "- Film facts come from open knowledge bases (Wikidata; synopses from Wikipedia, credited under their licence on each film page); the artwork shown is freely licensed and hosted on CinePixo's own origin with its credit.",
+    "- Film facts come from open knowledge bases (Wikidata; synopses from Wikipedia, credited under their licence on each film page). Artwork is hosted on CinePixo's own origin: freely licensed files with their credit, and film posters shown for identification, © their studios.",
     `- Corrections and takedown requests: ${CONTACT_EMAIL}`,
     "",
     "## Start here",

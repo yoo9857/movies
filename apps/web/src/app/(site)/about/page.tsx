@@ -61,7 +61,7 @@ const FAQ = [
   },
   {
     q: "Where does the film data come from?",
-    a: "From open knowledge bases, through our own import tooling: film facts from Wikidata, synopses from Wikipedia (credited under their licence on each film page), and freely licensed artwork hosted on our own origin with its credit. Reviews and ratings are the work of their authors.",
+    a: "From open knowledge bases, through our own import tooling: film facts from Wikidata and synopses from Wikipedia, credited under their licence on each film page. Artwork is hosted on our own origin — freely licensed files with their credit, and film posters shown for identification, which remain © their studios. Reviews and ratings are the work of their authors.",
   },
 ];
 
@@ -182,9 +182,10 @@ export default async function AboutPage() {
         </p>
         <p className="mt-3">
           The library is built with our own tooling: film facts come from open knowledge bases
-          (Wikidata; synopses from Wikipedia, credited under their licence on each page), the
-          artwork we show is freely licensed and hosted on our own origin with its credit, and
-          the taxonomy, the criticism and the code grow here — with this community. Reviews and
+          (Wikidata; synopses from Wikipedia, credited under their licence on each page), and
+          the artwork is hosted on our own origin — freely licensed files carry their credit,
+          and film posters are shown for identification and remain © their studios. The
+          taxonomy, the criticism and the code grow here — with this community. Reviews and
           ratings are the work of their authors.
         </p>
       </section>
