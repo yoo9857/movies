@@ -58,6 +58,9 @@ async function leadImage(title: string): Promise<string | null> {
   url.searchParams.set("titles", title);
   url.searchParams.set("prop", "pageimages");
   url.searchParams.set("piprop", "original");
+  // The default is pilicense=free, which silently excludes exactly the image
+  // this script exists to fetch — film posters are non-free by nature.
+  url.searchParams.set("pilicense", "any");
   url.searchParams.set("redirects", "1");
   url.searchParams.set("format", "json");
   url.searchParams.set("formatversion", "2");
