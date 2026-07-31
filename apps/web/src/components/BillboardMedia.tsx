@@ -37,7 +37,11 @@ export function BillboardMedia({
     const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
     if (!wide || calm || nav.connection?.saveData) return;
 
-    timer.current = window.setTimeout(() => setShowVideo(true), 1400);
+    // Mount almost immediately: the iframe loads invisibly behind the still,
+    // so the network time is spent while the viewer is already looking at
+    // artwork. The old 1.4s wait *before even starting* to load was the bulk
+    // of the "trailer takes forever" complaint.
+    timer.current = window.setTimeout(() => setShowVideo(true), 250);
     return () => window.clearTimeout(timer.current);
   }, [trailerKey, dismissed]);
 
@@ -85,11 +89,14 @@ export function BillboardMedia({
             title=""
             tabIndex={-1}
             allow="autoplay; encrypted-media"
-            /* wait past the player's start-up overlay before revealing it */
-            onLoad={() => window.setTimeout(() => setReady(true), 900)}
-            /* 16:9 cover, scaled past the frame so the player's own chrome
-               (title bar, watch-later, branding) is cropped out of view */
-            className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full origin-center -translate-x-1/2 -translate-y-1/2 scale-[1.18] border-0"
+            /* Reveal only after the player's start-up overlay (spinner, big
+               play glyph, title flash) has had time to clear — revealing on
+               load alone showed exactly that chrome for a beat. */
+            onLoad={() => window.setTimeout(() => setReady(true), 1500)}
+            /* 16:9 cover, scaled well past the frame so the player's own
+               chrome — title bar, watch-later, branding, the transient
+               play/pause flash at the edges — is cropped out of view. */
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full origin-center -translate-x-1/2 -translate-y-1/2 scale-[1.32] border-0"
           />
           {/* Shield: guarantees the cursor never reaches the player, so its
               hover overlay (centre play/pause, skip buttons) never appears. */}
