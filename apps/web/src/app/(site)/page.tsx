@@ -152,10 +152,12 @@ export default async function HomePage() {
     siteCounts(),
   ]);
 
-  // Billboard: newest review with a backdrop (falls back to blurred poster art).
+  // Billboard: newest review whose film can actually dress the stage — our own
+  // artwork with a trailer to play behind it beats artwork alone beats neither.
+  // (The old test keyed on TMDB paths, which nothing renders any more.)
   const billboard =
-    latest.find((r) => r.movie.backdropPath) ??
-    latest.find((r) => r.movie.posterPath) ??
+    latest.find((r) => r.movie.image && r.movie.trailerKey) ??
+    latest.find((r) => r.movie.image) ??
     latest[0] ??
     null;
   const lead = latest.find((r) => r !== billboard && r.excerpt) ?? null;

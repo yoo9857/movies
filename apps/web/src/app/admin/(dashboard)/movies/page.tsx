@@ -1,5 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import Link from "next/link";
+import { EnrichMovieButton } from "@/components/admin/EnrichMovieButton";
 import { MovieArtworkButton } from "@/components/admin/MovieArtworkButton";
 import { Poster } from "@/components/Poster";
 
@@ -112,7 +113,10 @@ export default async function AdminMoviesPage(props: {
                     <td className="px-4 py-3 text-muted">{m.genres.join(", ") || "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-muted">{m._count.reviews}</td>
                     <td className="px-4 py-3 text-right">
-                      <MovieArtworkButton movieId={m.id} hasOwn={m.image != null} />
+                      <span className="inline-flex items-center gap-3">
+                        <EnrichMovieButton movieId={m.id} />
+                        <MovieArtworkButton movieId={m.id} hasOwn={m.image != null} />
+                      </span>
                     </td>
                   </tr>
                 ))}
