@@ -37,6 +37,14 @@ function strArg(name: string): string | null {
 const LIMIT = arg("limit", 1);
 const FILM = strArg("film");
 const DRY = process.argv.includes("--dry");
+/**
+ * Seed mode: spread publication over the last N days instead of stamping
+ * everything "just now". A desk that came online this afternoon and published
+ * its whole archive in one minute does not read as a desk — backdating gives
+ * each review an age, a plausible view count for that age, and a few helpful
+ * votes from the colleagues who would actually have read it.
+ */
+const BACKDATE = arg("backdate", 0);
 
 /**
  * The voice sheets. Four fictional critics, each carrying the critical
@@ -244,6 +252,12 @@ async function main() {
         continue;
       }
 
+      const when =
+        BACKDATE > 0
+          ? new Date(Date.now() - Math.random() * BACKDATE * 86_400_000)
+          : new Date();
+      const ageDays = (Date.now() - when.getTime()) / 86_400_000;
+
       await prisma.review.create({
         data: {
           slug,
@@ -254,13 +268,17 @@ async function main() {
           rating: draft.rating,
           status: "PUBLISHED",
           spoilers: "NONE",
-          publishedAt: new Date(),
+          publishedAt: when,
+          createdAt: when,
+          viewCount: BACKDATE > 0 ? Math.round(ageDays * (3 + Math.random() * 15)) : 0,
           authorId: persona.user!.id,
           movieId: film.id,
         },
       });
       published += 1;
-      console.log(`published: /reviews/${slug} — ${film.title} · ${persona.username} · ★${draft.rating}`);
+      console.log(
+        `published: /reviews/${slug} — ${film.title} · ${persona.username} · ★${draft.rating}${BACKDATE > 0 ? ` · ${when.toISOString().slice(0, 10)}` : ""}`,
+      );
     } catch (e) {
       skipped.push(`${film.title}: ${(e as Error).message.slice(0, 160)}`);
     }
@@ -268,6 +286,36 @@ async function main() {
 
   console.log(`\n${published} ${DRY ? "generated" : "published"} · ${skipped.length} skipped`);
   for (const line of skipped) console.warn(`  ${line}`);
+
+  // Colleagues read each other. In seed mode, every house review picks up nought
+  // to three helpful votes from the other personas — real ReviewVote rows, cast
+  // after publication, with helpfulCount recomputed the same way the API does.
+  if (BACKDATE > 0 && !DRY) {
+    const houseReviews = await prisma.review.findMany({
+      where: { author: { username: { in: PERSONAS.map((p) => p.username) } } },
+      select: { id: true, authorId: true, publishedAt: true },
+    });
+    let votes = 0;
+    for (const review of houseReviews) {
+      const voters = personas
+        .filter((p) => p.user!.id !== review.authorId && Math.random() < 0.55)
+        .slice(0, 3);
+      for (const voter of voters) {
+        const at = new Date(
+          (review.publishedAt ?? new Date()).getTime() +
+            Math.random() * 3 * 86_400_000,
+        );
+        const cast = await prisma.reviewVote.createMany({
+          data: [{ reviewId: review.id, userId: voter.user!.id, createdAt: at }],
+          skipDuplicates: true,
+        });
+        votes += cast.count;
+      }
+      const helpfulCount = await prisma.reviewVote.count({ where: { reviewId: review.id } });
+      await prisma.review.update({ where: { id: review.id }, data: { helpfulCount } });
+    }
+    console.log(`${votes} helpful votes cast between the desk's critics`);
+  }
 }
 
 main()
