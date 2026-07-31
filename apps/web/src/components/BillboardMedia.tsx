@@ -16,12 +16,139 @@ import { useEffect, useRef, useState } from "react";
 export function BillboardMedia({
   image,
   trailerKey,
+  trailerFile,
   startAt = 8,
 }: {
   /** Artwork on our own storage; without one the billboard is the house field. */
   image: string | null;
   trailerKey: string | null;
+  /** A trailer file on our own storage — preferred: our player, zero chrome. */
+  trailerFile?: string | null;
   startAt?: number;
+}) {
+  if (trailerFile) {
+    return <NativeBillboard image={image} src={trailerFile} startAt={startAt} />;
+  }
+  return <EmbedBillboard image={image} trailerKey={trailerKey} startAt={startAt} />;
+}
+
+/**
+ * The IMDb way: our file, our <video>, every pixel ours. No mask choreography
+ * because there is no third-party chrome to hide — the only fade is taste.
+ */
+function NativeBillboard({
+  image,
+  src,
+  startAt,
+}: {
+  image: string | null;
+  src: string;
+  startAt: number;
+}) {
+  const [showVideo, setShowVideo] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [sound, setSound] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (dismissed) return;
+    const wide = window.matchMedia("(min-width: 1024px)").matches;
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
+    if (!wide || calm || nav.connection?.saveData) return;
+    const t = window.setTimeout(() => setShowVideo(true), 250);
+    return () => window.clearTimeout(t);
+  }, [dismissed]);
+
+  return (
+    <>
+      {image ? (
+        <Image
+          src={image}
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          style={{ opacity: playing ? 0 : 0.3 }}
+          className={`scale-125 object-cover blur-2xl transition-opacity duration-1000 ${playing ? "" : "cx-kenburns"}`}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-surface" />
+      )}
+
+      {showVideo && (
+        <video
+          ref={videoRef}
+          src={src}
+          autoPlay
+          muted={!sound}
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+          style={{ opacity: playing ? 0.68 : 0 }}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-1000"
+          onLoadedMetadata={(e) => {
+            e.currentTarget.currentTime = startAt;
+          }}
+          onPlaying={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onWaiting={() => setPlaying(false)}
+        />
+      )}
+
+      {showVideo && playing && (
+        <div className="absolute bottom-6 right-4 z-[2] flex gap-2 sm:right-8">
+          <button
+            onClick={() => {
+              setSound((s) => {
+                if (videoRef.current) videoRef.current.muted = s;
+                return !s;
+              });
+            }}
+            aria-label={sound ? "Mute trailer" : "Unmute trailer"}
+            className="grid h-9 w-9 place-items-center rounded-full border border-line/70 bg-background/60 text-muted backdrop-blur transition-colors hover:border-accent-dim hover:text-foreground"
+          >
+            {sound ? (
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <path d="M3 10v4h4l5 4V6L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zm-2.5-8v2a6 6 0 0 1 0 12v2a8 8 0 0 0 0-16z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <path d="M3 10v4h4l5 4V6L7 10H3zm16.6 2 2.4-2.4-1.2-1.2L18.4 10.8 16 8.4l-1.2 1.2 2.4 2.4-2.4 2.4 1.2 1.2 2.4-2.4 2.4 2.4 1.2-1.2z" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              videoRef.current?.pause();
+              setDismissed(true);
+              setShowVideo(false);
+              setPlaying(false);
+              setSound(false);
+            }}
+            aria-label="Stop trailer"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line/70 bg-background/60 text-muted backdrop-blur transition-colors hover:border-accent-dim hover:text-foreground"
+          >
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function EmbedBillboard({
+  image,
+  trailerKey,
+  startAt,
+}: {
+  image: string | null;
+  trailerKey: string | null;
+  startAt: number;
 }) {
   const [showVideo, setShowVideo] = useState(false);
   const [ready, setReady] = useState(false);

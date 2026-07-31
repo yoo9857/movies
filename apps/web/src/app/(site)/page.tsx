@@ -134,6 +134,7 @@ const reviewSelect = {
       releaseDate: true,
       director: true,
       trailerKey: true,
+      trailerFile: true,
     },
   },
 } as const;
@@ -156,7 +157,7 @@ export default async function HomePage() {
   // artwork with a trailer to play behind it beats artwork alone beats neither.
   // (The old test keyed on TMDB paths, which nothing renders any more.)
   const billboard =
-    latest.find((r) => r.movie.image && r.movie.trailerKey) ??
+    latest.find((r) => r.movie.image && (r.movie.trailerFile || r.movie.trailerKey)) ??
     latest.find((r) => r.movie.image) ??
     latest[0] ??
     null;
@@ -203,6 +204,7 @@ export default async function HomePage() {
             <BillboardMedia
               image={billboard.movie.image}
               trailerKey={billboard.movie.trailerKey}
+              trailerFile={billboard.movie.trailerFile}
             />
             {/* Two-axis scrim: dark enough to read type over, light enough that
                 the film still reads as a film. */}

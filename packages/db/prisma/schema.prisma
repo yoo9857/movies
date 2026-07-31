@@ -135,6 +135,9 @@ model Movie {
   popularity    Float?
   /// YouTube key of the primary trailer (the rest live in MovieVideo)
   trailerKey    String?
+  /// A trailer file on our own storage, played by our own <video> — no rented
+  /// player, no third-party chrome. Local path only (CHECK enforces).
+  trailerFile   String?
   collectionId   Int?
   collectionName String?
   /// [{ "name": "Barunson E&A", "logoPath": "/x.png" }]
