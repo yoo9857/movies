@@ -137,16 +137,28 @@ async function summary(articleUrl: string): Promise<Summary | null> {
     return null;
   }
 
-  const res = await fetch(`${WIKIPEDIA}/${title}`, {
-    headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-    signal: AbortSignal.timeout(20_000),
-  });
+  // One slow response must not end the pass. This ran to batch 448 — 26,880
+  // films, six hours — and then a single `AbortSignal.timeout` rejection
+  // unwound through `main()` and killed it, losing the queue position along
+  // with the poster lane that drinks from what this one discovers. A film
+  // whose article did not answer is a film without a synopsis, nothing more.
+  let res: Response;
+  try {
+    res = await fetch(`${WIKIPEDIA}/${title}`, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    return null;
+  }
   if (!res.ok) return null;
 
-  const json = (await res.json()) as {
-    extract?: string;
-    content_urls?: { desktop?: { page?: string } };
-  };
+  let json: { extract?: string; content_urls?: { desktop?: { page?: string } } };
+  try {
+    json = await res.json();
+  } catch {
+    return null;
+  }
   const extract = json.extract?.trim();
   return {
     // Long enough to be a synopsis, short enough to stay an extract rather than
