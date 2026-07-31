@@ -51,9 +51,9 @@ export default async function Image({ params }: { params: Promise<{ slug: string
       // Our own file when we have one — but re-encoded to PNG first: the upload
       // pipeline writes WebP, which satori cannot decode, and a card with a blank
       // plate where the poster should be is worse than one without a plate.
-      poster: movie.image
-        ? await ourImageAsPng(absUrl(movie.image), 500)
-        : posterUrl(movie.posterPath, "w500"),
+      // Our own file or no plate at all — the card's composition carries the
+      // identity; a third-party poster is no longer part of it.
+      poster: movie.image ? await ourImageAsPng(absUrl(movie.image), 500) : null,
     }),
     await ogFontOptions(),
   );

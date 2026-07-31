@@ -199,8 +199,7 @@ export default async function HomePage() {
         <section className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
           <div className="cx-beam relative flex min-h-[clamp(30rem,68vh,40rem)] flex-col justify-end overflow-hidden">
             <BillboardMedia
-              backdropPath={billboard.movie.backdropPath}
-              posterPath={billboard.movie.posterPath}
+              image={billboard.movie.image}
               trailerKey={billboard.movie.trailerKey}
             />
             {/* Two-axis scrim: dark enough to read type over, light enough that
@@ -355,13 +354,9 @@ export default async function HomePage() {
                 }`}
               >
                 <div className={`relative ${i === 0 ? "aspect-video" : "aspect-[4/5]"}`}>
-                  {r.movie.backdropPath || r.movie.posterPath ? (
+                  {r.movie.image ? (
                     <Image
-                      src={`https://image.tmdb.org/t/p/w780${
-                        i === 0
-                          ? (r.movie.backdropPath ?? r.movie.posterPath)
-                          : (r.movie.posterPath ?? r.movie.backdropPath)
-                      }`}
+                      src={r.movie.image}
                       alt=""
                       fill
                       sizes="(max-width: 640px) 88vw, 512px"

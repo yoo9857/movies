@@ -61,7 +61,7 @@ const FAQ = [
   },
   {
     q: "Where does the film data come from?",
-    a: "Film metadata, posters and stills are supplied by TMDB. CinePixo uses the TMDB API but is not endorsed or certified by TMDB. Reviews and ratings are the work of their authors.",
+    a: "From open knowledge bases, through our own import tooling: film facts from Wikidata, synopses from Wikipedia (credited under their licence on each film page), and freely licensed artwork hosted on our own origin with its credit. Reviews and ratings are the work of their authors.",
   },
 ];
 
@@ -181,16 +181,10 @@ export default async function AboutPage() {
           .
         </p>
         <p className="mt-3">
-          Film metadata, posters and stills are supplied by{" "}
-          <a
-            href="https://www.themoviedb.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent hover:opacity-80"
-          >
-            TMDB
-          </a>
-          . This product uses the TMDB API but is not endorsed or certified by TMDB. Reviews and
+          The library is built with our own tooling: film facts come from open knowledge bases
+          (Wikidata; synopses from Wikipedia, credited under their licence on each page), the
+          artwork we show is freely licensed and hosted on our own origin with its credit, and
+          the taxonomy, the criticism and the code grow here — with this community. Reviews and
           ratings are the work of their authors.
         </p>
       </section>

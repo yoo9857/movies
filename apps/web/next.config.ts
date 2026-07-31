@@ -20,7 +20,7 @@ const csp = [
   "default-src 'self'",
   isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' https://image.tmdb.org https://i.ytimg.com${uploadHost ? ` https://${uploadHost}` : ""} data: blob:`,
+  `img-src 'self' https://i.ytimg.com${uploadHost ? ` https://${uploadHost}` : ""} data: blob:`,
   "font-src 'self'",
   "connect-src 'self'",
   // trailer embeds only — loaded on click, privacy-enhanced domain
@@ -69,11 +69,6 @@ const nextConfig: NextConfig = {
     /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|Googlebot|GoogleOther|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|PerplexityBot|Amazonbot|Bytespider|meta-externalagent|CCBot|cohere-ai|Diffbot|SemrushBot|AhrefsBot|MJ12bot|DotBot/i,
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "image.tmdb.org",
-        pathname: "/t/p/**",
-      },
       {
         protocol: "https",
         hostname: "i.ytimg.com",

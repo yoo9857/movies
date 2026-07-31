@@ -116,7 +116,7 @@ export function MoviePicker({
         >
           {results.length === 0 ? (
             <li className="px-3 py-2 text-sm text-muted">
-              Nothing matches. An admin can import it from TMDB.
+              Nothing matches. If a film is missing, tell an admin — the library grows on request.
             </li>
           ) : (
             results.map((m, i) => (

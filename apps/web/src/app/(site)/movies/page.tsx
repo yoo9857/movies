@@ -336,13 +336,13 @@ export default async function MoviesPage(props: {
           className="group relative mt-8 block overflow-hidden rounded-2xl border border-line"
         >
           <div className="relative min-h-[13rem]">
-            {featured.backdropPath ? (
+            {featured.image ? (
               <Image
-                src={`https://image.tmdb.org/t/p/w780${featured.backdropPath}`}
+                src={featured.image}
                 alt=""
                 fill
                 sizes="(max-width: 1024px) 100vw, 1024px"
-                className="object-cover opacity-30 transition-opacity group-hover:opacity-40"
+                className="scale-110 object-cover opacity-25 blur-xl transition-opacity group-hover:opacity-35"
               />
             ) : (
               <div className="absolute inset-0 bg-surface" />

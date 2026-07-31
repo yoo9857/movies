@@ -8,8 +8,8 @@ import { useRef, useState } from "react";
  *
  * The fill scripts never displace artwork and the replace API existed with no
  * hand on it — this is the hand. "Swap" opens the file picker and posts the
- * file; "URL" asks for an address to import; "×" clears back to the TMDB path
- * or the house card. All three land on /api/v1/admin/movies/[id]/artwork.
+ * file; "URL" asks for an address to import; "×" clears back to the house
+ * card. All three land on /api/v1/admin/movies/[id]/artwork.
  */
 export function MovieArtworkButton({ movieId, hasOwn }: { movieId: string; hasOwn: boolean }) {
   const router = useRouter();
@@ -75,11 +75,11 @@ export function MovieArtworkButton({ movieId, hasOwn }: { movieId: string; hasOw
       {hasOwn && (
         <button
           onClick={() => {
-            if (window.confirm("Remove this film's own artwork? It falls back to TMDB or the house card."))
+            if (window.confirm("Remove this film's artwork? It falls back to the house card."))
               void send({ method: "DELETE" });
           }}
           disabled={busy}
-          title="Remove our artwork (falls back to TMDB path or house card)"
+          title="Remove our artwork (falls back to the house card)"
           className="text-xs text-muted hover:text-foreground disabled:opacity-50"
         >
           ×

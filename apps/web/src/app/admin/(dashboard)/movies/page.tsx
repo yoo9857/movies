@@ -1,8 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import Link from "next/link";
 import { MovieArtworkButton } from "@/components/admin/MovieArtworkButton";
-import { MovieImporter } from "@/components/admin/MovieImporter";
-import { RefreshMovieButton } from "@/components/admin/RefreshMovieButton";
 import { Poster } from "@/components/Poster";
 
 export const dynamic = "force-dynamic";
@@ -46,27 +44,12 @@ export default async function AdminMoviesPage(props: {
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
-  const tmdbConfigured = Boolean(process.env.TMDB_API_KEY);
   const pageHref = (p: number) =>
     `/admin/movies?${new URLSearchParams({ ...(q ? { q } : {}), ...(p > 1 ? { page: String(p) } : {}) })}`;
 
   return (
     <div>
       <h1 className="text-2xl font-bold">Movies</h1>
-
-      <section className="mt-6">
-        <h2 className="text-sm font-semibold uppercase text-muted">Import from TMDB</h2>
-        {tmdbConfigured ? (
-          <div className="mt-3">
-            <MovieImporter />
-          </div>
-        ) : (
-          <p className="mt-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-muted">
-            Set <code className="text-accent">TMDB_API_KEY</code> in{" "}
-            <code>apps/web/.env.local</code> to enable TMDB search &amp; import.
-          </p>
-        )}
-      </section>
 
       <section className="mt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -129,10 +112,7 @@ export default async function AdminMoviesPage(props: {
                     <td className="px-4 py-3 text-muted">{m.genres.join(", ") || "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-muted">{m._count.reviews}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className="inline-flex items-center gap-3">
-                        <MovieArtworkButton movieId={m.id} hasOwn={m.image != null} />
-                        {m.tmdbId != null && <RefreshMovieButton tmdbId={m.tmdbId} />}
-                      </span>
+                      <MovieArtworkButton movieId={m.id} hasOwn={m.image != null} />
                     </td>
                   </tr>
                 ))}

@@ -318,18 +318,11 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       {/* ① Backdrop hero — full bleed, rises behind the nav, lit like a screen */}
       <header className="relative -mt-[8.25rem] left-1/2 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
         <div className="cx-beam relative min-h-[22rem] overflow-hidden sm:min-h-[28rem]">
-          {movie.backdropPath ? (
+          {movie.image ? (
+            // Our own artwork, blurred up to backdrop duty — posters are
+            // portrait, and pretending otherwise reads as a stretched poster.
             <Image
-              src={`https://image.tmdb.org/t/p/w1280${movie.backdropPath}`}
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              className="object-cover opacity-40"
-            />
-          ) : movie.posterPath ? (
-            <Image
-              src={`https://image.tmdb.org/t/p/w780${movie.posterPath}`}
+              src={movie.image}
               alt=""
               fill
               priority
@@ -545,7 +538,11 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       {/* ⑧ Artwork gallery */}
       <PosterGallery
         title={movie.title}
-        artwork={movie.images.map((i) => ({ id: i.id, path: i.path, kind: i.kind }))}
+        // Only files on our own origin — the imported CDN paths in this table
+        // are historical data now, not something the page hands to a browser.
+        artwork={movie.images
+          .filter((i) => i.path.startsWith("/"))
+          .map((i) => ({ id: i.id, path: i.path, kind: i.kind }))}
       />
 
       {/* ⑨ The series this film belongs to */}

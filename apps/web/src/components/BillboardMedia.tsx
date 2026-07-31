@@ -14,13 +14,12 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 export function BillboardMedia({
-  backdropPath,
-  posterPath,
+  image,
   trailerKey,
   startAt = 8,
 }: {
-  backdropPath: string | null;
-  posterPath: string | null;
+  /** Artwork on our own storage; without one the billboard is the house field. */
+  image: string | null;
   trailerKey: string | null;
   startAt?: number;
 }) {
@@ -42,11 +41,9 @@ export function BillboardMedia({
     return () => window.clearTimeout(timer.current);
   }, [trailerKey, dismissed]);
 
-  const still = backdropPath
-    ? { src: `https://image.tmdb.org/t/p/w1280${backdropPath}`, blur: false }
-    : posterPath
-      ? { src: `https://image.tmdb.org/t/p/w780${posterPath}`, blur: true }
-      : null;
+  // Our own artwork only (posters are portrait, so they sit blurred behind the
+  // copy rather than pretending to be a backdrop). No third-party stills.
+  const still = image ? { src: image, blur: true } : null;
 
   const embed =
     trailerKey &&

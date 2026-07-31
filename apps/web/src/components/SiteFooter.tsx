@@ -26,16 +26,8 @@ export function SiteFooter() {
             Cine<span className="text-accent">Pixo</span> — a home for film-critic fandom.
           </span>
           <span>
-            This product uses the{" "}
-            <a
-              href="https://www.themoviedb.org"
-              className="underline underline-offset-2 hover:text-foreground"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              TMDB
-            </a>{" "}
-            API but is not endorsed or certified by TMDB.
+            Built, filled and argued over by this community — the library, the artwork we
+            license and host, the taxonomy and every signed review grow here, together.
           </span>
         </p>
       </div>

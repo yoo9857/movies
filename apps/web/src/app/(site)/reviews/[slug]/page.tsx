@@ -200,17 +200,17 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
     <>
       <JsonLd data={jsonLd} />
 
-      {/* ── Backdrop hero ── */}
-      {movie.backdropPath && (
+      {/* ── Backdrop hero — our own artwork only, blurred to backdrop duty ── */}
+      {movie.image && (
         <div className="relative -mt-[8.25rem] left-1/2 mb-8 w-screen -translate-x-1/2 sm:-mt-[5.5rem]">
           <div className="cx-beam relative h-56 overflow-hidden sm:h-72">
             <Image
-              src={`https://image.tmdb.org/t/p/w1280${movie.backdropPath}`}
+              src={movie.image}
               alt=""
               fill
               priority
               sizes="100vw"
-              className="object-cover opacity-30"
+              className="scale-125 object-cover opacity-25 blur-2xl"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-black/20" />
             <div className="cx-perf absolute inset-x-0 bottom-0" aria-hidden="true" />

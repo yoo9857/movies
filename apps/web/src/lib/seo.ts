@@ -55,10 +55,16 @@ export type TmdbSize =
   | "w1280"
   | "original";
 
-/** TMDB CDN URL for a stored image path. */
-export function tmdbImage(path: Nullable<string>, size: TmdbSize): string | undefined {
-  if (!path) return undefined;
-  return `https://image.tmdb.org/t/p/${size}${path}`;
+/**
+ * Retired (2026-07-31, owner's decision): the site no longer serves or cites
+ * TMDB imagery — artwork is our own (Commons-licensed files on our origin) or
+ * the house card. The stored `posterPath` columns remain as historical import
+ * data, but no URL is ever built from them again. The function keeps its shape
+ * so every caller — JSON-LD, sitemaps, feeds, share cards — goes quiet at this
+ * one choke point instead of forty call sites.
+ */
+export function tmdbImage(_path: Nullable<string>, _size: TmdbSize): string | undefined {
+  return undefined;
 }
 
 export const posterUrl = (p: Nullable<string>, size: TmdbSize = "w500") => tmdbImage(p, size);

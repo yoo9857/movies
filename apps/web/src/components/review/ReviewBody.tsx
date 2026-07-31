@@ -219,10 +219,12 @@ export function ReviewBody({ content, media }: { content: string; media: ReviewM
             </div>
           ) : null;
         const still = media.stills[b.index];
-        return still ? (
+        // Only stills on our own origin render; the CDN paths this directive
+        // used to point at are retired with the rest of TMDB (2026-07-31).
+        return still && still.startsWith("/") ? (
           <figure key={i} className="my-8">
             <Image
-              src={`https://image.tmdb.org/t/p/w780${still}`}
+              src={still}
               alt={`${media.title} still`}
               width={780}
               height={439}

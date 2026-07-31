@@ -189,27 +189,18 @@ export function Poster({
     );
   }
 
-  if (!path || !path.startsWith("/")) {
-    return (
-      <HousePoster
-        title={title}
-        year={year}
-        director={director}
-        genres={genres}
-        className={className}
-      />
-    );
-  }
-
+  // No TMDB fallback any more (2026-07-31): a film either wears artwork we
+  // host and can point at a licence for, or the house card. `path` is still
+  // accepted so forty call sites did not need to change on the day the
+  // decision landed; it is deliberately unused.
+  void path;
   return (
-    <Image
-      src={`https://image.tmdb.org/t/p/${v.file}${path}`}
-      alt={`${title} poster`}
-      width={v.w}
-      height={v.h}
-      sizes={sizes ?? `${v.w}px`}
-      priority={priority}
-      className={`object-cover ${className}`}
+    <HousePoster
+      title={title}
+      year={year}
+      director={director}
+      genres={genres}
+      className={className}
     />
   );
 }

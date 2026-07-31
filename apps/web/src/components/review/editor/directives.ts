@@ -173,13 +173,19 @@ export const StillBlock = Node.create<{ stills: string[] }>({
         `🖼 Still #${index} — this film's still, full width`,
       ];
     }
+    // Editor preview only for stills on our own origin — the retired CDN
+    // paths fall back to the label-only chip above on the page too.
+    if (!path.startsWith("/")) {
+      return [
+        "div",
+        { ...base, class: "cx-edit-media" },
+        `🖼 Still #${index} — this film's still, full width`,
+      ];
+    }
     return [
       "div",
       { ...base, class: "cx-edit-media cx-edit-media-preview" },
-      [
-        "img",
-        { src: `https://image.tmdb.org/t/p/w300${path}`, alt: "", draggable: "false" },
-      ],
+      ["img", { src: path, alt: "", draggable: "false" }],
       ["span", {}, `🖼 Still #${index} — full width on the page`],
     ];
   },

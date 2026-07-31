@@ -36,11 +36,10 @@ export function PersonPortrait({
   priority?: boolean;
 }) {
   const shell = `relative overflow-hidden rounded-full border border-line ${className}`;
-  const src =
-    person.image ??
-    (person.tmdbProfilePath
-      ? `https://image.tmdb.org/t/p/w342${person.tmdbProfilePath}`
-      : null);
+  // Our object or the monogram — the TMDB stop-gap state was retired with the
+  // rest of TMDB (2026-07-31); `tmdbProfilePath` stays in the type only so the
+  // many call sites passing it did not all change on the same day.
+  const src = person.image ?? null;
 
   if (!src) {
     return (
