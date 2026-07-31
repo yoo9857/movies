@@ -33,3 +33,9 @@ packages/db/src/generated/
 
 # locally-stored uploads (object storage takes over when configured)
 var/uploads/
+
+# persona portrait sources (registered to server storage; not repo assets)
+/Amara.png
+/Dorothy.png
+/Marcus.png
+/vera.png
