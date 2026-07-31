@@ -13,7 +13,7 @@
  * XSLT 1.0 only — that is what browsers implement.
  */
 
-/** The shared page chrome: ink field, projector gold, reel dots. */
+/** The shared page chrome: ink field, projector gold, the bubble mark. */
 const SHELL_CSS = `
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -23,9 +23,7 @@ const SHELL_CSS = `
     padding: 40px 24px 64px;
   }
   .wrap { max-width: 880px; margin: 0 auto; }
-  .dots { display: inline-flex; gap: 6px; vertical-align: middle; margin-right: 12px; }
-  .dots i { width: 9px; height: 9px; border-radius: 999px; background: #e8b34b; display: inline-block; }
-  .dots i:nth-child(2) { opacity: .6; } .dots i:nth-child(3) { opacity: .3; }
+  .marklogo { width: 44px; height: 44px; margin-right: 14px; flex: none; }
   h1 { font-size: 24px; font-weight: 700; letter-spacing: -.5px; display: flex; align-items: center; }
   h1 .gold { color: #e8b34b; }
   .sub { color: #9b99a3; margin-top: 6px; font-size: 13px; }
@@ -73,7 +71,7 @@ export const SITEMAP_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <body>
   <div class="wrap">
     <h1>
-      <span class="dots"><i/><i/><i/></span>
+      <img class="marklogo" src="/logo.png" alt=""/>
       <span>Cine<span class="gold">Pixo</span>&#160;&#8212;&#160;Sitemap</span>
     </h1>
     <p class="sub">
@@ -183,7 +181,7 @@ export const FEED_XSL = `<?xml version="1.0" encoding="UTF-8"?>
 <body>
   <div class="wrap">
     <h1>
-      <span class="dots"><i/><i/><i/></span>
+      <img class="marklogo" src="/logo.png" alt=""/>
       <span>Cine<span class="gold">Pixo</span>&#160;&#8212;&#160;RSS</span>
     </h1>
     <p class="sub"><xsl:value-of select="/rss/channel/description"/></p>

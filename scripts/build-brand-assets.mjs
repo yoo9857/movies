@@ -120,13 +120,15 @@ async function main() {
   // fresh checkout would simply not have. Four frames, because a tab paints at
   // 16 and Google's own guidance asks for a square multiple of 48.
   //
-  // On the ink ground, not transparent: gold on Chrome's light tab strip is
-  // under 2:1 contrast, while the dark tile reads in light and dark chrome
-  // alike. The knockout type is unreadable at 16px by design — the silhouette
-  // is what identifies the tab.
+  // Transparent, like icon.png. The first cut sat the mark on an ink tile for
+  // contrast on light tab strips, and everywhere a light surface showed the
+  // icon — Google results above all — the tile read as a black box stapled to
+  // the logo (2026-07-31, owner's call). The gold silhouette carries enough on
+  // its own; only the surfaces that *require* an opaque ground (Apple touch,
+  // maskable) keep the ink plate, because there the OS pins the shape.
   const icoFrames = [];
   for (const size of [16, 32, 48, 64]) {
-    icoFrames.push({ size, data: await fit(mark, size, 0.06, { ...INK, alpha: 1 }) });
+    icoFrames.push({ size, data: await fit(mark, size, 0.06) });
   }
   out.push([path.join(APP, "favicon.ico"), ico(icoFrames)]);
 
