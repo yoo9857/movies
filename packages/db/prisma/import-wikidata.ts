@@ -56,6 +56,29 @@ const SITELINKS_ONLY = process.argv.includes("--sitelinks-only");
  * be combined with GROUP_CONCAT. Aggregating here rather than per film keeps the
  * whole year to one request.
  */
+/**
+ * What counts as a film here.
+ *
+ * `wdt:P31 wd:Q11424` alone — which this asked for until Toy Story 5 turned out
+ * to be missing along with Shrek, Up, Finding Nemo and every other Pixar
+ * picture — takes only items typed *exactly* "film". Wikidata types animation
+ * as "animated film" or "anime film" instead, so 13,483 films sat outside a
+ * library of 115,834 and the omission was invisible because nothing errored.
+ *
+ * The fix is a list and not `P31/P279*`. Traversing subclasses does find the
+ * animation, but it also drags in 3,611 television films, 244 unmade "film
+ * projects", 215 miniseries and 97 television episodes, none of which is a film
+ * this site should hold. Widening by name keeps the decision legible: each id
+ * here is a thing a critic would call a film.
+ */
+const FILM_TYPES = [
+  "wd:Q11424", // film
+  "wd:Q202866", // animated film
+  "wd:Q29168811", // animated feature film
+  "wd:Q20650540", // anime film
+  "wd:Q226730", // silent film
+].join(" ");
+
 function query(year: number): string {
   return `
 SELECT ?film ?title ?imdb ?sitelinks
@@ -66,7 +89,8 @@ SELECT ?film ?title ?imdb ?sitelinks
        (GROUP_CONCAT(DISTINCT ?genreName;    separator="; ") AS ?genres)
        (SAMPLE(?originalTitle) AS ?original)
 WHERE {
-  ?film wdt:P31 wd:Q11424 ;
+  VALUES ?filmType { ${FILM_TYPES} }
+  ?film wdt:P31 ?filmType ;
         wdt:P345 ?imdb ;
         wdt:P57  ?director ;
         wikibase:sitelinks ?sitelinks .
@@ -286,7 +310,8 @@ function slugMinter(taken: Set<string>) {
 function sitelinksQuery(year: number): string {
   return `
 SELECT ?film ?sitelinks WHERE {
-  ?film wdt:P31 wd:Q11424 ; wdt:P345 ?imdb ; wdt:P57 ?director ; wikibase:sitelinks ?sitelinks .
+  VALUES ?filmType { ${FILM_TYPES} }
+  ?film wdt:P31 ?filmType ; wdt:P345 ?imdb ; wdt:P57 ?director ; wikibase:sitelinks ?sitelinks .
   FILTER(?sitelinks >= ${MIN_SITELINKS})
   FILTER EXISTS { ?film wdt:P577 ?chunkDate . FILTER(YEAR(?chunkDate) = ${year}) }
 }
