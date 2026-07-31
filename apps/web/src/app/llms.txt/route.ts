@@ -7,6 +7,7 @@
 //
 // Kept short and link-heavy by design — the long form is /llms-full.txt.
 import { prisma } from "@cinepixo/db";
+import { unstable_cache } from "next/cache";
 import { markdownResponse } from "@/lib/markdown-export";
 import { absUrl } from "@/lib/seo";
 import { CONTACT_EMAIL, SITE_ABOUT, SITE_NAME, SITE_URL } from "@/lib/site";
@@ -16,7 +17,19 @@ export const dynamic = "force-dynamic";
 /** How many of each entity to list before pointing at the index instead. */
 const LIST_LIMIT = 40;
 
+/**
+ * The whole document, cached for as long as the response header already told
+ * clients to keep it. The people list alone sorts two hundred thousand rows by
+ * credit count — 3.4 seconds measured in production — for a page whose readers
+ * are crawlers with no opinion on freshness inside half an hour.
+ */
+const llmsDoc = unstable_cache(buildDoc, ["llms-txt"], { revalidate: 1800 });
+
 export async function GET(): Promise<Response> {
+  return markdownResponse(await llmsDoc(), 1800);
+}
+
+async function buildDoc(): Promise<string> {
   const [reviews, movies, critics, people, topics, counts] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
@@ -85,7 +98,8 @@ export async function GET(): Promise<Response> {
   const [reviewCount, movieCount, criticCount, peopleCount] = counts;
   const themes = topics.filter((t) => t.kind === "THEME");
   const motifs = topics.filter((t) => t.kind === "MOTIF");
-  const year = (d: Date | null) => (d ? ` (${new Date(d).getFullYear()})` : "");
+  // Runs inside unstable_cache on a miss, so dates may already be JSON strings.
+  const year = (d: Date | string | null) => (d ? ` (${new Date(d).getFullYear()})` : "");
 
   const doc = [
     `# ${SITE_NAME}`,
@@ -195,5 +209,5 @@ export async function GET(): Promise<Response> {
     `Canonical origin: ${SITE_URL}`,
   ];
 
-  return markdownResponse(doc.filter((line) => line !== null).join("\n"), 1800);
+  return doc.filter((line) => line !== null).join("\n");
 }
