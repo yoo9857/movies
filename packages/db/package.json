@@ -22,6 +22,7 @@
     "import-wikidata-credits": "tsx prisma/import-wikidata-credits.ts",
     "import-wikidata-people": "tsx prisma/import-wikidata-people.ts",
     "import-wikidata-details": "tsx prisma/import-wikidata-details.ts",
+    "import-tmdb-posters": "tsx prisma/import-tmdb-posters.ts",
     "refresh-library": "tsx prisma/refresh-library.ts",
     "studio": "prisma studio"
   },
