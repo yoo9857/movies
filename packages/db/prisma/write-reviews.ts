@@ -16,13 +16,13 @@
 // which is what is installed and authenticated on the server. The model is asked
 // for strict JSON; anything that does not parse and validate is skipped and
 // reported, never half-written into the database.
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { z } from "zod";
 import "./env";
 import { prisma } from "../src/index";
-
-const run = promisify(execFile);
 
 function arg(name: string, fallback: number): number {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -38,27 +38,31 @@ const LIMIT = arg("limit", 1);
 const FILM = strArg("film");
 const DRY = process.argv.includes("--dry");
 
-/** The voice sheets. The username must exist — the persona seed creates them. */
+/**
+ * The voice sheets. Four fictional critics, each carrying the critical
+ * philosophy of a real one — the school is inherited, the byline is not. The
+ * username must exist; the persona seed creates them.
+ */
 const PERSONAS = [
   {
     username: "vera_lindqvist",
     voice:
-      "You are Vera Lindqvist, a formalist film critic. You analyse shot construction, editing rhythm, sound design and camera movement before theme. Cool, precise prose; concrete scenes as evidence; no plot summary beyond one orienting sentence. You never gush.",
+      "You are Vera Lindqvist, a fictional critic writing in the tradition of André Bazin. His creed is yours: cinema's vocation is reality — the long take and deep focus respect the world's ambiguity, while montage imposes meaning on it. You analyse what the camera preserves versus what the cut decides, mise-en-scène before message. Cool, precise, essayistic prose; concrete shots as evidence; one orienting sentence of plot at most. You never gush.",
   },
   {
     username: "marcus_reid",
     voice:
-      "You are Marcus Reid, a populist critic who trusts the Saturday-night audience. Warm, funny, direct prose. You judge films on the promise their genre makes and whether it is kept, and you talk about how scenes actually play in a full room.",
+      "You are Marcus Reid, a fictional critic writing in the tradition of Roger Ebert. You believe, as he did, that a movie is a machine that generates empathy — you judge films by the lives they let you live and you write for the person deciding what to watch on Friday, in warm, funny, first-person plain prose. Relative-to-genre grading: a great genre film beats a failed prestige film. Generous but never dishonest.",
   },
   {
     username: "amara_osei",
     voice:
-      "You are Amara Osei, a film historian. You place every film in a lineage — what it answers, borrows, quarrels with — naming specific earlier films and movements. Elegant essayistic prose; the history always serves the film at hand, never replaces it.",
+      "You are Amara Osei, a fictional critic writing in the tradition of Susan Sontag. Against interpretation: you refuse to melt a film down to its 'themes' and instead describe its surfaces — texture, tempo, faces, sound — until the sensuous facts make the argument. In place of a hermeneutics, an erotics of cinema. Intellectual, aphoristic prose that quotes what is on screen, not what it 'stands for'.",
   },
   {
     username: "dorothy_kwan",
     voice:
-      "You are Dorothy Kwan, the desk's skeptic. Sharp, exacting, witty prose. You re-examine reputations, name what does not work even in films you admire, and award praise in half-stars. Your ratings run a full point below the consensus unless the film earns otherwise.",
+      "You are Dorothy Kwan, a fictional critic writing in the tradition of Pauline Kael. Criticism is first-person and physiological — what the film did to you in the dark, in prose that moves like talk: fast, funny, unafraid of slang or of majority opinion. You distrust respectability, prize vitality over polish (trash has energy art forgets), and when a sacred cow wanders in you check whether it still gives milk. Your ratings run below consensus unless the film earns otherwise.",
   },
 ];
 
@@ -127,11 +131,21 @@ async function generate(persona: (typeof PERSONAS)[number], film: {
     .filter(Boolean)
     .join("\n");
 
-  const { stdout } = await run("codex", ["exec", "--skip-git-repo-check", prompt], {
-    timeout: 300_000,
-    maxBuffer: 1024 * 1024,
-  });
-  return draftSchema.parse(extractJson(stdout));
+  // Prompt in on stdin, answer out through --output-last-message: codex mixes
+  // session logs into the terminal stream, and the file is the one channel that
+  // carries nothing but the model's final message.
+  const dir = mkdtempSync(path.join(tmpdir(), "house-review-"));
+  const outFile = path.join(dir, "answer.txt");
+  try {
+    execFileSync(
+      "codex",
+      ["exec", "--skip-git-repo-check", "--output-last-message", outFile, "-"],
+      { input: prompt, timeout: 300_000, maxBuffer: 8 * 1024 * 1024, stdio: ["pipe", "ignore", "ignore"] },
+    );
+    return draftSchema.parse(extractJson(readFileSync(outFile, "utf8")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 async function main() {
