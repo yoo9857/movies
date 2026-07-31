@@ -15,23 +15,41 @@ export const dynamic = "force-dynamic";
 const ITEMS = 30;
 
 export async function GET(): Promise<Response> {
-  const reviews = await prisma.review.findMany({
-    where: { status: "PUBLISHED" },
-    orderBy: { publishedAt: "desc" },
-    take: ITEMS,
-    select: {
-      slug: true,
-      title: true,
-      excerpt: true,
-      verdict: true,
-      content: true,
-      rating: true,
-      publishedAt: true,
-      updatedAt: true,
-      author: { select: { username: true, displayName: true } },
-      movie: { select: { title: true, releaseDate: true, posterPath: true, genres: true } },
-    },
-  });
+  // Reviews and topic essays, interleaved by date — the same two kinds of
+  // published writing /feed.xml carries.
+  const [reviews, topics] = await Promise.all([
+    prisma.review.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: ITEMS,
+      select: {
+        slug: true,
+        title: true,
+        excerpt: true,
+        verdict: true,
+        content: true,
+        rating: true,
+        publishedAt: true,
+        updatedAt: true,
+        author: { select: { username: true, displayName: true } },
+        movie: { select: { title: true, releaseDate: true, posterPath: true, genres: true } },
+      },
+    }),
+    prisma.topic.findMany({
+      where: { essay: { not: null } },
+      orderBy: { createdAt: "desc" },
+      take: ITEMS,
+      select: {
+        slug: true,
+        name: true,
+        kind: true,
+        description: true,
+        essay: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+  ]);
 
   const feed = {
     version: "https://jsonfeed.org/version/1.1",
@@ -43,11 +61,53 @@ export async function GET(): Promise<Response> {
     icon: absUrl("/icon-512.png"),
     favicon: absUrl("/icon-192.png"),
     authors: [{ name: SITE_NAME, url: `${SITE_URL}/` }],
-    items: reviews.map((r) => {
-      const url = absUrl(`/reviews/${r.slug}`);
-      const author = r.author.displayName ?? r.author.username;
-      const year = r.movie.releaseDate ? new Date(r.movie.releaseDate).getFullYear() : null;
-      return {
+    items: buildItems(reviews, topics),
+  };
+
+  return new Response(JSON.stringify(feed, null, 2), {
+    headers: {
+      "Content-Type": "application/feed+json; charset=utf-8",
+      "Cache-Control": "public, max-age=600, stale-while-revalidate=86400",
+    },
+  });
+}
+
+type ReviewRow = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  verdict: string | null;
+  content: string;
+  rating: number;
+  publishedAt: Date | null;
+  updatedAt: Date;
+  author: { username: string; displayName: string | null };
+  movie: {
+    title: string;
+    releaseDate: Date | null;
+    posterPath: string | null;
+    genres: string[];
+  };
+};
+
+type TopicRow = {
+  slug: string;
+  name: string;
+  kind: "THEME" | "MOTIF";
+  description: string | null;
+  essay: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function buildItems(reviews: ReviewRow[], topics: TopicRow[]) {
+  const reviewItems = reviews.map((r) => {
+    const url = absUrl(`/reviews/${r.slug}`);
+    const author = r.author.displayName ?? r.author.username;
+    const year = r.movie.releaseDate ? new Date(r.movie.releaseDate).getFullYear() : null;
+    return {
+      date: r.publishedAt ?? new Date(0),
+      item: {
         id: url,
         url,
         title: r.title,
@@ -73,14 +133,36 @@ export async function GET(): Promise<Response> {
           film_year: year,
           markdown_url: `${url}.md`,
         },
-      };
-    }),
-  };
-
-  return new Response(JSON.stringify(feed, null, 2), {
-    headers: {
-      "Content-Type": "application/feed+json; charset=utf-8",
-      "Cache-Control": "public, max-age=600, stale-while-revalidate=86400",
-    },
+      },
+    };
   });
+
+  const topicItems = topics.map((t) => {
+    const url = absUrl(`/topics/${t.slug}`);
+    const kindLabel = t.kind === "THEME" ? "Theme" : "Motif";
+    return {
+      date: t.createdAt,
+      item: {
+        id: url,
+        url,
+        title: `${t.name} — a CinePixo ${kindLabel.toLowerCase()}`,
+        summary: t.description ?? clamp(plainText(t.essay ?? ""), 300),
+        content_text: plainText(t.essay ?? ""),
+        date_published: t.createdAt.toISOString(),
+        date_modified: t.updatedAt.toISOString(),
+        // Editorial, not signed by one member: the site is the author.
+        authors: [{ name: SITE_NAME }],
+        tags: [kindLabel, "Topics"],
+        _cinepixo: {
+          kind: t.kind,
+          markdown_url: `${url}.md`,
+        },
+      },
+    };
+  });
+
+  return [...reviewItems, ...topicItems]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, ITEMS)
+    .map((i) => i.item);
 }

@@ -38,24 +38,42 @@ function cdata(s: string): string {
 }
 
 export async function GET() {
-  const reviews = await prisma.review.findMany({
-    where: { status: "PUBLISHED" },
-    orderBy: { publishedAt: "desc" },
-    take: ITEMS,
-    select: {
-      slug: true,
-      title: true,
-      excerpt: true,
-      verdict: true,
-      content: true,
-      rating: true,
-      publishedAt: true,
-      author: { select: { username: true, displayName: true } },
-      movie: { select: { title: true, releaseDate: true, posterPath: true, genres: true } },
-    },
-  });
+  // Two kinds of writing feed this feed: signed reviews, and the editorial
+  // essays that open a topic. Both are published prose with a URL; a reader
+  // following the site should hear about either, interleaved by date.
+  const [reviews, topics] = await Promise.all([
+    prisma.review.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: ITEMS,
+      select: {
+        slug: true,
+        title: true,
+        excerpt: true,
+        verdict: true,
+        content: true,
+        rating: true,
+        publishedAt: true,
+        author: { select: { username: true, displayName: true } },
+        movie: { select: { title: true, releaseDate: true, posterPath: true, genres: true } },
+      },
+    }),
+    prisma.topic.findMany({
+      where: { essay: { not: null } },
+      orderBy: { createdAt: "desc" },
+      take: ITEMS,
+      select: {
+        slug: true,
+        name: true,
+        kind: true,
+        description: true,
+        essay: true,
+        createdAt: true,
+      },
+    }),
+  ]);
 
-  const items = reviews
+  const reviewItems = reviews
     .map((r) => {
       const url = absUrl(`/reviews/${r.slug}`);
       const author = r.author.displayName ?? r.author.username;
@@ -63,7 +81,7 @@ export async function GET() {
       const poster = posterUrl(r.movie.posterPath, "w342");
       const year = r.movie.releaseDate ? new Date(r.movie.releaseDate).getFullYear() : null;
 
-      return [
+      const entry = [
         "    <item>",
         `      <title>${xml(r.title)}</title>`,
         `      <link>${xml(url)}</link>`,
@@ -86,10 +104,43 @@ export async function GET() {
       ]
         .filter(Boolean)
         .join("\n");
-    })
+
+      return { date: r.publishedAt ?? new Date(0), entry };
+    });
+
+  const topicItems = topics.map((t) => {
+    const url = absUrl(`/topics/${t.slug}`);
+    const kindLabel = t.kind === "THEME" ? "Theme" : "Motif";
+    const summary =
+      t.description ?? clamp(plainText(t.essay ?? ""), 400) ?? t.name;
+
+    const entry = [
+      "    <item>",
+      `      <title>${xml(`${t.name} — a CinePixo ${kindLabel.toLowerCase()}`)}</title>`,
+      `      <link>${xml(url)}</link>`,
+      `      <guid isPermaLink="true">${xml(url)}</guid>`,
+      `      <description>${xml(summary)}</description>`,
+      `      <content:encoded>${cdata(exportMarkdownBody(t.essay ?? ""))}</content:encoded>`,
+      // Editorial, not signed by one member: the site is the author.
+      `      <dc:creator>${xml(SITE_NAME)}</dc:creator>`,
+      `      <category>${xml(kindLabel)}</category>`,
+      `      <category>Topics</category>`,
+      `      <pubDate>${new Date(t.createdAt).toUTCString()}</pubDate>`,
+      "    </item>",
+    ].join("\n");
+
+    return { date: t.createdAt, entry };
+  });
+
+  const merged = [...reviewItems, ...topicItems].sort(
+    (a, b) => b.date.getTime() - a.date.getTime(),
+  );
+  const items = merged
+    .slice(0, ITEMS)
+    .map((i) => i.entry)
     .join("\n");
 
-  const newest = reviews[0]?.publishedAt;
+  const newest = merged[0]?.date;
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet type="text/xsl" href="/feed.xsl"?>
