@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
 import { absUrl } from "@/lib/seo";
-import { SITE_URL } from "@/lib/site";
 
 /**
  * Paths that must never be crawled: authenticated areas, the write flow, and the
@@ -94,6 +93,9 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: absUrl("/sitemap.xml"),
-    host: SITE_URL,
+    // No `host:` — it is not in RFC 9309, was only ever a Yandex extension
+    // (retired 2018), and is the one line every validator flags as an error.
+    // The canonical origin is asserted where it belongs: canonicals and the
+    // sitemap URL above.
   };
 }
