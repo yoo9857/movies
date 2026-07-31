@@ -49,7 +49,9 @@ export default async function StatsPage() {
   const genreMap = new Map<string, number[]>();
   for (const r of reviews) {
     for (const g of r.movie.genres) {
-      genreMap.set(g, [...(genreMap.get(g) ?? []), r.rating]);
+      const bucket = genreMap.get(g);
+      if (bucket) bucket.push(r.rating);
+      else genreMap.set(g, [r.rating]);
     }
   }
   const genreRows = Array.from(genreMap, ([genre, rs]) => ({

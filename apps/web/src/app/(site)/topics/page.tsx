@@ -44,7 +44,9 @@ interface TopicCardData {
   name: string;
   kind: "THEME" | "MOTIF";
   description: string | null;
+  /** A poster strip's worth, not the whole shelf — the count is `filmCount`. */
   films: { title: string; posterPath: string | null }[];
+  filmCount: number;
 }
 
 function TopicCard({ topic }: { topic: TopicCardData }) {
@@ -81,7 +83,7 @@ function TopicCard({ topic }: { topic: TopicCardData }) {
           })}
         </span>
         <span className="font-mono text-xs text-muted">
-          {topic.films.length} {topic.films.length === 1 ? "film" : "films"}
+          {topic.filmCount} {topic.filmCount === 1 ? "film" : "films"}
         </span>
       </span>
     </Link>
@@ -96,10 +98,14 @@ export default async function TopicsPage() {
       name: true,
       kind: true,
       description: true,
+      // The card shows four thumbnails and a number: fetch a strip, count the
+      // rest. A topic can hold hundreds of films; its card must not.
       movies: {
         orderBy: { sort: "asc" },
+        take: 8,
         select: { movie: { select: { title: true, posterPath: true } } },
       },
+      _count: { select: { movies: true } },
     },
   });
 
@@ -109,6 +115,7 @@ export default async function TopicsPage() {
     kind: t.kind,
     description: t.description,
     films: t.movies.map((m) => m.movie),
+    filmCount: t._count.movies,
   }));
   const themes = cards.filter((t) => t.kind === "THEME");
   const motifs = cards.filter((t) => t.kind === "MOTIF");

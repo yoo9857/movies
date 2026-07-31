@@ -56,10 +56,15 @@ const getMovie = cache(async (param: string) => {
 
 const movieInclude = {
   // The linked Person carries the portrait we own and the page to link to.
+  // Forty names is already past what the rail or the JSON-LD can usefully say;
+  // a TMDB-seeded ensemble film carries two hundred rows nobody scrolls to.
   cast: {
     orderBy: { order: "asc" as const },
+    take: 40,
     include: { person: { select: { slug: true, image: true } } },
   },
+  // Crew needs no cap: the importers only write the handful of key jobs, so the
+  // table is bounded by role count, not by how big a production was.
   crew: { include: { person: { select: { slug: true } } } },
   // The axes we placed this film on, each with the sentence that justifies it.
   topics: {
@@ -76,7 +81,7 @@ const movieInclude = {
     },
   },
   videos: { orderBy: { sort: "asc" as const } },
-  images: { orderBy: [{ kind: "asc" as const }, { sort: "asc" as const }] },
+  images: { orderBy: [{ kind: "asc" as const }, { sort: "asc" as const }], take: 24 },
   reviews: {
     where: { status: "PUBLISHED" as const },
     orderBy: { publishedAt: "desc" as const },

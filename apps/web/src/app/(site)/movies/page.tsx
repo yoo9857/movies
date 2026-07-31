@@ -1,6 +1,7 @@
 import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -85,6 +86,56 @@ export async function generateMetadata(props: {
   });
 }
 
+/**
+ * The facet bars, and the counts pagination is built on — cached.
+ *
+ * Genres and decades are `DISTINCT` scans over the whole library for two lists
+ * that change roughly never (a new decade arrives once every ten years); an hour
+ * stale costs nothing. Counts are a `COUNT(*)` per (genre, decade) selection —
+ * over 115,000 rows for the unfiltered view — and drive `totalPages` and a
+ * display total, neither of which needs to track the import scripts minute by
+ * minute. Keyed by arguments, so every filter combination counts once per
+ * revalidation window instead of once per visitor.
+ */
+const facetLists = unstable_cache(
+  async () => {
+    const [genreRows, yearRows] = await Promise.all([
+      prisma.$queryRawUnsafe<{ genre: string }[]>(
+        `SELECT DISTINCT UNNEST("genres") AS genre FROM "Movie" ORDER BY genre`,
+      ),
+      prisma.$queryRawUnsafe<{ decade: number }[]>(
+        `SELECT DISTINCT (EXTRACT(YEAR FROM "releaseDate")::int / 10) * 10 AS decade
+         FROM "Movie" WHERE "releaseDate" IS NOT NULL ORDER BY decade DESC`,
+      ),
+    ]);
+    return {
+      genres: genreRows.map((g) => g.genre),
+      decades: yearRows.map((d) => Number(d.decade)),
+    };
+  },
+  ["movies-facets"],
+  { revalidate: 3600 },
+);
+
+const filteredCount = unstable_cache(
+  (genre: string, decade: number | null) =>
+    prisma.movie.count({
+      where: {
+        ...(genre ? { genres: { has: genre } } : {}),
+        ...(decade != null
+          ? {
+              releaseDate: {
+                gte: new Date(Date.UTC(decade, 0, 1)),
+                lt: new Date(Date.UTC(decade + 10, 0, 1)),
+              },
+            }
+          : {}),
+      },
+    }),
+  ["movies-filtered-count"],
+  { revalidate: 600 },
+);
+
 export default async function MoviesPage(props: {
   searchParams: Promise<{
     genre?: string;
@@ -149,9 +200,10 @@ export default async function MoviesPage(props: {
     reviews: { where: { status: "PUBLISHED" as const }, select: { rating: true } },
   };
 
-  // Facet lists come from distinct values, not from every row's payload.
-  const [total, rows, genreRows, yearRows] = await Promise.all([
-    prisma.movie.count({ where }),
+  // Facet lists come from distinct values, not from every row's payload — and
+  // both they and the selection count are cached above.
+  const [total, rows, facets] = await Promise.all([
+    filteredCount(genre, decade),
     prisma.movie.findMany({
       where,
       orderBy,
@@ -159,17 +211,11 @@ export default async function MoviesPage(props: {
       skip: (page - 1) * PER_PAGE,
       take: PER_PAGE,
     }),
-    prisma.$queryRawUnsafe<{ genre: string }[]>(
-      `SELECT DISTINCT UNNEST("genres") AS genre FROM "Movie" ORDER BY genre`,
-    ),
-    prisma.$queryRawUnsafe<{ decade: number }[]>(
-      `SELECT DISTINCT (EXTRACT(YEAR FROM "releaseDate")::int / 10) * 10 AS decade
-       FROM "Movie" WHERE "releaseDate" IS NOT NULL ORDER BY decade DESC`,
-    ),
+    facetLists(),
   ]);
 
-  const allGenres = genreRows.map((g) => g.genre);
-  const decades = yearRows.map((d) => Number(d.decade));
+  const allGenres = facets.genres;
+  const decades = facets.decades;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   const withScores = rows.map((m) => {

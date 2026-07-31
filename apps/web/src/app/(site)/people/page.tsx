@@ -1,5 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
@@ -89,6 +90,139 @@ const toCard = (r: Row): Card => ({
   role: r.job,
 });
 
+/**
+ * The numbers a card shows, for a bounded set of people.
+ *
+ * One film per person per row even when they are credited twice on it, and one
+ * review counted once for the same reason — a writer-director must not have
+ * their film's rating counted twice.
+ */
+const cardSql = (where: string, order: string, limit: number) => `
+  WITH picked AS (
+    SELECT p.id, p.slug, p.name, p.image, p."tmdbProfilePath"
+    FROM "Person" p
+    WHERE ${where}
+    ORDER BY ${order}
+    LIMIT ${limit}
+  )
+  SELECT k.slug, k.name, k.image, k."tmdbProfilePath",
+         COALESCE(f.films, 0) AS films,
+         COALESCE(r.reviews, 0) AS reviews,
+         r.avg,
+         j.job
+  FROM picked k
+  LEFT JOIN LATERAL (
+    SELECT count(*) AS films FROM (
+      SELECT "movieId" FROM "MovieCast" WHERE "personId" = k.id
+      UNION
+      SELECT "movieId" FROM "MovieCrew" WHERE "personId" = k.id
+    ) m
+  ) f ON true
+  LEFT JOIN LATERAL (
+    SELECT count(*) AS reviews, avg(rating) AS avg FROM (
+      SELECT DISTINCT rv.id, rv.rating
+      FROM "Review" rv
+      WHERE rv.status = 'PUBLISHED'
+        AND (rv."movieId" IN (SELECT "movieId" FROM "MovieCast" WHERE "personId" = k.id)
+          OR rv."movieId" IN (SELECT "movieId" FROM "MovieCrew" WHERE "personId" = k.id))
+    ) d
+  ) r ON true
+  LEFT JOIN LATERAL (
+    SELECT job FROM "MovieCrew" WHERE "personId" = k.id ORDER BY job LIMIT 1
+  ) j ON true
+`;
+
+const credited = `(EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."personId" = p.id)
+                   OR EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."personId" = p.id))`;
+
+/** `$1` when a specific crew job is bound; the job is always the first parameter. */
+const roleFilterFor = (activeRole: string | null) =>
+  activeRole
+    ? activeRole === "Acting"
+      ? `AND EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."personId" = p.id)`
+      : `AND EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."personId" = p.id AND w.job = $1)`
+    : "";
+
+/**
+ * The card queries, cached for ten minutes per (role, letter) selection.
+ *
+ * Each card runs three correlated laterals, so a letter page is 240 picked rows
+ * and 720 subqueries — correct, bounded, and still the most expensive thing this
+ * page does. The result changes when a review publishes or an import lands a new
+ * name; neither needs to be visible inside ten minutes. `unstable_cache` keys on
+ * the arguments, so every selection caches separately, and the rows are reduced
+ * to `Card`s first because the cache round-trips through JSON (a bigint would
+ * throw; these become numbers).
+ */
+const featuredCards = unstable_cache(
+  async (activeRole: string | null) => {
+    const rows = await prisma.$queryRawUnsafe<Row[]>(
+      cardSql(
+        `${credited} ${roleFilterFor(activeRole)} AND (
+           EXISTS (SELECT 1 FROM "MovieCast" c2 JOIN "Review" r2 ON r2."movieId" = c2."movieId"
+                    WHERE c2."personId" = p.id AND r2.status = 'PUBLISHED')
+           OR EXISTS (SELECT 1 FROM "MovieCrew" w2 JOIN "Review" r2 ON r2."movieId" = w2."movieId"
+                    WHERE w2."personId" = p.id AND r2.status = 'PUBLISHED'))`,
+        "p.name ASC",
+        FEATURED,
+      ),
+      ...(activeRole && activeRole !== "Acting" ? [activeRole] : []),
+    );
+    return rows.map(toCard);
+  },
+  ["people-featured"],
+  { revalidate: 600 },
+);
+
+const listedCards = unstable_cache(
+  async (activeRole: string | null, activeLetter: string | null) => {
+    const params: string[] = activeRole && activeRole !== "Acting" ? [activeRole] : [];
+    let where: string;
+    if (activeLetter === "#") {
+      where = `${credited} ${roleFilterFor(activeRole)} AND upper(left(p.name, 1)) !~ '^[A-Z]$'`;
+    } else if (activeLetter) {
+      params.push(activeLetter);
+      where = `${credited} ${roleFilterFor(activeRole)} AND upper(left(p.name, 1)) = $${params.length}`;
+    } else {
+      // Without a letter, the people this site has written about — a list with
+      // something on it rather than the first 240 names in the alphabet.
+      where = `${credited} ${roleFilterFor(activeRole)} AND (p.bio IS NOT NULL OR p.notes IS NOT NULL OR p.image IS NOT NULL)`;
+    }
+    const rows = await prisma.$queryRawUnsafe<Row[]>(
+      cardSql(where, "p.name ASC", activeLetter ? PER_LETTER : WRITTEN_ABOUT),
+      ...params,
+    );
+    return rows.map(toCard);
+  },
+  ["people-listed"],
+  { revalidate: 600 },
+);
+
+/**
+ * The letter bar's counts and the page's total — one aggregate over one column,
+ * but over two hundred thousand rows of it, for numbers that drift only as
+ * imports land. An hour stale is still honest.
+ */
+const letterTally = unstable_cache(
+  async () => {
+    const [rows, total] = await Promise.all([
+      prisma.$queryRaw<{ initial: string; people: bigint }[]>`
+        SELECT CASE WHEN upper(left(name, 1)) ~ '^[A-Z]$' THEN upper(left(name, 1)) ELSE '#' END AS initial,
+               count(*) AS people
+        FROM "Person"
+        GROUP BY 1
+      `,
+      prisma.person.count(),
+    ]);
+    return {
+      letters: rows.map((r) => [r.initial, Number(r.people)] as [string, number]),
+      total,
+    };
+  },
+  ["people-letter-tally"],
+  { revalidate: 3600 },
+);
+
 export async function generateMetadata(props: {
   searchParams: Promise<{ role?: string; letter?: string }>;
 }): Promise<Metadata> {
@@ -121,111 +255,16 @@ export default async function PeoplePage(props: {
   const activeRole = DEPARTMENTS.find((d) => d === role) ?? null;
   const activeLetter = LETTERS.find((l) => l === letter?.toUpperCase()) ?? null;
 
-  // Prisma's `$queryRaw` with tagged parameters, so the role and letter are bound
-  // values rather than interpolated SQL.
-  const roleFilter = activeRole
-    ? activeRole === "Acting"
-      ? `AND EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."personId" = p.id)`
-      : `AND EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."personId" = p.id AND w.job = $1)`
-    : "";
-
-  /**
-   * The numbers a card shows, for a bounded set of people.
-   *
-   * One film per person per row even when they are credited twice on it, and one
-   * review counted once for the same reason — a writer-director must not have
-   * their film's rating counted twice.
-   */
-  const cardSql = (where: string, order: string, limit: number) => `
-    WITH picked AS (
-      SELECT p.id, p.slug, p.name, p.image, p."tmdbProfilePath"
-      FROM "Person" p
-      WHERE ${where}
-      ORDER BY ${order}
-      LIMIT ${limit}
-    )
-    SELECT k.slug, k.name, k.image, k."tmdbProfilePath",
-           COALESCE(f.films, 0) AS films,
-           COALESCE(r.reviews, 0) AS reviews,
-           r.avg,
-           j.job
-    FROM picked k
-    LEFT JOIN LATERAL (
-      SELECT count(*) AS films FROM (
-        SELECT "movieId" FROM "MovieCast" WHERE "personId" = k.id
-        UNION
-        SELECT "movieId" FROM "MovieCrew" WHERE "personId" = k.id
-      ) m
-    ) f ON true
-    LEFT JOIN LATERAL (
-      SELECT count(*) AS reviews, avg(rating) AS avg FROM (
-        SELECT DISTINCT rv.id, rv.rating
-        FROM "Review" rv
-        WHERE rv.status = 'PUBLISHED'
-          AND (rv."movieId" IN (SELECT "movieId" FROM "MovieCast" WHERE "personId" = k.id)
-            OR rv."movieId" IN (SELECT "movieId" FROM "MovieCrew" WHERE "personId" = k.id))
-      ) d
-    ) r ON true
-    LEFT JOIN LATERAL (
-      SELECT job FROM "MovieCrew" WHERE "personId" = k.id ORDER BY job LIMIT 1
-    ) j ON true
-  `;
-
-  const credited = `(EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."personId" = p.id)
-                     OR EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."personId" = p.id))`;
-
-  const [featuredRows, letterRows, letterCounts, total] = await Promise.all([
-    // Most written about: driven from the review table, which has hundreds of
-    // rows rather than millions, so this stays cheap however large the library
-    // grows.
-    prisma.$queryRawUnsafe<Row[]>(
-      cardSql(
-        `${credited} ${roleFilter} AND (
-           EXISTS (SELECT 1 FROM "MovieCast" c2 JOIN "Review" r2 ON r2."movieId" = c2."movieId"
-                    WHERE c2."personId" = p.id AND r2.status = 'PUBLISHED')
-           OR EXISTS (SELECT 1 FROM "MovieCrew" w2 JOIN "Review" r2 ON r2."movieId" = w2."movieId"
-                    WHERE w2."personId" = p.id AND r2.status = 'PUBLISHED'))`,
-        "p.name ASC",
-        FEATURED,
-      ),
-      ...(activeRole && activeRole !== "Acting" ? [activeRole] : []),
-    ),
-    // One letter, one screenful. Without a letter, the people this site has
-    // written about — a list with something on it rather than the first 240
-    // names in the alphabet.
-    activeLetter
-      ? prisma.$queryRawUnsafe<Row[]>(
-          cardSql(
-            activeLetter === "#"
-              ? `${credited} ${roleFilter} AND upper(left(p.name, 1)) !~ '^[A-Z]$'`
-              : `${credited} ${roleFilter} AND upper(left(p.name, 1)) = '${activeLetter}'`,
-            "p.name ASC",
-            PER_LETTER,
-          ),
-          ...(activeRole && activeRole !== "Acting" ? [activeRole] : []),
-        )
-      : prisma.$queryRawUnsafe<Row[]>(
-          cardSql(
-            `${credited} ${roleFilter} AND (p.bio IS NOT NULL OR p.notes IS NOT NULL OR p.image IS NOT NULL)`,
-            "p.name ASC",
-            WRITTEN_ABOUT,
-          ),
-          ...(activeRole && activeRole !== "Acting" ? [activeRole] : []),
-        ),
-    // One aggregate over one column: cheap enough at any size, and it is what
-    // makes the letter bar honest about where the names are.
-    prisma.$queryRaw<{ initial: string; people: bigint }[]>`
-      SELECT CASE WHEN upper(left(name, 1)) ~ '^[A-Z]$' THEN upper(left(name, 1)) ELSE '#' END AS initial,
-             count(*) AS people
-      FROM "Person"
-      GROUP BY 1
-    `,
-    prisma.person.count(),
+  const [featured, listed, tally] = await Promise.all([
+    // Most written about: driven from the review side, which is small — and
+    // cached, like everything below, because none of it changes by the minute.
+    featuredCards(activeRole),
+    listedCards(activeRole, activeLetter),
+    letterTally(),
   ]);
 
-  const featured = featuredRows.map(toCard);
-  const listed = letterRows.map(toCard);
-  const counts = new Map(letterCounts.map((c) => [c.initial, Number(c.people)]));
+  const total = tally.total;
+  const counts = new Map(tally.letters);
 
   const params = new URLSearchParams();
   if (activeRole) params.set("role", activeRole);

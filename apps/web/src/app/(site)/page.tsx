@@ -1,6 +1,7 @@
 import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { BillboardMedia } from "@/components/BillboardMedia";
@@ -31,6 +32,89 @@ export const metadata: Metadata = pageMetadata({
   // which generates the absolute URL and dimensions itself.
 });
 
+/**
+ * The shelf's newest twelve, and the stat tiles' four counts — cached.
+ *
+ * The first version of this page selected *every* movie with its reviews joined
+ * and sliced twelve in JS, which was fine at 60 films and a 1.5s full-table scan
+ * at 115,000. The rails only ever show a handful of rows, so a handful of rows
+ * is what gets asked for; the counts change by the minute while imports run, but
+ * nobody needs them to — ten minutes stale is still an honest number.
+ *
+ * `unstable_cache` serializes through JSON, so anything date-shaped comes back a
+ * string; consumers re-wrap with `new Date()` where they need a year.
+ */
+const libraryRail = unstable_cache(
+  () =>
+    prisma.movie.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        posterPath: true,
+        image: true,
+        releaseDate: true,
+        reviews: { where: { status: "PUBLISHED" }, select: { rating: true } },
+      },
+    }),
+  ["home-library-rail"],
+  { revalidate: 300 },
+);
+
+/**
+ * Top rated, computed where the reviews are.
+ *
+ * Grouping Review by movie is bounded by how many films have been written
+ * about — a number that grows at the speed of criticism, not of imports. The
+ * weighting (shrunk toward the mean by `n / (n + 2)`) is unchanged; only the
+ * 115,000-row detour to compute it is gone.
+ */
+const topRatedRail = unstable_cache(
+  async () => {
+    const grouped = await prisma.review.groupBy({
+      by: ["movieId"],
+      where: { status: "PUBLISHED" },
+      _avg: { rating: true },
+      _count: { _all: true },
+    });
+    const ranked = grouped
+      .map((g) => ({
+        movieId: g.movieId,
+        n: g._count._all,
+        avg: g._avg.rating ?? 0,
+        weighted: (g._avg.rating ?? 0) * (g._count._all / (g._count._all + 2)),
+      }))
+      .sort((a, b) => b.weighted - a.weighted)
+      .slice(0, 10);
+    if (ranked.length === 0) return [];
+    const movies = await prisma.movie.findMany({
+      where: { id: { in: ranked.map((r) => r.movieId) } },
+      select: { id: true, slug: true, title: true, posterPath: true, image: true },
+    });
+    const byId = new Map(movies.map((m) => [m.id, m]));
+    return ranked.flatMap((r) => {
+      const m = byId.get(r.movieId);
+      return m ? [{ ...m, n: r.n, avg: r.avg }] : [];
+    });
+  },
+  ["home-top-rated"],
+  { revalidate: 300 },
+);
+
+const siteCounts = unstable_cache(
+  () =>
+    Promise.all([
+      prisma.review.count({ where: { status: "PUBLISHED" } }),
+      prisma.movie.count(),
+      prisma.critic.count(),
+      prisma.user.count(),
+    ]),
+  ["home-site-counts"],
+  { revalidate: 600 },
+);
+
 const reviewSelect = {
   slug: true,
   title: true,
@@ -54,32 +138,17 @@ const reviewSelect = {
 } as const;
 
 export default async function HomePage() {
-  const [latest, movies, critics, counts] = await Promise.all([
+  const [latest, shelf, topRated, critics, counts] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
       take: 14,
       select: reviewSelect,
     }),
-    prisma.movie.findMany({
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        posterPath: true,
-        image: true,
-        releaseDate: true,
-        createdAt: true,
-        reviews: { where: { status: "PUBLISHED" }, select: { rating: true } },
-      },
-    }),
+    libraryRail(),
+    topRatedRail(),
     prisma.critic.findMany({ orderBy: { name: "asc" }, take: 12 }),
-    Promise.all([
-      prisma.review.count({ where: { status: "PUBLISHED" } }),
-      prisma.movie.count(),
-      prisma.critic.count(),
-      prisma.user.count(),
-    ]),
+    siteCounts(),
   ]);
 
   // Billboard: newest review with a backdrop (falls back to blurred poster art).
@@ -90,17 +159,6 @@ export default async function HomePage() {
     null;
   const lead = latest.find((r) => r !== billboard && r.excerpt) ?? null;
   const railReviews = latest.filter((r) => r !== billboard && r !== lead).slice(0, 10);
-
-  // Top rated: fandom average weighted by review volume (shrunk toward the mean).
-  const topRated = movies
-    .map((m) => {
-      const n = m.reviews.length;
-      const avg = n > 0 ? m.reviews.reduce((s, r) => s + r.rating, 0) / n : null;
-      return { ...m, n, avg, weighted: avg != null ? avg * (n / (n + 2)) : -1 };
-    })
-    .filter((m) => m.n > 0)
-    .sort((a, b) => b.weighted - a.weighted)
-    .slice(0, 10);
 
   const [reviewCount, movieCount, criticCount, memberCount] = counts;
 
@@ -190,7 +248,7 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
-      ) : movies.length > 0 ? (
+      ) : movieCount > 0 ? (
         /* No reviews yet, but films are in — lead with the library so the page
            is never an empty stage. */
         <section className="pt-10">
@@ -198,8 +256,8 @@ export default async function HomePage() {
             For the love of <span className="text-accent">film criticism</span>
           </h1>
           <p className="mt-4 max-w-2xl text-muted">
-            {movies.length} films are on the shelf and nobody has written about them yet. That is
-            an opportunity.
+            {movieCount.toLocaleString("en-US")} films are on the shelf and nobody has written
+            about them yet. That is an opportunity.
           </p>
           <div className="mt-6 flex gap-3">
             <Link
@@ -238,7 +296,7 @@ export default async function HomePage() {
       {/* ── ③ In the library — posters directly under the billboard.
              Pulled up so the cards break the fold: the page announces
              "keep scrolling" by itself, and it leads with films, not text. ── */}
-      {movies.length > 0 && (
+      {shelf.length > 0 && (
         <Rail
           title="In the library"
           className="relative z-[1] -mt-4"
@@ -248,16 +306,15 @@ export default async function HomePage() {
             </Link>
           }
         >
-          {[...movies]
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-            .slice(0, 12)
-            .map((m) => {
+          {shelf.map((m) => {
               const n = m.reviews.length;
               const avgR = n > 0 ? m.reviews.reduce((s, r) => s + r.rating, 0) / n : null;
               return (
                 <Link key={m.id} href={`/movies/${m.slug}`} className="group w-40">
                   <Poster
                     path={m.posterPath}
+                    image={m.image}
+                    year={m.releaseDate ? new Date(m.releaseDate).getFullYear() : null}
                     title={m.title}
                     className="aspect-2/3 w-full rounded-lg border border-line shadow-lg transition-transform group-hover:scale-[1.03]"
                   />
@@ -360,6 +417,7 @@ export default async function HomePage() {
           <Link href={`/movies/${lead.movie.slug}`} className="hidden sm:block">
             <Poster
               path={lead.movie.posterPath}
+              image={lead.movie.image}
               title={lead.movie.title}
               className="w-36 rotate-2 rounded-xl border border-line shadow-2xl transition-transform hover:rotate-0"
             />
@@ -389,6 +447,7 @@ export default async function HomePage() {
                 <div className="relative z-[1]">
                   <Poster
                     path={m.posterPath}
+                    image={m.image}
                     title={m.title}
                     className="aspect-2/3 w-full rounded-lg border border-line shadow-lg transition-transform group-hover:scale-[1.03]"
                   />
@@ -396,7 +455,7 @@ export default async function HomePage() {
                     {m.title}
                   </p>
                   <p className="font-mono text-[11px] text-accent">
-                    ★ {toStarScale(m.avg!).toFixed(1)}
+                    ★ {toStarScale(m.avg).toFixed(1)}
                     <span className="ml-1 text-muted">· {m.n}</span>
                   </p>
                 </div>

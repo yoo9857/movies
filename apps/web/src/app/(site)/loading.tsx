@@ -1,20 +1,22 @@
+import { Skeleton, SkeletonPage, SkeletonRail } from "@/components/Skeleton";
+
+/**
+ * The (site) fallback — in practice mostly the home page, since the heavy
+ * routes each sketch their own shape. A billboard void, then a rail.
+ */
 export default function Loading() {
   return (
-    <div className="animate-pulse space-y-6" aria-label="Loading" role="status">
-      <div className="h-8 w-48 rounded bg-surface-raised" />
-      <div className="grid gap-4 sm:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex gap-4 rounded-xl border border-line bg-surface p-4">
-            <div className="h-36 w-24 shrink-0 rounded-md bg-surface-raised" />
-            <div className="flex-1 space-y-3 py-1">
-              <div className="h-3 w-24 rounded bg-surface-raised" />
-              <div className="h-4 w-3/4 rounded bg-surface-raised" />
-              <div className="h-3 w-full rounded bg-surface-raised" />
-              <div className="h-3 w-1/2 rounded bg-surface-raised" />
-            </div>
-          </div>
-        ))}
+    <SkeletonPage>
+      <div className="relative -mt-6 flex min-h-[24rem] flex-col justify-end overflow-hidden rounded-xl border border-line bg-surface p-8">
+        <Skeleton className="h-3 w-32" />
+        <Skeleton className="mt-4 h-10 w-2/3 max-w-xl" />
+        <Skeleton className="mt-4 h-4 w-1/2 max-w-md" />
+        <div className="mt-6 flex gap-3">
+          <Skeleton className="h-10 w-40 rounded-lg" />
+          <Skeleton className="h-10 w-32 rounded-lg" />
+        </div>
       </div>
-    </div>
+      <SkeletonRail />
+    </SkeletonPage>
   );
 }
