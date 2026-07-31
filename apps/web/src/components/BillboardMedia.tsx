@@ -28,6 +28,43 @@ export function BillboardMedia({
   const [sound, setSound] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  /**
+   * Reveal only on the player's own word that it is PLAYING (state 1 over the
+   * widget postMessage channel). Revealing on load-plus-delay showed whatever
+   * the player happened to be at that moment — on browsers that block or
+   * defer autoplay, that was a paused player with its big centre controls,
+   * sitting in the middle of the billboard where no crop can reach. If the
+   * film never rolls, the still simply stays; and if it has not rolled within
+   * ten seconds, the video layer is dismissed for this visit.
+   */
+  useEffect(() => {
+    if (!showVideo) return;
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== "https://www.youtube-nocookie.com") return;
+      try {
+        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        if (data?.info?.playerState === 1) setReady(true);
+      } catch {
+        /* other widgets' messages are not our business */
+      }
+    }
+    window.addEventListener("message", onMessage);
+    const giveUp = window.setTimeout(() => {
+      setReady((r) => {
+        if (!r) {
+          setDismissed(true);
+          setShowVideo(false);
+        }
+        return r;
+      });
+    }, 10_000);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearTimeout(giveUp);
+    };
+  }, [showVideo]);
 
   useEffect(() => {
     if (!trailerKey || dismissed) return;
@@ -49,11 +86,16 @@ export function BillboardMedia({
   // copy rather than pretending to be a backdrop). No third-party stills.
   const still = image ? { src: image, blur: true } : null;
 
+  // Gated on showVideo (false during SSR), so window is safe to touch here.
   const embed =
+    showVideo &&
     trailerKey &&
     `https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}` +
       `?autoplay=1&mute=${sound ? 0 : 1}&controls=0&loop=1&playlist=${encodeURIComponent(trailerKey)}` +
-      `&start=${startAt}&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`;
+      `&start=${startAt}&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3&disablekb=1&fs=0` +
+      // The widget API channel the playing-state listener above depends on.
+      // Only rendered client-side (showVideo starts false), so window exists.
+      `&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`;
 
   return (
     <>
@@ -84,15 +126,20 @@ export function BillboardMedia({
           className="pointer-events-none absolute inset-0 overflow-hidden transition-opacity duration-1000"
         >
           <iframe
+            ref={iframeRef}
             key={sound ? "sound" : "muted"}
             src={embed}
             title=""
             tabIndex={-1}
             allow="autoplay; encrypted-media"
-            /* Reveal only after the player's start-up overlay (spinner, big
-               play glyph, title flash) has had time to clear — revealing on
-               load alone showed exactly that chrome for a beat. */
-            onLoad={() => window.setTimeout(() => setReady(true), 1500)}
+            /* Handshake: tell the widget we are listening, so it starts
+               reporting player state — the reveal above waits for PLAYING. */
+            onLoad={() =>
+              iframeRef.current?.contentWindow?.postMessage(
+                JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+                "https://www.youtube-nocookie.com",
+              )
+            }
             /* 16:9 cover, scaled well past the frame so the player's own
                chrome — title bar, watch-later, branding, the transient
                play/pause flash at the edges — is cropped out of view. */
