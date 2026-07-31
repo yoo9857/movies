@@ -137,6 +137,7 @@ async function buildDoc(): Promise<string> {
     `- [People](${absUrl("/people")}): everyone credited, each with their filmography and the reviews of their work.`,
     `- [Topics & Motifs](${absUrl("/topics")}): the editorial axes the library is read along, each defined and argued film by film.`,
     `- [Critics](${absUrl("/critics")}): profiles of the critics this community follows.`,
+    `- [Free to Watch](${absUrl("/watch")}): public-domain films and theatrical trailers we host ourselves, each with its licence and source.`,
     `- [Statistics](${absUrl("/stats")}): rating distribution, genre averages, publishing activity.`,
     `- [About](${absUrl("/about")}): editorial rules and the full rating definitions.`,
     "",

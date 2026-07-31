@@ -264,6 +264,9 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         { url: absUrl("/people"), lastModified: person?.updatedAt, changeFrequency: "weekly", priority: 0.6 },
         { url: absUrl("/topics"), lastModified: topic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
         { url: absUrl("/critics"), lastModified: critic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
+        // The free shelf changes whenever an import lands a new file, and it is
+        // the one listing whose contents exist nowhere else on the web as a set.
+        { url: absUrl("/watch"), lastModified: movie?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
         { url: absUrl("/stats"), lastModified: review?.updatedAt, changeFrequency: "weekly", priority: 0.5 },
         { url: absUrl("/about"), lastModified: critic?.updatedAt, changeFrequency: "monthly", priority: 0.6 },
         ...browseStates,
