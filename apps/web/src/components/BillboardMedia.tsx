@@ -71,7 +71,10 @@ function NativeBillboard({
           priority
           sizes="100vw"
           style={{ opacity: playing ? 0 : 0.3 }}
-          className={`scale-125 object-cover blur-2xl transition-opacity duration-1000 ${playing ? "" : "cx-kenburns"}`}
+          // A brisk fade: our own file starts fast, so a second-long crossfade
+          // reads as lag rather than atmosphere. The embed path keeps its slow
+          // fade — there it is still doing the work of hiding a player.
+          className={`scale-125 object-cover blur-2xl transition-opacity duration-[400ms] ${playing ? "" : "cx-kenburns"}`}
         />
       ) : (
         <div className="absolute inset-0 bg-surface" />
@@ -88,7 +91,7 @@ function NativeBillboard({
           preload="auto"
           aria-hidden="true"
           style={{ opacity: playing ? 0.68 : 0 }}
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-1000"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-[400ms]"
           onLoadedMetadata={(e) => {
             e.currentTarget.currentTime = startAt;
           }}
