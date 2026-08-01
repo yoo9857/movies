@@ -33,6 +33,17 @@ function arg(name: string, fallback: number): number {
 const LIMIT = arg("limit", 500);
 const BATCH = Math.min(arg("batch", 40), 100);
 const DRY = process.argv.includes("--dry");
+/**
+ * Cast only, for films that already have crew.
+ *
+ * The default selection takes films with no credits at all, which was right
+ * until the P725 fix above: every animated film had received its crew and zero
+ * cast, and "no credits at all" can never select it again. This mode asks for
+ * exactly that stranded shape — crew present, cast absent — and writes only the
+ * cast, because MovieCrew has no unique key and a second crew insert would
+ * simply double every director.
+ */
+const MISSING_CAST = process.argv.includes("--missing-cast");
 
 /** Wikidata property → the job name this project already uses for it. */
 const CREW_PROPERTIES: [property: string, job: string, department: string][] = [
@@ -72,11 +83,18 @@ type Binding = Record<string, { value: string } | undefined>;
  */
 function castQuery(qids: string[]): string {
   const values = qids.map((q) => `wd:${q}`).join(" ");
+  // P161 is a live-action cast member; animation credits its performers as
+  // P725 "voice actor" instead, and the two barely overlap — Toy Story carries
+  // ten P725 and zero P161, so asking only P161 gave every animated film an
+  // empty cast list. Same statement shape, same qualifiers, one property
+  // variable: the p:/ps: split has to stay so P453/P4633/P1545 keep hanging
+  // off the right statement.
   return `
 SELECT ?film ?person ?personLabel ?charLabel ?charName ?ordinal WHERE {
   VALUES ?film { ${values} }
-  ?film p:P161 ?statement .
-  ?statement ps:P161 ?person .
+  VALUES (?castProp ?castStatement) { (p:P161 ps:P161) (p:P725 ps:P725) }
+  ?film ?castProp ?statement .
+  ?statement ?castStatement ?person .
   OPTIONAL { ?statement pq:P453 ?char }
   OPTIONAL { ?statement pq:P4633 ?charName }
   OPTIONAL { ?statement pq:P1545 ?ordinal }
@@ -168,19 +186,29 @@ async function main() {
   // Films worth filling in first: the ones carrying our own writing, then the
   // most widely documented. `sitelinks` is null for anything imported before that
   // column existed, and NULLS LAST puts those at the back rather than the front.
-  const films = await prisma.$queryRaw<{ id: string; wikidataId: string; title: string }[]>`
-    SELECT m.id, m."wikidataId", m.title
-    FROM "Movie" m
-    WHERE m."wikidataId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."movieId" = m.id)
-      AND NOT EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."movieId" = m.id)
-    ORDER BY
-      (EXISTS (SELECT 1 FROM "Review" r WHERE r."movieId" = m.id AND r.status = 'PUBLISHED')
-       OR EXISTS (SELECT 1 FROM "MovieTopic" t WHERE t."movieId" = m.id)) DESC,
-      m."wikidataSitelinks" DESC NULLS LAST,
-      m."releaseDate" DESC NULLS LAST
-    LIMIT ${LIMIT}
-  `;
+  const films = MISSING_CAST
+    ? await prisma.$queryRaw<{ id: string; wikidataId: string; title: string }[]>`
+        SELECT m.id, m."wikidataId", m.title
+        FROM "Movie" m
+        WHERE m."wikidataId" IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."movieId" = m.id)
+          AND EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."movieId" = m.id)
+        ORDER BY m."wikidataSitelinks" DESC NULLS LAST, m."releaseDate" DESC NULLS LAST
+        LIMIT ${LIMIT}
+      `
+    : await prisma.$queryRaw<{ id: string; wikidataId: string; title: string }[]>`
+        SELECT m.id, m."wikidataId", m.title
+        FROM "Movie" m
+        WHERE m."wikidataId" IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."movieId" = m.id)
+          AND NOT EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."movieId" = m.id)
+        ORDER BY
+          (EXISTS (SELECT 1 FROM "Review" r WHERE r."movieId" = m.id AND r.status = 'PUBLISHED')
+           OR EXISTS (SELECT 1 FROM "MovieTopic" t WHERE t."movieId" = m.id)) DESC,
+          m."wikidataSitelinks" DESC NULLS LAST,
+          m."releaseDate" DESC NULLS LAST
+        LIMIT ${LIMIT}
+      `;
 
   if (films.length === 0) {
     console.log("Every film with a QID already has credits. Nothing to do.");
@@ -325,7 +353,9 @@ async function main() {
             })),
           });
         }
-        if (crew.length > 0) {
+        // In --missing-cast mode the crew is already in the table, and MovieCrew
+        // has no unique key: writing it again doubles every director.
+        if (!MISSING_CAST && crew.length > 0) {
           await tx.movieCrew.createMany({
             data: crew.map((c) => ({
               movieId: film.id,
@@ -365,10 +395,26 @@ async function main() {
         if (Number.isFinite(budget) && budget > 0) data.budget = budget;
         if (Object.keys(data).length === 0) continue;
         // A figure the CHECK constraints refuse (a negative, an absurd amount)
-        // costs that film's money row and nothing else.
+        // costs that film's money row and nothing else. Fill-only for real:
+        // the plain update this used to be would have replaced a seeded film's
+        // TMDB figures with Wikidata's the day one was ever selected.
         try {
-          await prisma.movie.update({ where: { id: film.id }, data });
-          moneyFilled += 1;
+          let touched = 0;
+          if (data.revenue !== undefined) {
+            const r = await prisma.movie.updateMany({
+              where: { id: film.id, revenue: null },
+              data: { revenue: data.revenue },
+            });
+            touched += r.count;
+          }
+          if (data.budget !== undefined) {
+            const r = await prisma.movie.updateMany({
+              where: { id: film.id, budget: null },
+              data: { budget: data.budget },
+            });
+            touched += r.count;
+          }
+          if (touched > 0) moneyFilled += 1;
         } catch (e) {
           skipped.push(`${film.title} (money): ${(e as Error).message.split("\n").pop()}`);
         }
