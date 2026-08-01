@@ -164,6 +164,27 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
   const authorName = review.author.displayName ?? review.author.username;
   const trail = trailFor(review);
 
+  // One list, two homes: inline above the body on narrow screens, a sticky
+  // rail on wide ones. Links and ids are identical — only the frame differs.
+  const contentsList = (
+    <ol className="mt-2.5 space-y-1.5 text-sm">
+      {headings.map((h, i) => (
+        <li key={h.id} className={h.level === 3 ? "pl-4" : ""}>
+          <a
+            href={`#${h.id}`}
+            className="flex gap-2.5 text-muted transition-colors hover:text-accent"
+          >
+            <span className="font-mono text-[11px] tabular-nums opacity-60">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span>{h.text}</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  );
+  const hasContents = headings.length >= 3;
+
   // The page graph: the review, the film it reviews, where the page sits, and
   // what the page itself is. Cross-referenced by `@id` so a crawler resolves one
   // film and one review rather than four unrelated blobs.
@@ -227,7 +248,20 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
         </div>
       )}
 
-      <article className="mx-auto max-w-3xl">
+      {/* With a table of contents the page earns a second column: the article
+          keeps its reading measure, the contents move to a sticky rail on the
+          right, and the pair breaks out of the site's 5xl container so the
+          rail widens the canvas instead of squeezing the prose. The rail is
+          also where a future ad slot goes — under the contents, never inside
+          the article column. Without contents, the single column stands. */}
+      <div
+        className={
+          hasContents
+            ? "xl:relative xl:left-1/2 xl:w-[min(76rem,100vw-3rem)] xl:-translate-x-1/2 xl:grid xl:grid-cols-[minmax(0,1fr)_17rem] xl:gap-12"
+            : undefined
+        }
+      >
+      <article className="mx-auto w-full max-w-3xl min-w-0">
         {/* ── Masthead ── */}
         <header>
           <Breadcrumbs trail={trail} />
@@ -286,27 +320,16 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
           />
         </div>
 
-        {/* ── Contents, for reviews long enough to need them ── */}
-        {headings.length >= 3 && (
-          <nav className="mt-7 rounded-xl border border-line bg-surface px-5 py-4" aria-label="Contents">
+        {/* ── Contents, inline — only where the rail doesn't exist ── */}
+        {hasContents && (
+          <nav
+            className="mt-7 rounded-xl border border-line bg-surface px-5 py-4 xl:hidden"
+            aria-label="Contents"
+          >
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
               In this review
             </p>
-            <ol className="mt-2.5 space-y-1.5 text-sm">
-              {headings.map((h, i) => (
-                <li key={h.id} className={h.level === 3 ? "pl-4" : ""}>
-                  <a
-                    href={`#${h.id}`}
-                    className="flex gap-2.5 text-muted transition-colors hover:text-accent"
-                  >
-                    <span className="font-mono text-[11px] tabular-nums opacity-60">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span>{h.text}</span>
-                  </a>
-                </li>
-              ))}
-            </ol>
+            {contentsList}
           </nav>
         )}
 
@@ -422,6 +445,26 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
           </section>
         </footer>
       </article>
+
+      {/* ── The rail: contents that follow the reader, room for more below ── */}
+      {hasContents && (
+        <aside className="hidden xl:block" aria-label="Article tools">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] space-y-8 overflow-y-auto">
+            {/* No card here — the rail marks itself with a rule, the way the
+                rest of the chrome does. The duplicate nav is fine: one of the
+                two is always display:none. */}
+            <nav className="border-l border-line pl-4" aria-label="Contents">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                In this review
+              </p>
+              {contentsList}
+            </nav>
+            {/* Future ad slot lives here, under the contents — never inside
+                the article column. */}
+          </div>
+        </aside>
+      )}
+      </div>
     </>
   );
 }
