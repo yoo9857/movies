@@ -9,6 +9,7 @@ import {
   breadcrumbNode,
   type Crumb,
   graph,
+  hosted,
   itemListNode,
   pageMetadata,
   posterUrl,
@@ -95,7 +96,7 @@ export default async function ReviewsPage(props: {
         rating: true,
         publishedAt: true,
         author: { select: { username: true, displayName: true } },
-        movie: { select: { title: true, releaseDate: true, posterPath: true } },
+        movie: { select: { title: true, releaseDate: true, posterPath: true, image: true } },
       },
     }),
   ]);
@@ -129,7 +130,7 @@ export default async function ReviewsPage(props: {
         entries: reviews.map((r) => ({
           path: `/reviews/${r.slug}`,
           name: r.title,
-          image: posterUrl(r.movie.posterPath, "w342"),
+          image: hosted(r.movie.image) ?? posterUrl(r.movie.posterPath, "w342"),
           entityId: reviewEntityId(r.slug),
         })),
       }),

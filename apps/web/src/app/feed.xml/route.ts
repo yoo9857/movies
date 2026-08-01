@@ -9,7 +9,7 @@
 // See /feed.json for the same content without the namespace gymnastics.
 import { prisma } from "@cinepixo/db";
 import { exportMarkdownBody } from "@/lib/markdown-export";
-import { absUrl, clamp, plainText, posterUrl } from "@/lib/seo";
+import { absUrl, clamp, hosted, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 // A feed must reflect what is published right now, and building it at deploy
@@ -55,7 +55,7 @@ export async function GET() {
         rating: true,
         publishedAt: true,
         author: { select: { username: true, displayName: true } },
-        movie: { select: { title: true, releaseDate: true, posterPath: true, genres: true } },
+        movie: { select: { title: true, releaseDate: true, posterPath: true, image: true, genres: true } },
       },
     }),
     prisma.topic.findMany({
@@ -78,7 +78,7 @@ export async function GET() {
       const url = absUrl(`/reviews/${r.slug}`);
       const author = r.author.displayName ?? r.author.username;
       const summary = clamp(r.verdict ?? r.excerpt ?? plainText(r.content), 400) ?? r.title;
-      const poster = posterUrl(r.movie.posterPath, "w342");
+      const poster = hosted(r.movie.image) ?? posterUrl(r.movie.posterPath, "w342");
       const year = r.movie.releaseDate ? new Date(r.movie.releaseDate).getFullYear() : null;
 
       const entry = [
@@ -96,7 +96,7 @@ export async function GET() {
         ...r.movie.genres.map((g) => `      <category>${xml(g)}</category>`),
         r.publishedAt ? `      <pubDate>${new Date(r.publishedAt).toUTCString()}</pubDate>` : "",
         poster
-          ? `      <media:thumbnail url="${xml(poster)}" />\n      <enclosure url="${xml(poster)}" type="image/jpeg" length="0" />`
+          ? `      <media:thumbnail url="${xml(poster)}" />\n      <enclosure url="${xml(poster)}" type="${poster.endsWith(".webp") ? "image/webp" : "image/jpeg"}" length="0" />`
           : "",
         `      <media:rating scheme="urn:cinepixo">${r.rating.toFixed(1)}/10</media:rating>`,
         year ? `      <media:keywords>${xml(`${r.movie.title}, ${year}`)}</media:keywords>` : "",

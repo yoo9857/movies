@@ -14,6 +14,7 @@ import {
   breadcrumbNode,
   type Crumb,
   graph,
+  hosted,
   itemListNode,
   movieEntityId,
   pageMetadata,
@@ -299,7 +300,7 @@ export default async function MoviesPage(props: {
         entries: listed.map((m) => ({
           path: `/movies/${m.slug}`,
           name: m.title,
-          image: posterUrl(m.posterPath, "w342"),
+          image: hosted(m.image) ?? posterUrl(m.posterPath, "w342"),
           entityId: movieEntityId(m.slug),
         })),
       }),

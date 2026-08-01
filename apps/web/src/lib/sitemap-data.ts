@@ -50,7 +50,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         select: {
           slug: true,
           updatedAt: true,
-          movie: { select: { posterPath: true, backdropPath: true } },
+          movie: { select: { image: true, posterPath: true, backdropPath: true } },
         },
       });
       // Reviews are the reason the site exists, so they outrank the library.
@@ -59,7 +59,10 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         lastModified: r.updatedAt,
         changeFrequency: "monthly",
         priority: 0.9,
+        // Our own poster first — the TMDB helpers answer undefined by design,
+        // which had quietly left every review entry imageless.
         images: [
+          r.movie.image ? absUrl(r.movie.image) : undefined,
           backdropUrl(r.movie.backdropPath, "w1280"),
           posterUrl(r.movie.posterPath, "w780"),
         ].filter((u): u is string => Boolean(u)),

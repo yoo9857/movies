@@ -11,6 +11,7 @@ import { Rail } from "@/components/Rail";
 import { StarRating } from "@/components/StarRating";
 import {
   graph,
+  hosted,
   itemListNode,
   pageMetadata,
   posterUrl,
@@ -186,7 +187,7 @@ export default async function HomePage() {
         entries: latest.map((r) => ({
           path: `/reviews/${r.slug}`,
           name: r.title,
-          image: posterUrl(r.movie.posterPath, "w342"),
+          image: hosted(r.movie.image) ?? posterUrl(r.movie.posterPath, "w342"),
           entityId: reviewEntityId(r.slug),
         })),
       }),

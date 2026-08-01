@@ -28,6 +28,7 @@ import {
   breadcrumbNode,
   type Crumb,
   graph,
+  hosted,
   movieEntityId,
   movieNode,
   pageMetadata,
@@ -111,9 +112,13 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
   const [review, viewer] = await Promise.all([getReview(slug), getCurrentUser()]);
   if (!review) notFound();
 
-  // fire-and-forget view counter; render never waits or fails on it
-  prisma.review
-    .update({ where: { id: review.id }, data: { viewCount: { increment: 1 } } })
+  // Fire-and-forget view counter; render never waits or fails on it. Raw SQL
+  // rather than `update`, because Prisma's @updatedAt fires on *any* update —
+  // which made every page view bump `updatedAt`, and `updatedAt` is what the
+  // graph publishes as `dateModified` and the sitemap as `lastmod`. A timestamp
+  // that moves on every crawl is a timestamp crawlers learn to ignore.
+  prisma
+    .$executeRaw`UPDATE "Review" SET "viewCount" = "viewCount" + 1 WHERE id = ${review.id}`
     .catch(() => {});
 
   const movie = review.movie;
@@ -172,7 +177,11 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
       name: review.title,
       description: review.verdict ?? review.excerpt,
       kind: "ItemPage",
-      image: backdropUrl(movie.backdropPath, "w1280") ?? posterUrl(movie.posterPath, "w780"),
+      // Ours first — the TMDB helpers answer undefined by design.
+      image:
+        hosted(movie.image) ??
+        backdropUrl(movie.backdropPath, "w1280") ??
+        posterUrl(movie.posterPath, "w780"),
       datePublished: review.publishedAt,
       dateModified: review.updatedAt,
       hasBreadcrumb: true,

@@ -132,3 +132,32 @@ describe("VideoObject uploadDate", () => {
     expect(trailer.embedUrl).toBeUndefined();
   });
 });
+
+/**
+ * The Movie node carries the poster we host.
+ *
+ * `posterUrl` has answered undefined since TMDB paths stopped being handed to
+ * browsers — correct for the pages, but it quietly stripped `image` from every
+ * Movie node in the graph, and `itemReviewed.image` is what review snippets
+ * key on. The poster in `movie.image` is our own file and the one the page
+ * actually renders.
+ */
+describe("movieNode image", () => {
+  it("uses our hosted poster, absolutised", () => {
+    const node = movieNode(
+      { ...FILM, image: "/uploads/films/2026/07/x.webp" },
+      {},
+    ) as unknown as Record<string, unknown>;
+    expect(node.image).toEqual(["http://localhost:3000/uploads/films/2026/07/x.webp"]);
+    expect(node.thumbnailUrl).toBe("http://localhost:3000/uploads/films/2026/07/x.webp");
+  });
+
+  it("leaves a bucket URL alone rather than double-prefixing it", () => {
+    const bucket = "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/films/x.webp";
+    const node = movieNode({ ...FILM, image: bucket }, { brief: true }) as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(node.image).toBe(bucket);
+  });
+});

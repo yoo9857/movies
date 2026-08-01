@@ -476,7 +476,11 @@ const MPAA = new Set(["G", "PG", "PG-13", "R", "NC-17", "NR", "Unrated"]);
 export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonLdNode {
   const id = movieEntityId(movie.slug);
   const url = absUrl(`/movies/${movie.slug}`);
-  const poster = posterUrl(movie.posterPath, "w500");
+  // Our own poster first. `posterUrl` has answered undefined since TMDB paths
+  // stopped being handed to browsers, which quietly left every Movie node in
+  // the graph imageless — and `image` is what review snippets and movie rich
+  // results key on. The file in `movie.image` is the poster the page renders.
+  const poster = hosted(movie.image ?? null) ?? posterUrl(movie.posterPath, "w500");
 
   if (opts.brief) {
     return compact({ "@type": "Movie", "@id": id, name: movie.title, url, image: poster });
@@ -517,8 +521,12 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
       movie.originalTitle && movie.originalTitle !== movie.title ? movie.originalTitle : undefined,
     description: clamp(movie.overview ?? movie.tagline ?? undefined, 500),
     disambiguatingDescription: movie.tagline ?? undefined,
-    image: [posterUrl(movie.posterPath, "w780"), backdropUrl(movie.backdropPath)].filter(Boolean),
-    thumbnailUrl: posterUrl(movie.posterPath, "w342"),
+    image: [
+      hosted(movie.image ?? null),
+      posterUrl(movie.posterPath, "w780"),
+      backdropUrl(movie.backdropPath),
+    ].filter(Boolean),
+    thumbnailUrl: poster,
     datePublished: isoDay(movie.releaseDate),
     duration: isoDuration(movie.runtime),
     genre: movie.genres?.length ? [...movie.genres] : undefined,
@@ -558,7 +566,10 @@ export function movieNode(movie: MovieInput, opts: MovieNodeOptions = {}): JsonL
  * the local one writes `/uploads/…`, the bucket writes its own https URL — and
  * running `absUrl` over the second would produce `https://cinepixo.com/https://…`.
  */
-function hosted(url: string): string {
+export function hosted(url: string): string;
+export function hosted(url: Nullable<string>): string | undefined;
+export function hosted(url: Nullable<string>): string | undefined {
+  if (!url) return undefined;
   return /^https?:\/\//.test(url) ? url : absUrl(url);
 }
 

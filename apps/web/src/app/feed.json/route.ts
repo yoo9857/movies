@@ -7,7 +7,7 @@
 //
 // Spec: https://www.jsonfeed.org/version/1.1/
 import { prisma } from "@cinepixo/db";
-import { absUrl, clamp, plainText, posterUrl } from "@/lib/seo";
+import { absUrl, clamp, hosted, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_LANG, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export async function GET(): Promise<Response> {
         publishedAt: true,
         updatedAt: true,
         author: { select: { username: true, displayName: true } },
-        movie: { select: { title: true, releaseDate: true, posterPath: true, genres: true } },
+        movie: { select: { title: true, releaseDate: true, posterPath: true, image: true, genres: true } },
       },
     }),
     prisma.topic.findMany({
@@ -86,6 +86,7 @@ type ReviewRow = {
     title: string;
     releaseDate: Date | null;
     posterPath: string | null;
+    image: string | null;
     genres: string[];
   };
 };
@@ -115,7 +116,7 @@ function buildItems(reviews: ReviewRow[], topics: TopicRow[]) {
         // Markdown, not HTML: the review's source form, which is also what the
         // .md endpoints serve. Anything rendering it should render Markdown.
         content_text: plainText(r.content),
-        image: posterUrl(r.movie.posterPath, "w500"),
+        image: hosted(r.movie.image) ?? posterUrl(r.movie.posterPath, "w500"),
         date_published: r.publishedAt?.toISOString(),
         date_modified: r.updatedAt.toISOString(),
         authors: [{ name: author }],
