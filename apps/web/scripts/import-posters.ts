@@ -21,7 +21,6 @@ import { prisma } from "@cinepixo/db";
 import { fetchRemoteImage, processImage } from "@/lib/media/image";
 import { buildKey, putPublicObject } from "@/lib/media/storage";
 
-const API = "https://en.wikipedia.org/w/api.php";
 const USER_AGENT = "CinePixo/0.1 (https://cinepixo.com; devoh@signpost.kr) node-fetch";
 
 function arg(name: string, fallback: number): number {
@@ -39,6 +38,21 @@ const LIMIT = arg("limit", 500);
 const PACE = arg("pace", 1200);
 const FILM = strArg("film");
 const DRY = process.argv.includes("--dry");
+/**
+ * The films with no English article at all — 11,842 of them, and invisible to
+ * the default pass because it selects on `wikipediaUrl`.
+ *
+ * A poster is a picture. The Polish, Finnish or Armenian article for a film
+ * carries the same theatrical poster in its infobox as the English one would,
+ * so the only thing the English edition was ever providing here was an address.
+ * Measured over 25 of these films, some edition has a lead image for 72% of
+ * them. Nothing else about the import changes: the file is re-encoded onto our
+ * storage and credited to the rights holders, and `imageSourceUrl` records the
+ * article we actually read rather than an English one that does not exist.
+ */
+const FOREIGN = process.argv.includes("--foreign");
+/** Editions to try per film before giving up. Ordered by article length. */
+const MAX_EDITIONS = arg("editions", 6);
 
 /** "https://en.wikipedia.org/wiki/Oldboy_(2003_film)" → "Oldboy (2003 film)" */
 function articleTitle(url: string): string | null {
@@ -51,9 +65,24 @@ function articleTitle(url: string): string | null {
   }
 }
 
-/** The article's lead image at full size — the infobox poster, in practice. */
-async function leadImage(title: string): Promise<string | null> {
-  const url = new URL(API);
+/**
+ * The article's lead image at full size — the infobox poster, in practice.
+ *
+ * Takes the article URL rather than a bare title so it works against any
+ * edition: the host is where the query goes, and each Wikipedia hosts its own
+ * non-free uploads (`upload.wikimedia.org/wikipedia/fi/…`), so the poster is
+ * only reachable through the wiki that holds it.
+ */
+async function leadImage(articleUrl: string): Promise<string | null> {
+  const title = articleTitle(articleUrl);
+  if (!title) return null;
+  let host: string;
+  try {
+    host = new URL(articleUrl).host;
+  } catch {
+    return null;
+  }
+  const url = new URL(`https://${host}/w/api.php`);
   url.searchParams.set("action", "query");
   url.searchParams.set("titles", title);
   url.searchParams.set("prop", "pageimages");
@@ -64,15 +93,69 @@ async function leadImage(title: string): Promise<string | null> {
   url.searchParams.set("redirects", "1");
   url.searchParams.set("format", "json");
   url.searchParams.set("formatversion", "2");
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as {
-    query?: { pages?: { original?: { source?: string } }[] };
-  };
-  return json.query?.pages?.[0]?.original?.source ?? null;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      query?: { pages?: { original?: { source?: string } }[] };
+    };
+    const src = json.query?.pages?.[0]?.original?.source;
+    // A lead image that is not a file is not an image: some editions answer
+    // with a page name when the infobox holds no picture.
+    return src && /\.(jpe?g|png|gif|webp|svg)$/i.test(new URL(src).pathname) ? src : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every Wikipedia article for a batch of films, longest edition first.
+ *
+ * One query per batch rather than per film. `schema:isPartOf` filtered to
+ * wikipedia.org keeps out Wikiquote, Wikisource and Commons, none of which
+ * carries an infobox poster.
+ */
+async function articlesFor(qids: string[]): Promise<Map<string, string[]>> {
+  const values = qids.map((q) => `wd:${q}`).join(" ");
+  const query = `
+SELECT ?film ?wiki WHERE {
+  VALUES ?film { ${values} }
+  ?wiki schema:about ?film ;
+        schema:isPartOf ?site .
+  FILTER(CONTAINS(STR(?site), "wikipedia.org"))
+}
+`;
+  const byQid = new Map<string, string[]>();
+  try {
+    const res = await fetch("https://query.wikidata.org/sparql", {
+      method: "POST",
+      headers: {
+        Accept: "application/sparql-results+json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": USER_AGENT,
+      },
+      body: new URLSearchParams({ query }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!res.ok) return byQid;
+    const json = (await res.json()) as {
+      results: { bindings: { film?: { value: string }; wiki?: { value: string } }[] };
+    };
+    for (const b of json.results.bindings) {
+      const qid = b.film?.value.split("/").pop();
+      const wiki = b.wiki?.value;
+      if (!qid || !wiki) continue;
+      const list = byQid.get(qid);
+      if (list) list.push(wiki);
+      else byQid.set(qid, [wiki]);
+    }
+  } catch {
+    // A batch that does not answer costs those films this round, not the run.
+  }
+  return byQid;
 }
 
 async function main() {
@@ -81,10 +164,12 @@ async function main() {
   const films = await prisma.movie.findMany({
     where: FILM
       ? { slug: FILM }
-      : { image: null, wikipediaUrl: { not: null } },
+      : FOREIGN
+        ? { image: null, wikipediaUrl: null, wikidataId: { not: null } }
+        : { image: null, wikipediaUrl: { not: null } },
     orderBy: [{ wikidataSitelinks: "desc" }, { releaseDate: "desc" }],
     take: FILM ? 1 : LIMIT,
-    select: { id: true, slug: true, title: true, wikipediaUrl: true },
+    select: { id: true, slug: true, title: true, wikipediaUrl: true, wikidataId: true },
   });
   if (films.length === 0) {
     console.log("No film with an article is missing a poster. Nothing to do.");
@@ -92,18 +177,43 @@ async function main() {
   }
   console.log(`${films.length} films to try. First: ${films[0].title}\n`);
 
+  // In foreign mode the addresses come from Wikidata, sixty films to a query.
+  const articles = new Map<string, string[]>();
+  if (FOREIGN) {
+    const qids = films.map((f) => f.wikidataId!).filter(Boolean);
+    for (let i = 0; i < qids.length; i += 60) {
+      for (const [qid, wikis] of await articlesFor(qids.slice(i, i + 60))) {
+        articles.set(qid, wikis);
+      }
+    }
+    console.log(`${articles.size} of them have an article in some edition.\n`);
+  }
+
   let stored = 0;
   let noImage = 0;
   const failed: string[] = [];
 
   for (const film of films) {
-    const title = film.wikipediaUrl ? articleTitle(film.wikipediaUrl) : null;
-    if (!title) {
-      failed.push(`${film.title}: unreadable article URL`);
+    const candidates = FOREIGN
+      ? (articles.get(film.wikidataId ?? "") ?? []).slice(0, MAX_EDITIONS)
+      : film.wikipediaUrl
+        ? [film.wikipediaUrl]
+        : [];
+    if (candidates.length === 0) {
+      failed.push(`${film.title}: no article to read`);
       continue;
     }
     try {
-      const src = await leadImage(title);
+      // First edition that actually has a picture wins; the rest are not asked.
+      let src: string | null = null;
+      let from: string | null = null;
+      for (const article of candidates) {
+        src = await leadImage(article);
+        if (src) {
+          from = article;
+          break;
+        }
+      }
       if (!src) {
         noImage += 1;
       } else if (!DRY) {
@@ -121,13 +231,14 @@ async function main() {
             image: url,
             imageCredit: "© the film's rights holders",
             imageLicense: "Poster shown for identification",
-            imageSourceUrl: film.wikipediaUrl,
+            // The article we actually read, which in foreign mode is not English.
+            imageSourceUrl: from,
           },
         });
         stored += 1;
         if (stored % 25 === 0) console.log(`  ${stored} stored · ${noImage} without a lead image`);
       } else {
-        console.log(`would store: ${film.title} ← ${src}`);
+        console.log(`would store: ${film.title} ← [${new URL(from!).host.split(".")[0]}] ${src}`);
         stored += 1;
       }
     } catch (e) {
