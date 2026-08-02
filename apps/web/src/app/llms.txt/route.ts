@@ -140,6 +140,8 @@ async function buildDoc(): Promise<string> {
     `- [Free to Watch](${absUrl("/watch")}): public-domain films and theatrical trailers we host ourselves, each with its licence and source.`,
     `- [Statistics](${absUrl("/stats")}): rating distribution, genre averages, publishing activity.`,
     `- [About](${absUrl("/about")}): editorial rules and the full rating definitions.`,
+    `- [Contact](${absUrl("/contact")}): corrections, rights enquiries, account questions.`,
+    `- [Privacy](${absUrl("/privacy")}) and [Terms](${absUrl("/terms")}): what is stored, and who owns what is written.`,
     "",
     "## Reviews",
     "",

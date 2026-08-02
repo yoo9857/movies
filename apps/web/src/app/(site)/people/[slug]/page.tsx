@@ -208,16 +208,23 @@ export async function generateMetadata(props: {
     [...new Set(person.crewRoles.map((c) => c.job))][0] ??
     (person.castRoles.length > 0 ? "actor" : "film worker");
 
-  // Everything on this page that is ours: prose we wrote, a portrait we own, or
-  // criticism of their work. With none of it, the page restates a database —
-  // hundreds of thousands of those arrived with the bulk credit import, and
-  // offering them as destinations is how a domain becomes a directory. Reachable
-  // and crawled onward from; not submitted. The sitemap applies the same rule,
-  // and a page graduates the moment someone writes about one of their films.
+  // Everything on this page that is *written*: prose we wrote, or criticism of
+  // their work. With none of it, the page restates a database — hundreds of
+  // thousands of those arrived with the bulk credit import, and offering them
+  // as destinations is how a domain becomes a directory. Reachable and crawled
+  // onward from; not submitted. The sitemap applies the same rule, and a page
+  // graduates the moment someone writes about one of their films.
+  //
+  // A portrait used to count, back when 173 of them existed and importing one
+  // meant someone had chosen this person. The portrait pass then filled 27,000,
+  // and the rule that had been a proxy for editorial attention became a rule
+  // that indexed a database with faces on it — the same way "credited on
+  // anything" failed before it. An imported photograph is not a reason to read
+  // a page, so it no longer makes one indexable. It still renders.
   const reviewed = [...person.castRoles, ...person.crewRoles].some(
     (c) => c.movie.reviews.length > 0,
   );
-  const ours = Boolean(person.bio || person.notes || person.image) || reviewed;
+  const ours = Boolean(person.bio || person.notes) || reviewed;
 
   return pageMetadata({
     path: `/people/${person.slug}`,

@@ -10,6 +10,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { AdSlot } from "@/components/ads/AdSlot";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { Avatar } from "@/components/Avatar";
@@ -459,8 +460,10 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
               </p>
               {contentsList}
             </nav>
-            {/* Future ad slot lives here, under the contents — never inside
-                the article column. */}
+            {/* Under the contents, never inside the article column: the reader
+                reaches the argument before they reach anything sold. Renders
+                nothing until a publisher id and a slot id both exist. */}
+            <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_RAIL ?? ""} height={600} />
           </div>
         </aside>
       )}

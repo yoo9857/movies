@@ -112,20 +112,25 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       }));
     }
     case "people": {
-      // Credited *and* carrying something a visitor came for: our prose, a
-      // portrait we own, or a film of theirs that has been reviewed here.
+      // Credited *and* carrying something written: our prose, or a film of
+      // theirs that has been reviewed here.
       //
       // "Credited on anything" was the bar while the library was hand-built. The
       // bulk import made it useless — hundreds of thousands of people, each with
       // a name and a filmography restating a database, would be a sitemap past
       // the 50,000-URL limit and an index full of pages nobody wrote. The page
       // metadata marks the rest `noindex, follow`, exactly as it does for films.
+      //
+      // "Or a portrait we own" was the next version of that mistake, and it
+      // lasted until the portrait pass ran: 173 imported faces became 27,000,
+      // and this section went from a few hundred URLs to 27,118 pages of
+      // database with photographs attached. A portrait is not writing. It
+      // renders on the page; it does not put the page in the sitemap.
       const people = await prisma.person.findMany({
         where: {
           OR: [
             { bio: { not: null } },
             { notes: { not: null } },
-            { image: { not: null } },
             { castRoles: { some: { movie: { reviews: { some: { status: "PUBLISHED" } } } } } },
             { crewRoles: { some: { movie: { reviews: { some: { status: "PUBLISHED" } } } } } },
           ],
@@ -272,6 +277,11 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         { url: absUrl("/watch"), lastModified: movie?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
         { url: absUrl("/stats"), lastModified: review?.updatedAt, changeFrequency: "weekly", priority: 0.5 },
         { url: absUrl("/about"), lastModified: critic?.updatedAt, changeFrequency: "monthly", priority: 0.6 },
+        // The pages an ad network, a rights holder or a regulator looks for
+        // first. Rarely changed, always present.
+        { url: absUrl("/contact"), lastModified: anything, changeFrequency: "monthly", priority: 0.4 },
+        { url: absUrl("/privacy"), lastModified: anything, changeFrequency: "monthly", priority: 0.3 },
+        { url: absUrl("/terms"), lastModified: anything, changeFrequency: "monthly", priority: 0.3 },
         ...browseStates,
       ];
     }

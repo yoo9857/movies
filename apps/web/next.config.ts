@@ -14,20 +14,70 @@ const uploadHost = (() => {
   }
 })();
 
+/**
+ * Hosts AdSense needs, and nothing beyond them.
+ *
+ * Ads are the one thing on this site that runs someone else's code, so the
+ * allowance is written as an explicit list rather than a wildcard: the tag
+ * loader, the ad server, the creative frames, and the pixel hosts Google
+ * documents. The same `NEXT_PUBLIC_GOOGLE_ADSENSE_ACCOUNT` that drives
+ * /ads.txt and the account meta tag gates the whole set — with no publisher id
+ * configured the CSP stays exactly as strict as it was before ads existed,
+ * which is also what keeps development and preview builds clean.
+ */
+const adsense = process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_ACCOUNT
+  ? {
+      script: [
+        "https://pagead2.googlesyndication.com",
+        "https://partner.googleadservices.com",
+        "https://tpc.googlesyndication.com",
+        "https://www.googletagservices.com",
+        "https://adservice.google.com",
+      ],
+      frame: [
+        "https://googleads.g.doubleclick.net",
+        "https://tpc.googlesyndication.com",
+        "https://www.google.com",
+      ],
+      img: [
+        "https://pagead2.googlesyndication.com",
+        "https://googleads.g.doubleclick.net",
+        "https://tpc.googlesyndication.com",
+        "https://www.google.com",
+        "https://www.google.co.kr",
+      ],
+      connect: [
+        "https://pagead2.googlesyndication.com",
+        "https://googleads.g.doubleclick.net",
+        "https://csi.gstatic.com",
+        "https://ep1.adtrafficquality.google",
+        "https://ep2.adtrafficquality.google",
+      ],
+    }
+  : { script: [], frame: [], img: [], connect: [] };
+
+const list = (...parts: (string | string[])[]) => parts.flat().filter(Boolean).join(" ");
+
 // Content-Security-Policy — the single strongest XSS mitigation.
 // Dev needs unsafe-eval/inline for Turbopack HMR; production stays strict.
 const csp = [
   "default-src 'self'",
-  isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
+  list(
+    isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
+    adsense.script,
+  ),
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' https://i.ytimg.com${uploadHost ? ` https://${uploadHost}` : ""} data: blob:`,
+  list(
+    `img-src 'self' https://i.ytimg.com${uploadHost ? ` https://${uploadHost}` : ""} data: blob:`,
+    adsense.img,
+  ),
   // Trailer files live on our own bucket; without an explicit media-src the
   // <video> falls back to default-src and a cross-origin file is refused.
   "media-src 'self' https://pokemon-dive.us-lax-4.linodeobjects.com",
   "font-src 'self'",
-  "connect-src 'self'",
+  list("connect-src 'self'", adsense.connect),
   // trailer embeds only — loaded on click, privacy-enhanced domain
-  "frame-src https://www.youtube-nocookie.com",
+  list("frame-src https://www.youtube-nocookie.com", adsense.frame),
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

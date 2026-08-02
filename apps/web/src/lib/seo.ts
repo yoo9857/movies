@@ -267,6 +267,7 @@ export type PageKind =
   | "CollectionPage"
   | "ItemPage"
   | "AboutPage"
+  | "ContactPage"
   | "ProfilePage"
   | "SearchResultsPage";
 

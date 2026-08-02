@@ -20,6 +20,9 @@ export function SiteFooter() {
           <Link href="/critics" className="hover:text-foreground">Critics</Link>
           <Link href="/stats" className="hover:text-foreground">Stats</Link>
           <Link href="/about" className="hover:text-foreground">About</Link>
+          <Link href="/contact" className="hover:text-foreground">Contact</Link>
+          <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+          <Link href="/terms" className="hover:text-foreground">Terms</Link>
           <a href="/feed.xml" className="hover:text-foreground">RSS</a>
         </nav>
         <p className="flex flex-wrap items-center gap-x-2">
