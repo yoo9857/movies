@@ -1,7 +1,16 @@
-// Convenience redirect only — NOT a security boundary (CVE-2025-29927).
-// Real enforcement lives in src/lib/auth.ts, called inside every protected
-// route handler and admin page.
+// Two jobs, neither of them a security boundary for authentication
+// (CVE-2025-29927). Real auth enforcement lives in src/lib/auth.ts, called
+// inside every protected route handler and admin page; the redirects here only
+// spare a logged-out reader a flash of a page they cannot use.
+//
+// The second job *is* load-bearing: the Content-Security-Policy is minted here,
+// because a nonce has to be new on every request and a static header in
+// next.config cannot be. Next reads the `Content-Security-Policy` off the
+// incoming request and stamps the same nonce onto the framework bundles, so the
+// header must be set on the request as well as the response. See lib/csp.ts for
+// why the policy is nonce-based rather than a list of hosts.
 import { NextResponse, type NextRequest } from "next/server";
+import { contentSecurityPolicy, newNonce } from "@/lib/csp";
 
 const SESSION_COOKIE = "cinepixo_session";
 
@@ -17,9 +26,22 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  return NextResponse.next();
+  const nonce = newNonce();
+  const csp = contentSecurityPolicy({ nonce });
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
+  return response;
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/me/:path*", "/write"],
+  // Everything that can carry a document, which now means everything except the
+  // build output itself. Prefetches are deliberately *not* excluded: a policy
+  // that skips some navigations is a policy with holes in it, and the work is a
+  // UUID and a string join.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

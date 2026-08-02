@@ -72,3 +72,9 @@ export const VERIFICATION = {
 /// tag AdSense uses to match the site to the account — public by design, but
 /// env-driven so a fork of this code never ships someone else's id.
 export const ADSENSE_ACCOUNT = process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_ACCOUNT;
+
+/// The same id as a plain string, for the markup that has to carry it.
+/// It lives here rather than beside the loader because the ad *slot* is a
+/// client component: importing it from a module that reads `next/headers`
+/// drags a server-only API into the browser bundle and the build stops.
+export const ADSENSE_CLIENT = ADSENSE_ACCOUNT ?? "";

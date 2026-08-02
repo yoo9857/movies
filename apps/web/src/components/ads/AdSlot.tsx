@@ -11,7 +11,7 @@
 // It is also labelled. A reader is entitled to know which rectangle was paid
 // for, and Google's own policy requires that ads not be presented as content.
 import { useEffect, useRef } from "react";
-import { ADSENSE_CLIENT } from "./AdSenseScript";
+import { ADSENSE_CLIENT } from "@/lib/site";
 
 declare global {
   interface Window {

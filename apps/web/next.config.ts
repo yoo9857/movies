@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV === "development";
-
 // Uploads live either on this origin (local driver) or on an object-storage
-// host. The CSP and the image optimiser both have to know which.
+// host. The image optimiser has to know which; so does the CSP, which builds
+// its own copy of this in src/lib/csp.ts because the proxy cannot import from
+// this file.
 const uploadHost = (() => {
   const raw = process.env.S3_PUBLIC_URL;
   if (!raw) return null;
@@ -14,78 +14,11 @@ const uploadHost = (() => {
   }
 })();
 
-/**
- * Hosts AdSense needs, and nothing beyond them.
- *
- * Ads are the one thing on this site that runs someone else's code, so the
- * allowance is written as an explicit list rather than a wildcard: the tag
- * loader, the ad server, the creative frames, and the pixel hosts Google
- * documents. The same `NEXT_PUBLIC_GOOGLE_ADSENSE_ACCOUNT` that drives
- * /ads.txt and the account meta tag gates the whole set — with no publisher id
- * configured the CSP stays exactly as strict as it was before ads existed,
- * which is also what keeps development and preview builds clean.
- */
-const adsense = process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_ACCOUNT
-  ? {
-      script: [
-        "https://pagead2.googlesyndication.com",
-        "https://partner.googleadservices.com",
-        "https://tpc.googlesyndication.com",
-        "https://www.googletagservices.com",
-        "https://adservice.google.com",
-      ],
-      frame: [
-        "https://googleads.g.doubleclick.net",
-        "https://tpc.googlesyndication.com",
-        "https://www.google.com",
-      ],
-      img: [
-        "https://pagead2.googlesyndication.com",
-        "https://googleads.g.doubleclick.net",
-        "https://tpc.googlesyndication.com",
-        "https://www.google.com",
-        "https://www.google.co.kr",
-      ],
-      connect: [
-        "https://pagead2.googlesyndication.com",
-        "https://googleads.g.doubleclick.net",
-        "https://csi.gstatic.com",
-        "https://ep1.adtrafficquality.google",
-        "https://ep2.adtrafficquality.google",
-      ],
-    }
-  : { script: [], frame: [], img: [], connect: [] };
-
-const list = (...parts: (string | string[])[]) => parts.flat().filter(Boolean).join(" ");
-
-// Content-Security-Policy — the single strongest XSS mitigation.
-// Dev needs unsafe-eval/inline for Turbopack HMR; production stays strict.
-const csp = [
-  "default-src 'self'",
-  list(
-    isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
-    adsense.script,
-  ),
-  "style-src 'self' 'unsafe-inline'",
-  list(
-    `img-src 'self' https://i.ytimg.com${uploadHost ? ` https://${uploadHost}` : ""} data: blob:`,
-    adsense.img,
-  ),
-  // Trailer files live on our own bucket; without an explicit media-src the
-  // <video> falls back to default-src and a cross-origin file is refused.
-  "media-src 'self' https://pokemon-dive.us-lax-4.linodeobjects.com",
-  "font-src 'self'",
-  list("connect-src 'self'", adsense.connect),
-  // trailer embeds only — loaded on click, privacy-enhanced domain
-  list("frame-src https://www.youtube-nocookie.com", adsense.frame),
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
-
+// The Content-Security-Policy is NOT here. It is minted per request in
+// src/proxy.ts, because AdSense only supports a nonce-based policy and a nonce
+// must be new on every request — see src/lib/csp.ts. Everything below is a
+// header whose value never changes, which is exactly what this hook is for.
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

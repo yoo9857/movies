@@ -138,7 +138,7 @@ canonicalise away.
 - JWT sessions: httpOnly + SameSite=Lax cookies, HS256 pinned, fresh DB role check per request
 - CSRF: SameSite cookie + Origin header check on all mutations
 - Rate limiting on login (per-IP and per-account), TMDB proxy routes
-- CSP, HSTS, nosniff, frame-deny headers; `poweredByHeader` off
+- CSP minted per request in `proxy.ts` around a fresh nonce (`src/lib/csp.ts`): `script-src` is `'nonce-…' 'strict-dynamic'`, never a host list — the shape AdSense documents as the only supported one. HSTS, nosniff, frame-deny stay static in `next.config.ts`
 - Markdown rendered by react-markdown — raw HTML never reaches the DOM
 - zod validation on every input; identical errors for unknown email vs wrong password
 - `npm audit`: 0 vulnerabilities (patched transitives pinned via `overrides`)

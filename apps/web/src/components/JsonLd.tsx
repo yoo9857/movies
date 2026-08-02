@@ -4,6 +4,7 @@
 // title containing "</script>" would end the element and everything after it
 // becomes markup. JSON.stringify does not escape for HTML, so we do — and doing
 // it here, once, means no page can forget.
+import { headers } from "next/headers";
 import type { JsonLdNode } from "@/lib/seo";
 
 // `<` and `>` close tags, `&` starts an entity, and U+2028/U+2029 are legal
@@ -27,11 +28,19 @@ function serialize(data: JsonLdNode): string {
  * One `<script type="application/ld+json">` per page, holding a single `@graph`
  * built by the helpers in `lib/seo`. Crawlers merge multiple blocks fine, but a
  * single graph is what lets nodes reference each other by `@id`.
+ *
+ * The nonce is not decoration. Since the policy went nonce-based (lib/csp.ts),
+ * `'unsafe-inline'` is ignored by every browser that matters, and a browser
+ * that enforces script-src on a `ld+json` block drops it and logs a violation
+ * on every page. Crawlers do not enforce CSP, so this never cost us a rich
+ * result — it would have cost every reader a console full of noise.
  */
-export function JsonLd({ data }: { data: JsonLdNode }) {
+export async function JsonLd({ data }: { data: JsonLdNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <script
       type="application/ld+json"
+      nonce={nonce}
       // escaped above — the only safe way to emit JSON-LD
       dangerouslySetInnerHTML={{ __html: serialize(data) }}
     />
