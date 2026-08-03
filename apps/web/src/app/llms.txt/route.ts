@@ -26,7 +26,8 @@ const LIST_LIMIT = 40;
 const llmsDoc = unstable_cache(buildDoc, ["llms-txt"], { revalidate: 1800 });
 
 export async function GET(): Promise<Response> {
-  return markdownResponse(await llmsDoc(), 1800);
+  // No canonical: this document is not a rendition of a page, it *is* the page.
+  return markdownResponse(await llmsDoc(), { maxAge: 1800 });
 }
 
 async function buildDoc(): Promise<string> {

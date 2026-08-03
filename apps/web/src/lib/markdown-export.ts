@@ -586,8 +586,26 @@ export function topicToMarkdown(topic: TopicExport): string {
   return `${lines.filter((l) => l !== null).join("\n")}\n`;
 }
 
-/** Response shape shared by every Markdown endpoint. */
-export function markdownResponse(body: string, maxAge = 600): Response {
+/**
+ * Response shape shared by every Markdown endpoint.
+ *
+ * `canonicalPath` is the HTML page this document is a rendition of, and passing
+ * it is what keeps the pair from competing. Every review, film, person and topic
+ * exists at two crawlable URLs — `/reviews/x` and `/reviews/x.md` — with the same
+ * text and, until now, no statement about which one is the address. Markdown
+ * cannot carry a `<link rel="canonical">`, so the answer is the HTTP header form:
+ * the same mechanism a PDF uses, understood by Google since 2011.
+ *
+ * It is deliberately still `index, follow` rather than `noindex`. These documents
+ * exist to be fetched and quoted by answer engines — that is the whole reason
+ * they are outside `/api/` and allowed in robots.txt — and `noindex` would tell
+ * some of those crawlers to drop them. A canonical consolidates the ranking onto
+ * the HTML without making the Markdown unreadable.
+ */
+export function markdownResponse(
+  body: string,
+  { maxAge = 600, canonicalPath }: { maxAge?: number; canonicalPath?: string } = {},
+): Response {
   return new Response(body, {
     headers: {
       // Not text/html, so nothing in a review body can execute on our origin.
@@ -595,6 +613,9 @@ export function markdownResponse(body: string, maxAge = 600): Response {
       "Content-Type": "text/markdown; charset=utf-8",
       "Cache-Control": `public, max-age=${maxAge}, stale-while-revalidate=86400`,
       "X-Robots-Tag": "index, follow",
+      ...(canonicalPath
+        ? { Link: `<${SITE_URL}${canonicalPath}>; rel="canonical"` }
+        : {}),
     },
   });
 }

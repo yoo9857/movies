@@ -1,17 +1,50 @@
 import { describe, expect, it } from "vitest";
 import {
   exportMarkdownBody,
+  markdownResponse,
   movieToMarkdown,
   personToMarkdown,
   topicToMarkdown,
 } from "@/lib/markdown-export";
 import { plainText } from "@/lib/seo";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * What leaves this origin: feed.xml's content:encoded, the .md endpoints and
  * llms-full.txt all ship the review body to consumers that have no idea what a
  * `:::still` is and no origin to resolve `/uploads/…` against.
  */
+
+/**
+ * Every review, film, person and topic is crawlable at two URLs — the page and
+ * its `.md` rendition — with the same text. Markdown cannot carry a
+ * `<link rel="canonical">`, so the pair only stops competing if the HTTP header
+ * says which one is the address. Losing this line silently splits the ranking
+ * signals of every document on the site, which is exactly the kind of regression
+ * nobody notices.
+ */
+describe("markdownResponse", () => {
+  it("names the HTML page as canonical, in the header form", () => {
+    const res = markdownResponse("# Body\n", { canonicalPath: "/reviews/a-slug" });
+    // Built from SITE_URL rather than a literal host: the test environment has no
+    // NEXT_PUBLIC_SITE_URL, and hardcoding production here would pass for the
+    // wrong reason on a preview deploy.
+    expect(res.headers.get("Link")).toBe(`<${SITE_URL}/reviews/a-slug>; rel="canonical"`);
+  });
+
+  it("stays indexable, because these documents exist to be quoted", () => {
+    const res = markdownResponse("# Body\n", { canonicalPath: "/movies/parasite-2019" });
+    expect(res.headers.get("X-Robots-Tag")).toBe("index, follow");
+    expect(res.headers.get("Content-Type")).toBe("text/markdown; charset=utf-8");
+  });
+
+  it("sends no canonical for a document that is not a rendition of a page", () => {
+    // llms.txt is itself the page; pointing it at another URL would be a lie.
+    const res = markdownResponse("# llms\n", { maxAge: 1800 });
+    expect(res.headers.get("Link")).toBeNull();
+    expect(res.headers.get("Cache-Control")).toContain("max-age=1800");
+  });
+});
 
 describe("exportMarkdownBody", () => {
   it("absolutises uploaded images and internal links", () => {

@@ -57,5 +57,6 @@ export async function GET(
       crew: movie.crew.map((c) => ({ ...c, personSlug: c.person?.slug })),
       topics: movie.topics.map((mt) => ({ ...mt.topic, note: mt.note })),
     }),
+    { canonicalPath: `/movies/${movie.slug}` },
   );
 }

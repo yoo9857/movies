@@ -100,5 +100,6 @@ export async function GET(
         author: r.author,
       })),
     }),
+    { canonicalPath: `/people/${person.slug}` },
   );
 }

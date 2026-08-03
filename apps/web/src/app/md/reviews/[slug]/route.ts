@@ -31,5 +31,7 @@ export async function GET(
   });
   if (!review) return notFoundMarkdown();
 
-  return markdownResponse(reviewToMarkdown(review));
+  return markdownResponse(reviewToMarkdown(review), {
+    canonicalPath: `/reviews/${review.slug}`,
+  });
 }

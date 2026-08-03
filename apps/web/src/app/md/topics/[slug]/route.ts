@@ -54,5 +54,6 @@ export async function GET(
       updatedAt: topic.updatedAt,
       films,
     }),
+    { canonicalPath: `/topics/${topic.slug}` },
   );
 }

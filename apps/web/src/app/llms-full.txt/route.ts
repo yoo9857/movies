@@ -174,5 +174,6 @@ export async function GET(): Promise<Response> {
     `Generated from ${absUrl("/")} · see also ${absUrl("/llms.txt")}`,
   ];
 
-  return markdownResponse(doc.join("\n"), 1800);
+  // No canonical: this document is not a rendition of a page, it *is* the page.
+  return markdownResponse(doc.join("\n"), { maxAge: 1800 });
 }
