@@ -215,6 +215,43 @@ describe("Movie sanity constraints", () => {
    */
   const OURS = "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/x.webm";
 
+  /**
+   * The poster answers to the same rule as the videos.
+   *
+   * It did not always: `image` took `^/` alone, because when it was added "ours"
+   * and "on this filesystem" were the same sentence. Moving uploads to the
+   * bucket broke that equivalence, not the reason behind it — a hotlinked poster
+   * is still the thing this refuses.
+   */
+  it("image must be our origin or our bucket", async () => {
+    await expect(
+      movie({ image: "/uploads/films/2026/08/a.webp", imageSourceUrl: "https://commons.wikimedia.org/wiki/File:A" }),
+    ).resolves.toBeTruthy();
+    await expect(
+      movie({
+        image: "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/films/2026/08/a.webp",
+        imageSourceUrl: "https://commons.wikimedia.org/wiki/File:A",
+      }),
+    ).resolves.toBeTruthy();
+    await rejects(
+      () =>
+        movie({
+          image: "https://upload.wikimedia.org/wikipedia/commons/a/a6/a.webp",
+          imageSourceUrl: "https://commons.wikimedia.org/wiki/File:A",
+        }),
+      SQLSTATE.check,
+    );
+    // Another bucket is not our bucket, however plausible the host looks.
+    await rejects(
+      () =>
+        movie({
+          image: "https://pokemon-dive.us-lax-4.linodeobjects.com/someone-else/a.webp",
+          imageSourceUrl: "https://commons.wikimedia.org/wiki/File:A",
+        }),
+      SQLSTATE.check,
+    );
+  });
+
   it.each([["trailerFile"], ["filmFile"]])("%s must be our origin or our bucket", async (col) => {
     await expect(movie({ [col]: "/uploads/trailers/2026/07/a.webm" })).resolves.toBeTruthy();
     await expect(movie({ [col]: OURS })).resolves.toBeTruthy();
