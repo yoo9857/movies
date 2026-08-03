@@ -51,13 +51,18 @@ same way: a migration directory with hand-written SQL.
 `pg_dump` inside the container so client and server versions always match, and it
 refuses to publish a dump that `pg_restore --list` cannot read.
 
-**The uploads archive is pruned on its own, far shorter clock**
-(`UPLOADS_RETAIN_DAYS`, 3). While the local storage driver is in use, images are
-not in the database — so the script also tars `var/uploads`, and that tar is a
-*full* copy every night. After the poster and portrait passes it crossed 7 GB,
-which on the dumps' 14-day retention would have been ~100 GB on a 157 GB disk
-shared with ten other sites. Raise it once the bucket is the durable copy and
-the archive stops being taken at all.
+**The uploads archive is taken only while the local storage driver is in use,**
+and pruned on its own far shorter clock (`UPLOADS_RETAIN_DAYS`, 3). While uploads
+are on disk they are not in the database, so a dump that restores perfectly still
+loses every picture — hence a *full* tar of `var/uploads` every night. After the
+poster and portrait passes that tar crossed 7 GB, which on the dumps' 14-day
+retention would have been ~100 GB on a 157 GB disk shared with ten other sites.
+
+Since 2026-08-03 uploads live in the `pokemon-dive` bucket, so the script checks
+for `S3_BUCKET` in `apps/web/.env.local` and skips the archive: the bucket is the
+durable copy and a nightly tar of the same bytes is redundant. The local tree is
+still there and still served — **skipping its backup and deleting it are separate
+decisions, and only one of them is reversible.**
 
 Installed as a cron entry:
 

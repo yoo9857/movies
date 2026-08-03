@@ -55,12 +55,23 @@ echo "[backup] wrote $final ($size, $entries entries)"
 
 # ── Uploads ──────────────────────────────────────────────────────
 # User images (avatars, review images) live on disk, not in the database — a
-# dump that restores perfectly still loses every picture without this. Only
-# taken when the local driver is in use; with object storage the bucket is the
-# durable copy. Objects are immutable and never renamed, so tar needs no
-# consistency tricks.
+# dump that restores perfectly still loses every picture without this. Objects
+# are immutable and never renamed, so tar needs no consistency tricks.
+#
+# "Only taken when the local driver is in use" is what this always claimed, and
+# for a long time it was not what it did: the test was whether the directory had
+# anything in it, so after the uploads were migrated to the bucket it would have
+# gone on tarring 7.4 GB of second copies every night. The driver is now actually
+# consulted — S3_BUCKET in the app's env means the bucket is the durable copy and
+# this archive is redundant by definition.
+#
+# The tree itself is deliberately left alone. Skipping its backup and deleting it
+# are separate decisions, and only one of them is reversible.
 UPLOADS="${UPLOAD_DIR:-$HOME/cinepixo/var/uploads}"
-if [ -d "$UPLOADS" ] && [ -n "$(ls -A "$UPLOADS" 2>/dev/null)" ]; then
+APP_ENV="${APP_ENV_FILE:-$HOME/cinepixo/apps/web/.env.local}"
+if [ -f "$APP_ENV" ] && grep -qE '^S3_BUCKET=.+' "$APP_ENV"; then
+  echo "[backup] object storage is configured — skipping the uploads archive"
+elif [ -d "$UPLOADS" ] && [ -n "$(ls -A "$UPLOADS" 2>/dev/null)" ]; then
   uploads_final="$DEST/cinepixo-uploads-$stamp.tar.gz"
   tar -czf "$uploads_final" -C "$(dirname "$UPLOADS")" "$(basename "$UPLOADS")"
   # Same rule as the dump: verify before counting it as a backup.
