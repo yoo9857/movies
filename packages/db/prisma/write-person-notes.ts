@@ -93,6 +93,8 @@ interface Credit {
   year: number | null;
   job: string;
   reviewed: boolean;
+  /** Wikidata sitelink count — how widely the film is written about. */
+  fame: number | null;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -103,7 +105,28 @@ function readableList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-function compose(name: string, credits: Credit[]): string | null {
+/**
+ * The entry point: which of their films to watch first.
+ *
+ * Prefers one we have reviewed — then the note points at our own writing — and
+ * otherwise the most widely documented, which is what `wikidataSitelinks`
+ * measures. This is the one clause not already visible elsewhere on the page: the
+ * filmography lists everything in release order and says nothing about where to
+ * start.
+ */
+function entryPoint(credits: Credit[]): Credit | null {
+  const reviewed = credits.filter((c) => c.reviewed);
+  const pool = reviewed.length > 0 ? reviewed : credits;
+  return (
+    [...pool].filter((c) => c.fame !== null).sort((a, b) => (b.fame ?? 0) - (a.fame ?? 0))[0] ?? null
+  );
+}
+
+function compose(
+  name: string,
+  credits: Credit[],
+  collaborator: { name: string; shared: number } | null,
+): string | null {
   const films = new Set(credits.map((c) => c.movieId));
   if (films.size < MIN_FILMS) return null;
 
@@ -158,11 +181,18 @@ function compose(name: string, credits: Credit[]): string | null {
     sentences.push(`Credited here also as ${readableList(others)}.`);
   }
 
-  const reviewed = credits.filter((c) => c.reviewed);
-  if (reviewed.length > 0) {
-    const titles = [...new Set(reviewed.map((c) => c.title))].slice(0, 3);
+  // The two clauses the field was named for, and the two a reader cannot get by
+  // reading the rest of the page: who they keep working with, and where to start.
+  if (collaborator && collaborator.shared >= 2) {
     sentences.push(
-      `${reviewed.length === 1 ? "One of those films has" : `${titles.length} of those films have`} been reviewed here: ${readableList(titles)}.`,
+      `Works most often with ${collaborator.name} — ${plural(collaborator.shared, "film")} together here.`,
+    );
+  }
+
+  const start = entryPoint(credits);
+  if (start) {
+    sentences.push(
+      `Start with ${start.title}${start.year ? ` (${start.year})` : ""}${start.reviewed ? ", reviewed here" : ""}.`,
     );
   }
 
@@ -179,6 +209,7 @@ async function creditsFor(personId: string): Promise<Credit[]> {
           select: {
             title: true,
             releaseDate: true,
+            wikidataSitelinks: true,
             reviews: { where: { status: "PUBLISHED" }, select: { id: true } },
           },
         },
@@ -193,6 +224,7 @@ async function creditsFor(personId: string): Promise<Credit[]> {
           select: {
             title: true,
             releaseDate: true,
+            wikidataSitelinks: true,
             reviews: { where: { status: "PUBLISHED" }, select: { id: true } },
           },
         },
@@ -202,7 +234,12 @@ async function creditsFor(personId: string): Promise<Credit[]> {
 
   const row = (
     movieId: string,
-    m: { title: string; releaseDate: Date | null; reviews: { id: string }[] },
+    m: {
+      title: string;
+      releaseDate: Date | null;
+      wikidataSitelinks: number | null;
+      reviews: { id: string }[];
+    },
     job: string,
   ): Credit => ({
     movieId,
@@ -210,12 +247,53 @@ async function creditsFor(personId: string): Promise<Credit[]> {
     year: m.releaseDate ? new Date(m.releaseDate).getUTCFullYear() : null,
     job,
     reviewed: m.reviews.length > 0,
+    fame: m.wikidataSitelinks,
   });
 
   return [
     ...cast.map((c) => row(c.movieId, c.movie, "Actor")),
     ...crew.map((c) => row(c.movieId, c.movie, c.job)),
   ];
+}
+
+/**
+ * Who they work with most, over the films we hold.
+ *
+ * Counted over shared *films* rather than shared credits, so a person credited
+ * twice on one picture is one collaboration. Two films is the floor: on a library
+ * this size one shared film is a coincidence — the same rule the person page's own
+ * Collaborators section applies.
+ */
+async function topCollaborator(
+  personId: string,
+  movieIds: string[],
+): Promise<{ name: string; shared: number } | null> {
+  if (movieIds.length < 2) return null;
+
+  const [cast, crew] = await Promise.all([
+    prisma.movieCast.findMany({
+      where: { movieId: { in: movieIds }, personId: { not: null, notIn: [personId] } },
+      select: { movieId: true, person: { select: { name: true } } },
+    }),
+    prisma.movieCrew.findMany({
+      where: { movieId: { in: movieIds }, personId: { not: null, notIn: [personId] } },
+      select: { movieId: true, person: { select: { name: true } } },
+    }),
+  ]);
+
+  const films = new Map<string, Set<string>>();
+  for (const r of [...cast, ...crew]) {
+    const name = r.person?.name;
+    if (!name) continue;
+    const set = films.get(name) ?? new Set<string>();
+    set.add(r.movieId);
+    films.set(name, set);
+  }
+
+  const best = [...films.entries()]
+    .map(([name, set]) => ({ name, shared: set.size }))
+    .sort((a, b) => b.shared - a.shared || a.name.localeCompare(b.name))[0];
+  return best && best.shared >= 2 ? best : null;
 }
 
 async function main() {
@@ -245,7 +323,11 @@ async function main() {
       skipped++;
       continue;
     }
-    const note = compose(p.name, await creditsFor(p.id));
+    const credits = await creditsFor(p.id);
+    const collaborator = await topCollaborator(p.id, [
+      ...new Set(credits.map((c) => c.movieId)),
+    ]);
+    const note = compose(p.name, credits, collaborator);
     if (!note) {
       console.log(`- ${p.slug}: too little to say honestly, skipped`);
       skipped++;
