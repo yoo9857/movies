@@ -58,6 +58,17 @@ const DRY = has("dry");
 const LIMIT = Number(val("limit") ?? 500);
 const ONLY_TABLE = val("table");
 const ONLY_COLUMN = val("column");
+/**
+ * How many files are in flight at once.
+ *
+ * Sequential, this pass managed one file per second: a small object spends
+ * almost all of its time waiting on three round trips (PUT, verifying HEAD,
+ * UPDATE), not on bytes. At that rate the 89,000 remaining files were a
+ * twenty-five hour job. The bucket advertises 2,000 requests per second, so the
+ * ceiling here is our own politeness rather than theirs — and the database sees
+ * one single-row UPDATE per file either way.
+ */
+const CONCURRENCY = Number(val("concurrency") ?? 12);
 
 const S3_ENDPOINT = process.env.S3_ENDPOINT;
 const S3_REGION = process.env.S3_REGION;
@@ -115,6 +126,25 @@ const contentType = (key: string) =>
 
 const gb = (n: number) => (n / 1_073_741_824).toFixed(2);
 
+/**
+ * Run `fn` over `items` with at most `n` in flight.
+ *
+ * Workers pull from a shared cursor rather than being handed equal slices, so
+ * one slow 180 MB video cannot leave eleven workers idle behind it. Counters are
+ * plain `++`: this is one event loop, not threads.
+ */
+async function pool<T>(items: T[], n: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+}
+
 async function main() {
   let moved = 0;
   let bytes = 0;
@@ -123,8 +153,11 @@ async function main() {
   let budget = LIMIT;
 
   console.log(
-    `${DRY ? "[dry] " : ""}bucket=${S3_BUCKET} prefix=${KEY_PREFIX}/ limit=${LIMIT} root=${LOCAL_ROOT}`,
+    `${DRY ? "[dry] " : ""}bucket=${S3_BUCKET} prefix=${KEY_PREFIX}/ limit=${LIMIT} ` +
+      `concurrency=${CONCURRENCY} root=${LOCAL_ROOT}`,
   );
+
+  const started = Date.now();
 
   for (const { table, column } of TARGETS) {
     if (budget <= 0) break;
@@ -139,15 +172,15 @@ async function main() {
       continue;
     }
     console.log(`${table}.${column}: ${rows.length} to move`);
+    budget -= rows.length;
 
-    for (const row of rows) {
-      if (budget <= 0) break;
+    await pool(rows, CONCURRENCY, async (row) => {
       const key = row.url.slice(LOCAL_PREFIX.length);
       const file = path.resolve(LOCAL_ROOT, key);
       if (!file.startsWith(path.resolve(LOCAL_ROOT) + path.sep)) {
         console.log(`  SKIP escapes upload root: ${row.url}`);
         failed++;
-        continue;
+        return;
       }
 
       let body: Buffer;
@@ -160,15 +193,14 @@ async function main() {
         // truth" if it is ever non-zero.
         console.log(`  MISSING on disk, left as-is: ${row.url}`);
         missing++;
-        continue;
+        return;
       }
 
       if (DRY) {
         console.log(`  would move ${key} (${(body.length / 1024).toFixed(0)} KB)`);
         moved++;
         bytes += body.length;
-        budget--;
-        continue;
+        return;
       }
 
       try {
@@ -203,15 +235,17 @@ async function main() {
         console.log(`  FAIL ${key}: ${(err as Error).message}`);
         failed++;
       }
-      budget--;
       if (moved > 0 && moved % 500 === 0) {
-        console.log(`  … ${moved} moved, ${gb(bytes)} GB`);
+        const rate = moved / ((Date.now() - started) / 1000);
+        console.log(`  … ${moved} moved, ${gb(bytes)} GB, ${rate.toFixed(1)}/s`);
       }
-    }
+    });
   }
 
+  const secs = (Date.now() - started) / 1000;
   console.log(
-    `\n${DRY ? "[dry] " : ""}moved=${moved} missing=${missing} failed=${failed} bytes=${gb(bytes)} GB`,
+    `\n${DRY ? "[dry] " : ""}moved=${moved} missing=${missing} failed=${failed} ` +
+      `bytes=${gb(bytes)} GB in ${secs.toFixed(0)}s (${(moved / Math.max(secs, 1)).toFixed(1)}/s)`,
   );
 }
 
