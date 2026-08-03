@@ -56,10 +56,17 @@ export default async function AdminPeoplePage(props: {
         wikidataId: true,
         _count: { select: { castRoles: true, crewRoles: true } },
       },
-      // Work first: no photograph, then an unimported source, then finished.
-      // Three keys Postgres can take from indexes, instead of a JS sort over the
-      // whole table.
-      orderBy: [{ image: { sort: "asc", nulls: "first" } }, { tmdbProfilePath: { sort: "desc", nulls: "last" } }, { name: "asc" }],
+      // Work first, in the order the old JS `rank` put it: nothing at all, then
+      // an unimported source, then finished. Both keys are NULLS FIRST — a null
+      // `image` is "no photograph", and among those a null `tmdbProfilePath` is
+      // the person nobody can fix without research, which is the top of the pile.
+      // Getting this backwards buries the actual work behind 27,000 rows that
+      // only need a button pressed.
+      orderBy: [
+        { image: { sort: "asc", nulls: "first" } },
+        { tmdbProfilePath: { sort: "asc", nulls: "first" } },
+        { name: "asc" },
+      ],
       skip: (page - 1) * PER_PAGE,
       take: PER_PAGE,
     }),
