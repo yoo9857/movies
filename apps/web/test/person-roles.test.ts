@@ -56,6 +56,32 @@ describe("rankedRoles", () => {
     expect(roles[0]).toBe("film actor");
   });
 
+  it("resolves a genuine tie the way criticism names a film's author", () => {
+    // Cretton wrote and directed all five of his films here: the counts cannot
+    // choose, and Wikidata's order put the screenwriter label first.
+    const roles = rankedRoles({
+      occupations: ["film screenwriter", "film editor", "director", "film producer", "film director"],
+      castCredits: 0,
+      crewJobs: [
+        ...Array.from({ length: 5 }, () => "Director"),
+        ...Array.from({ length: 5 }, () => "Screenplay"),
+      ],
+    });
+    expect(roles[0]).toBe("director");
+    // Both jobs still surface — the page names more than one role.
+    expect(roles.slice(0, 3)).toContain("film screenwriter");
+  });
+
+  it("does not let the authorial order override a real count", () => {
+    // Twenty writing credits against one directing credit: writing leads.
+    const roles = rankedRoles({
+      occupations: ["film director", "screenwriter"],
+      castCredits: 0,
+      crewJobs: [...Array.from({ length: 20 }, () => "Screenplay"), "Director"],
+    });
+    expect(roles[0]).toBe("screenwriter");
+  });
+
   it("keeps Wikidata's order when our credits say nothing", () => {
     expect(
       rankedRoles({ occupations: ["stage actor", "novelist"], castCredits: 0, crewJobs: [] }),

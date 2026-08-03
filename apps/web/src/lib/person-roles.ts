@@ -43,15 +43,34 @@ const hasWord = (haystack: string, word: string) =>
  * `not` exists for one real collision: the occupation "director of photography"
  * would otherwise also satisfy the plain Director credit.
  */
-const CREDIT_CONCEPTS: { credit: string; words: string[]; not?: string[] }[] = [
-  { credit: "actor", words: ["actor", "actress"] },
-  { credit: "Director of Photography", words: ["cinematographer", "photography"] },
-  { credit: "Director", words: ["director", "filmmaker"], not: ["photography"] },
-  { credit: "Screenplay", words: ["screenwriter", "screenplay", "writer", "playwright"] },
-  { credit: "Producer", words: ["producer"] },
-  { credit: "Original Music Composer", words: ["composer", "songwriter"] },
-  { credit: "Editor", words: ["editor"] },
+/**
+ * `priority` breaks exact ties, lowest first.
+ *
+ * Ties are real and common: Destin Daniel Cretton wrote and directed all five of
+ * his films in this library, so his credits stand 5–5 and the counts cannot
+ * choose. Left to Wikidata's ordering the page called him a screenwriter, which
+ * is true and is not what anyone means by his name.
+ *
+ * The order below is the one film criticism already uses when it names a film's
+ * author — direction first, the producer last — so a tie resolves the way a
+ * reader expects rather than the way a SPARQL result happened to arrive.
+ */
+const CREDIT_CONCEPTS: {
+  credit: string;
+  words: string[];
+  not?: string[];
+  priority: number;
+}[] = [
+  { credit: "Director", words: ["director", "filmmaker"], not: ["photography"], priority: 1 },
+  { credit: "actor", words: ["actor", "actress"], priority: 2 },
+  { credit: "Screenplay", words: ["screenwriter", "screenplay", "writer", "playwright"], priority: 3 },
+  { credit: "Director of Photography", words: ["cinematographer", "photography"], priority: 4 },
+  { credit: "Editor", words: ["editor"], priority: 5 },
+  { credit: "Original Music Composer", words: ["composer", "songwriter"], priority: 6 },
+  { credit: "Producer", words: ["producer"], priority: 7 },
 ];
+
+const NO_PRIORITY = 99;
 
 /** True when an occupation label names the job a credit label records. */
 function supports(occupation: string, credit: string): boolean {
@@ -86,12 +105,17 @@ export function rankedRoles({ occupations, castCredits, crewJobs }: RoleInput): 
     evidence.set(job, (evidence.get(job) ?? 0) + 1);
   }
 
-  const scoreOf = (occupation: string) => {
+  /** Credits backing this occupation: how many, and the most authorial of them. */
+  const weigh = (occupation: string) => {
     let score = 0;
+    let priority = NO_PRIORITY;
     for (const [credit, count] of evidence) {
-      if (supports(occupation, credit)) score += count;
+      if (!supports(occupation, credit)) continue;
+      score += count;
+      const p = CREDIT_CONCEPTS.find((c) => c.credit === credit)?.priority ?? NO_PRIORITY;
+      if (p < priority) priority = p;
     }
-    return score;
+    return { score, priority };
   };
 
   // One ranking over both vocabularies, because the credits are the evidence and
@@ -103,7 +127,7 @@ export function rankedRoles({ occupations, castCredits, crewJobs }: RoleInput): 
   // of Photography" — and within each vocabulary the original order stands, so
   // nothing shuffles between renders of one page.
   const candidates = [
-    ...occupations.map((label, i) => ({ label, rank: i, score: scoreOf(label) })),
+    ...occupations.map((label, i) => ({ label, rank: i, ...weigh(label) })),
     // A job our credits name that no occupation covers. Our labels are already
     // title-case, which is what the page renders; "actor" is ours, so it is not.
     ...[...evidence.entries()]
@@ -112,10 +136,17 @@ export function rankedRoles({ occupations, castCredits, crewJobs }: RoleInput): 
         label: credit === "actor" ? "Actor" : credit,
         rank: occupations.length + i,
         score: count,
+        priority:
+          CREDIT_CONCEPTS.find((c) => c.credit === credit)?.priority ?? NO_PRIORITY,
       })),
   ];
 
-  return candidates.sort((a, b) => b.score - a.score || a.rank - b.rank).map((c) => c.label);
+  // Count first — the credits are the evidence. Then the authorial order, which
+  // is what decides a genuine tie. Then the original index, so nothing shuffles
+  // between two renders of the same page.
+  return candidates
+    .sort((a, b) => b.score - a.score || a.priority - b.priority || a.rank - b.rank)
+    .map((c) => c.label);
 }
 
 /** The one role a title should carry, or null when we have nothing to say. */
