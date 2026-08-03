@@ -47,9 +47,17 @@ same way: a migration directory with hand-written SQL.
 ## Backups
 
 `ops/postgres/backup.sh` writes a verified custom-format dump to
-`~/backups/cinepixo` and prunes anything older than 14 days. It runs `pg_dump`
-inside the container so client and server versions always match, and it refuses
-to publish a dump that `pg_restore --list` cannot read.
+`~/backups/cinepixo` and prunes dumps older than `RETAIN_DAYS` (14). It runs
+`pg_dump` inside the container so client and server versions always match, and it
+refuses to publish a dump that `pg_restore --list` cannot read.
+
+**The uploads archive is pruned on its own, far shorter clock**
+(`UPLOADS_RETAIN_DAYS`, 3). While the local storage driver is in use, images are
+not in the database — so the script also tars `var/uploads`, and that tar is a
+*full* copy every night. After the poster and portrait passes it crossed 7 GB,
+which on the dumps' 14-day retention would have been ~100 GB on a 157 GB disk
+shared with ten other sites. Raise it once the bucket is the durable copy and
+the archive stops being taken at all.
 
 Installed as a cron entry:
 

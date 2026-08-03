@@ -3,6 +3,7 @@
 #
 #   ops/postgres/backup.sh
 #   RETAIN_DAYS=30 BACKUP_DIR=/mnt/big/cinepixo ops/postgres/backup.sh
+#   UPLOADS_RETAIN_DAYS=7 ops/postgres/backup.sh   # once uploads live in a bucket
 #
 # pg_dump runs *inside* the container so the client version always matches the
 # server — a mismatched pg_dump is the classic reason a restore fails at 3am.
@@ -17,6 +18,12 @@ DB=cinepixo
 DB_USER=cinepixo
 DEST="${BACKUP_DIR:-$HOME/backups/cinepixo}"
 RETAIN_DAYS="${RETAIN_DAYS:-14}"
+# Uploads keep their own, much shorter window. A dump is ~90 MB and a fortnight
+# of them is free; the uploads archive is a *full* tar of every image on disk,
+# and once the poster and portrait passes had run it crossed 7 GB — fourteen of
+# those is 100 GB on a 157 GB disk shared with ten other sites. Three days is
+# still three independent copies of an immutable, append-only tree.
+UPLOADS_RETAIN_DAYS="${UPLOADS_RETAIN_DAYS:-3}"
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 inner="/tmp/cinepixo-$stamp.dump"
@@ -72,8 +79,8 @@ fi
 # failed run can never delete a good backup.
 deleted=$(find "$DEST" -maxdepth 1 -name 'cinepixo-*.dump' -type f -mtime "+$RETAIN_DAYS" -print -delete | wc -l)
 echo "[backup] pruned $deleted dump(s) older than ${RETAIN_DAYS}d"
-deleted_uploads=$(find "$DEST" -maxdepth 1 -name 'cinepixo-uploads-*.tar.gz' -type f -mtime "+$RETAIN_DAYS" -print -delete | wc -l)
-echo "[backup] pruned $deleted_uploads uploads archive(s) older than ${RETAIN_DAYS}d"
+deleted_uploads=$(find "$DEST" -maxdepth 1 -name 'cinepixo-uploads-*.tar.gz' -type f -mtime "+$UPLOADS_RETAIN_DAYS" -print -delete | wc -l)
+echo "[backup] pruned $deleted_uploads uploads archive(s) older than ${UPLOADS_RETAIN_DAYS}d"
 
 # An empty backup directory is how people discover they have no backups. Say so.
 count=$(find "$DEST" -maxdepth 1 -name 'cinepixo-*.dump' -type f | wc -l)
