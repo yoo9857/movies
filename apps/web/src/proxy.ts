@@ -10,9 +10,19 @@
 // header must be set on the request as well as the response. See lib/csp.ts for
 // why the policy is nonce-based rather than a list of hosts.
 import { NextResponse, type NextRequest } from "next/server";
-import { contentSecurityPolicy, newNonce } from "@/lib/csp";
+import { contentSecurityPolicy, newNonce, xsltDocumentPolicy } from "@/lib/csp";
 
 const SESSION_COOKIE = "cinepixo_session";
+
+/**
+ * The XML documents that render through our own XSLT, and the stylesheets
+ * themselves.
+ *
+ * These cannot live under the nonce policy: see `xsltDocumentPolicy`. Matched as
+ * an explicit list rather than by extension so that adding a styled document is a
+ * decision somebody makes on purpose.
+ */
+const XSLT_DOCUMENT = /^\/(?:sitemap\.xml|sitemaps\/[a-z-]+\.xml|feed\.xml|sitemap\.xsl|feed\.xsl)$/;
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -24,6 +34,14 @@ export function proxy(request: NextRequest) {
 
   if ((pathname.startsWith("/me") || pathname === "/write") && !hasCookie) {
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (XSLT_DOCUMENT.test(pathname)) {
+    // No nonce is minted: nothing in these responses is server-rendered markup
+    // that could carry one, and the framework bundles are not involved.
+    const response = NextResponse.next();
+    response.headers.set("Content-Security-Policy", xsltDocumentPolicy());
+    return response;
   }
 
   const nonce = newNonce();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentSecurityPolicy, newNonce } from "@/lib/csp";
+import { contentSecurityPolicy, newNonce, xsltDocumentPolicy } from "@/lib/csp";
 
 /**
  * The policy that lets an ad network run someone else's code here.
@@ -99,6 +99,41 @@ describe("the directives strict-dynamic does not cover", () => {
     for (const name of ["frame-src", "img-src", "connect-src"]) {
       expect(directive(csp, name)).not.toContain("google");
     }
+  });
+});
+
+/**
+ * The sitemap and the feed render through our own XSLT so a person opening one
+ * sees a table rather than tags. Chromium checks that stylesheet against
+ * `script-src`, and a stylesheet named by a processing instruction cannot carry a
+ * nonce — so under `'strict-dynamic'`, which ignores `'self'` by design, the
+ * transform was refused and the page came up blank. Valid XML, correct
+ * stylesheet, nothing on screen.
+ */
+describe("the policy for XSLT-rendered documents", () => {
+  it("lets 'self' mean what it says, because a stylesheet cannot be nonced", () => {
+    const script = directive(xsltDocumentPolicy(), "script-src");
+    expect(script).toBe("'self'");
+    expect(script).not.toContain("strict-dynamic");
+    expect(script).not.toContain("nonce");
+  });
+
+  it("allows the one inline style block the transform writes", () => {
+    expect(directive(xsltDocumentPolicy(), "style-src")).toContain("'unsafe-inline'");
+  });
+
+  it("gives up nothing else in exchange", () => {
+    const csp = xsltDocumentPolicy();
+    expect(directive(csp, "default-src")).toBe("'self'");
+    expect(directive(csp, "object-src")).toBe("'none'");
+    expect(directive(csp, "frame-src")).toBe("'none'");
+    expect(directive(csp, "frame-ancestors")).toBe("'none'");
+    expect(directive(csp, "base-uri")).toBe("'self'");
+    expect(directive(csp, "form-action")).toBe("'self'");
+    // These documents carry our URLs and titles; they have no business reaching
+    // an ad network, and no eval anywhere.
+    expect(csp).not.toContain("googlesyndication");
+    expect(csp).not.toContain("unsafe-eval");
   });
 });
 

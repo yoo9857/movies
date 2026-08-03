@@ -118,6 +118,41 @@ export function contentSecurityPolicy({
 }
 
 /**
+ * The policy for our XML documents that render through our own XSLT.
+ *
+ * `/sitemap.xml`, `/sitemaps/*.xml` and `/feed.xml` each carry an
+ * `xml-stylesheet` instruction so that a person who opens one sees a table
+ * instead of a wall of tags. Chromium checks that stylesheet load against
+ * `script-src` — an XSLT transform is executable — and a stylesheet referenced by
+ * a processing instruction cannot carry a nonce. Under `'strict-dynamic'` the
+ * `'self'` in `script-src` is ignored by design, so the transform was refused and
+ * the page rendered blank: valid XML, correct stylesheet, nothing on screen.
+ *
+ * So these paths get a policy with no `'strict-dynamic'` in it, which lets
+ * `'self'` mean what it says. Nothing is loosened in exchange: the stylesheet
+ * output contains no script, no event handler and no external reference (checked,
+ * not assumed), the documents hold only our own URLs and titles, and every other
+ * directive is at least as tight as the site policy. `'unsafe-inline'` on
+ * `style-src` is for the one `<style>` block the transform writes.
+ */
+export function xsltDocumentPolicy(): string {
+  return [
+    "default-src 'self'",
+    // No nonce and no strict-dynamic: the XSLT load is what this has to admit.
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+/**
  * A fresh nonce per request. `btoa` and `crypto` rather than `Buffer`, because
  * this runs in the proxy, where the Node built-ins are not guaranteed.
  */
