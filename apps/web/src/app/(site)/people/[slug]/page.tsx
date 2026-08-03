@@ -12,6 +12,7 @@ import { ReelDivider } from "@/components/ReelDivider";
 import { ReviewIndex } from "@/components/ReviewIndex";
 import { Collaborators, type Collaborator } from "@/components/person/Collaborators";
 import { PersonStats, type RatedFilm } from "@/components/person/PersonStats";
+import { rankedRoles } from "@/lib/person-roles";
 import {
   absUrl,
   breadcrumbNode,
@@ -220,12 +221,12 @@ export async function generateMetadata(props: {
     ...person.castRoles.map((c) => c.movieId),
     ...person.crewRoles.map((c) => c.movieId),
   ]).size;
-  const roles =
-    person.occupations.length > 0
-      ? person.occupations
-      : [...new Set(person.crewRoles.map((c) => c.job))];
-  const role =
-    roles[0] ?? (person.castRoles.length > 0 ? "actor" : "film worker");
+  const roles = rankedRoles({
+    occupations: person.occupations,
+    castCredits: person.castRoles.length,
+    crewJobs: person.crewRoles.map((c) => c.job),
+  });
+  const role = roles[0] ?? "film worker";
   const years = lifeYears(person.birthDate, person.deathDate);
   // Only the films actually written about here, so the sentence below can stop
   // promising reviews on the 207,876 pages that have none.
@@ -344,11 +345,14 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
 
   const activeYears = filmography.map((f) => f.year).filter((y): y is number => y !== null);
   const age = ageFrom(person.birthDate, person.deathDate);
-  const jobs = [...new Set(person.crewRoles.map((c) => c.job))];
-  const roleLine =
-    person.occupations.length > 0
-      ? person.occupations
-      : [...(person.castRoles.length > 0 ? ["Actor"] : []), ...jobs];
+  // Same ranking the title and description use, so "Known for" on the page, the
+  // <title> in the tab and `jobTitle` in the graph never disagree about what
+  // this person does.
+  const roleLine = rankedRoles({
+    occupations: person.occupations,
+    castCredits: person.castRoles.length,
+    crewJobs: person.crewRoles.map((c) => c.job),
+  });
 
   const ourLinks = Array.isArray(person.links)
     ? (person.links as { label?: string; url?: string }[]).filter(
