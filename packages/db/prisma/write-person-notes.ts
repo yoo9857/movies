@@ -54,14 +54,20 @@ const DEMAND = [
 const MIN_FILMS = 3;
 
 /**
- * A second job is only worth naming if they hold it more than once.
+ * A second job is worth naming when it is a real share of their work here, not a
+ * footnote to it.
  *
- * Henri Alekan has fifty-two photography credits here and exactly one as an
- * actor — a documentary appearance, almost certainly. Publishing "credited here
- * also as an actor" on a cinematographer's page is technically supported by our
- * rows and still the wrong sentence.
+ * Henri Alekan has fifty photography credits and three cast credits — one of them
+ * appearing as himself in a Wenders film. "Credited here also as an actor" is
+ * supported by those rows and is still the wrong sentence about a cinematographer.
+ *
+ * Proportion, not a flat count, and not the presence of a character name: only
+ * 8.6% of cast rows in this database carry one, and José Riesgo — sixty-eight
+ * roles — has none. Character names would have stripped the acting off actual
+ * actors, which is why this was measured before it was written.
  */
 const MIN_SECONDARY_CREDITS = 2;
+const MIN_SECONDARY_SHARE = 0.15;
 
 /**
  * Our six crew labels as role nouns.
@@ -138,7 +144,13 @@ function compose(name: string, credits: Credit[]): string | null {
   // A second job worth naming: held more than once, and named as a role rather
   // than as the credit label a title card would print.
   const others = [...jobCount.entries()]
-    .filter(([job, n]) => job !== topJob && n >= MIN_SECONDARY_CREDITS && ROLE_NOUN[job])
+    .filter(
+      ([job, n]) =>
+        job !== topJob &&
+        n >= MIN_SECONDARY_CREDITS &&
+        n / credits.length >= MIN_SECONDARY_SHARE &&
+        ROLE_NOUN[job],
+    )
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([job]) => ROLE_NOUN[job] as string);
