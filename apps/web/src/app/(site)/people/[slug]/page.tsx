@@ -190,6 +190,23 @@ const longDate = (d: Date | null) =>
       })
     : null;
 
+/**
+ * "1892–1957", "b. 1971", "d. 1957" — the disambiguator a name alone cannot be.
+ *
+ * Search Console says people arrive having typed the role themselves ("morgunov
+ * actor", "director terence young", "nirav shah cinematographer"), which is what
+ * someone does when a bare name is ambiguous. Life years do the same job for the
+ * many namesakes a 208,000-person credit graph contains.
+ */
+function lifeYears(birth: Date | null, death: Date | null): string | null {
+  const b = yearOf(birth);
+  const d = yearOf(death);
+  if (b && d) return `${b}–${d}`;
+  if (b) return `b. ${b}`;
+  if (d) return `d. ${d}`;
+  return null;
+}
+
 export async function generateMetadata(props: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
@@ -203,10 +220,20 @@ export async function generateMetadata(props: {
     ...person.castRoles.map((c) => c.movieId),
     ...person.crewRoles.map((c) => c.movieId),
   ]).size;
+  const roles =
+    person.occupations.length > 0
+      ? person.occupations
+      : [...new Set(person.crewRoles.map((c) => c.job))];
   const role =
-    person.occupations[0] ??
-    [...new Set(person.crewRoles.map((c) => c.job))][0] ??
-    (person.castRoles.length > 0 ? "actor" : "film worker");
+    roles[0] ?? (person.castRoles.length > 0 ? "actor" : "film worker");
+  const years = lifeYears(person.birthDate, person.deathDate);
+  // Only the films actually written about here, so the sentence below can stop
+  // promising reviews on the 207,876 pages that have none.
+  const reviewedFilms = new Set(
+    [...person.castRoles, ...person.crewRoles]
+      .filter((c) => c.movie.reviews.length > 0)
+      .map((c) => c.movieId),
+  ).size;
 
   // Everything on this page that is *written*: prose we wrote, or criticism of
   // their work. With none of it, the page restates a database — hundreds of
@@ -228,10 +255,27 @@ export async function generateMetadata(props: {
 
   return pageMetadata({
     path: `/people/${person.slug}`,
-    title: person.name,
+    // The role and the life years, because that is how the searcher wrote the
+    // query. A bare name competes with every namesake in the credit graph and
+    // tells a result page nothing it did not already know from the query itself.
+    title: years ? `${person.name} — ${role} (${years})` : `${person.name} — ${role}`,
+    // The facts, in the order they are asked for. This used to end "with every
+    // review written here about their work" unconditionally — a promise that was
+    // false on all but 272 of 208,148 pages, made in the one sentence Google
+    // shows. `clamp` cuts this at 158 characters, so the load-bearing half comes
+    // first: who they are, when they lived, where they were from.
     description:
       person.bio ??
-      `${person.name} — ${role}. ${films} film${films === 1 ? "" : "s"} in the CinePixo library, with every review written here about their work.`,
+      [
+        `${person.name} — ${roles.slice(0, 2).join(", ") || role}${years ? ` (${years})` : ""}.`,
+        person.birthPlace ? `Born in ${person.birthPlace}.` : null,
+        `${films} film${films === 1 ? "" : "s"} in the CinePixo library.`,
+        reviewedFilms > 0
+          ? `${reviewedFilms} reviewed here.`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
     keywords: [person.name, `${person.name} films`, `${person.name} reviews`, role],
     noIndex: !ours,
     // A person page is a profile, and it has a clean-markdown sibling.
