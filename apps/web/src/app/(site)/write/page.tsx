@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ReviewEditor } from "@/components/review/ReviewEditor";
 import { getCurrentUser } from "@/lib/auth";
+import { editorSeedFilms } from "@/lib/editor-films";
 import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -29,17 +30,10 @@ export default async function WritePage(props: {
   // nothing ever offered them back — so leaving this page meant the piece was
   // only findable by knowing to look under "My reviews".
   const [movies, drafts] = await Promise.all([
-    prisma.movie.findMany({
-      orderBy: { title: "asc" },
-      select: {
-        id: true,
-        title: true,
-        releaseDate: true,
-        director: true,
-        trailerKey: true,
-        images: { where: { kind: "backdrop" }, orderBy: { sort: "asc" }, select: { path: true } },
-      },
-    }),
+    // `?movie=` is pinned into the seed, so a preset still resolves even though
+    // this no longer reads the library. It used to read all 118,811 rows — on a
+    // page any logged-in member can open.
+    editorSeedFilms(sp.movie ?? null),
     prisma.review.findMany({
       where: { authorId: user.id, status: "DRAFT" },
       orderBy: { updatedAt: "desc" },
@@ -115,14 +109,7 @@ export default async function WritePage(props: {
                 }
               : undefined
           }
-          movies={movies.map((m) => ({
-            id: m.id,
-            title: m.title,
-            year: m.releaseDate ? new Date(m.releaseDate).getFullYear() : null,
-            director: m.director,
-            trailerKey: m.trailerKey,
-            stills: m.images.map((i) => i.path),
-          }))}
+          movies={movies}
         />
       </div>
     </div>

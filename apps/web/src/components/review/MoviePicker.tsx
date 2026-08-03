@@ -1,8 +1,21 @@
 "use client";
 
-// Searchable film picker. A plain <select> stops working the moment the
-// library outgrows a screenful, so this filters as you type and stays
-// keyboard-navigable.
+// Searchable film picker.
+//
+// It used to be handed the whole library and filter it in `useMemo`, which was a
+// reasonable design for twenty-one films and a way to take the site down at
+// 118,811: every page rendering the editor serialised the entire table into the
+// RSC payload, stills and all. Now it asks /api/v1/movies/search, which filters
+// where the trigram index is.
+//
+// Two things that matter for it still feeling instant:
+//
+//  · The caller passes `initial` — the newest films, plus whichever film is
+//    already chosen — so the dropdown has something to show before a keystroke
+//    and an edit screen can name its own film with no request at all.
+//  · Typing is debounced and every response is checked against the query that is
+//    current when it lands, so a slow reply for "bat" cannot overwrite the
+//    results for "batman".
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export interface PickerMovie {
@@ -15,34 +28,81 @@ export interface PickerMovie {
   stills?: string[];
 }
 
+const DEBOUNCE_MS = 180;
+
 export function MoviePicker({
-  movies,
+  initial,
   value,
+  selected: selectedProp,
   onChange,
 }: {
-  movies: PickerMovie[];
+  /** Films to show before anything is typed. Include the chosen one. */
+  initial: PickerMovie[];
   value: string;
-  onChange: (id: string) => void;
+  /** The chosen film, when the caller already knows it (an edit screen does). */
+  selected?: PickerMovie | null;
+  /** Reports the whole film, not just its id: the editor needs its stills. */
+  onChange: (movie: PickerMovie) => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
+  /**
+   * The last answer, tagged with the query it answers.
+   *
+   * Results are *derived* from this rather than mirrored into their own state:
+   * writing `initial` into state from an effect is a synchronous setState inside
+   * an effect, which cascades renders — and tagging the answer is also what makes
+   * a slow reply for "bat" unable to appear under "batman".
+   */
+  const [hit, setHit] = useState<{ q: string; movies: PickerMovie[] } | null>(null);
+  const [failedQuery, setFailedQuery] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
-  const selected = movies.find((m) => m.id === value) ?? null;
+  const q = query.trim();
+  const results = q ? (hit?.q === q ? hit.movies : []) : initial;
+  const loading = Boolean(q) && hit?.q !== q && failedQuery !== q;
+  const failed = Boolean(q) && failedQuery === q;
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return movies.slice(0, 40);
-    return movies
-      .filter(
-        (m) =>
-          m.title.toLowerCase().includes(q) ||
-          (m.director ?? "").toLowerCase().includes(q) ||
-          String(m.year ?? "").includes(q),
-      )
-      .slice(0, 40);
-  }, [movies, query]);
+  const selected = useMemo(
+    () =>
+      selectedProp ??
+      initial.find((m) => m.id === value) ??
+      hit?.movies.find((m) => m.id === value) ??
+      null,
+    [selectedProp, initial, hit, value],
+  );
+
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) return;
+
+    // `cancelled` as well as the AbortController: an aborted fetch and a
+    // superseded one both have to leave state alone. Every write happens inside
+    // the timeout, so none of them is synchronous with the effect.
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/movies/search?q=${encodeURIComponent(term)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const body = (await res.json()) as { movies?: PickerMovie[] };
+        if (cancelled) return;
+        setHit({ q: term, movies: body.movies ?? [] });
+        setFailedQuery(null);
+      } catch {
+        if (!cancelled) setFailedQuery(term);
+      }
+    }, DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [query]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -53,7 +113,7 @@ export function MoviePicker({
   }, []);
 
   function pick(m: PickerMovie) {
-    onChange(m.id);
+    onChange(m);
     setQuery("");
     setOpen(false);
   }
@@ -114,7 +174,13 @@ export function MoviePicker({
           role="listbox"
           className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-surface-raised py-1 shadow-2xl"
         >
-          {results.length === 0 ? (
+          {loading && results.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-muted">Searching…</li>
+          ) : failed ? (
+            <li className="px-3 py-2 text-sm text-muted">
+              The search did not answer. Check the connection and try again.
+            </li>
+          ) : results.length === 0 ? (
             <li className="px-3 py-2 text-sm text-muted">
               Nothing matches. If a film is missing, tell an admin — the library grows on request.
             </li>

@@ -9,7 +9,7 @@
 // The whole list is sent on save. That mirrors the endpoint — assignment is
 // curation, so there is no partial state to merge — and it means removing a
 // film here is not a separate destructive request.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export interface PickerFilm {
@@ -27,16 +27,25 @@ export interface Assignment {
 
 const NOTE_MAX = 500;
 
+const DEBOUNCE_MS = 180;
+
 export function TopicFilmPicker({
   topicId,
   kindWord,
-  library,
+  assignedFilms,
   initial,
 }: {
   topicId: string;
   /** "theme" or "motif" — the placeholder says which claim the note is making. */
   kindWord: string;
-  library: PickerFilm[];
+  /**
+   * The films already on this axis, resolved. This used to be the *library* —
+   * "a curated shelf of a few hundred titles at most, and a search endpoint for
+   * that would be ceremony", which was true when it was written and wrong by
+   * three orders of magnitude after the Wikidata import made it 118,811 rows.
+   * Candidates come from `/api/v1/movies/search` now.
+   */
+  assignedFilms: PickerFilm[];
   initial: Assignment[];
 }) {
   const router = useRouter();
@@ -45,16 +54,62 @@ export function TopicFilmPicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  /** Search answers, tagged with the query they answer. */
+  const [hit, setHit] = useState<{ q: string; films: PickerFilm[] } | null>(null);
 
-  const byId = useMemo(() => new Map(library.map((f) => [f.id, f])), [library]);
   const assigned = useMemo(() => new Set(rows.map((r) => r.movieId)), [rows]);
 
-  const candidates = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return library
-      .filter((f) => !assigned.has(f.id) && (q === "" || f.title.toLowerCase().includes(q)))
-      .slice(0, 12);
-  }, [library, assigned, query]);
+  // Assigned rows resolve out of what the page sent, plus anything picked from a
+  // search — otherwise a film added and then re-rendered reads as "no longer in
+  // the library".
+  const byId = useMemo(() => {
+    const m = new Map(assignedFilms.map((f) => [f.id, f]));
+    for (const f of hit?.films ?? []) m.set(f.id, f);
+    return m;
+  }, [assignedFilms, hit]);
+
+  const q = query.trim();
+  const candidates = useMemo(
+    () => (hit?.q === q ? hit.films.filter((f) => !assigned.has(f.id)).slice(0, 12) : []),
+    [hit, q, assigned],
+  );
+  const searching = q.length > 0 && hit?.q !== q;
+
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    // Every write is inside the timeout, so none is synchronous with the effect.
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/movies/search?q=${encodeURIComponent(term)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const body = (await res.json()) as {
+          movies?: { id: string; title: string; year: number | null; poster: string | null }[];
+        };
+        if (cancelled) return;
+        setHit({
+          q: term,
+          films: (body.movies ?? []).map((m) => ({
+            id: m.id,
+            title: m.title,
+            year: m.year,
+            poster: m.poster,
+          })),
+        });
+      } catch {
+        if (!cancelled) setHit({ q: term, films: [] });
+      }
+    }, DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [query]);
 
   const missingNotes = rows.filter((r) => r.note.trim() === "").length;
 
@@ -171,14 +226,20 @@ export function TopicFilmPicker({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the library by title"
+            placeholder="Search the library by title, director or year"
             className="mt-1 w-full rounded-lg border border-line bg-background px-3 py-2 text-sm outline-none focus:border-accent"
           />
         </label>
         <div className="mt-3 flex flex-wrap gap-2">
           {candidates.length === 0 ? (
             <p className="text-xs text-muted">
-              {query.trim() === "" ? "Every film is already assigned." : "No match in the library."}
+              {/* An empty box no longer means "nothing left" — the library is not
+                  in memory to be listed, so the honest prompt is to type. */}
+              {q === ""
+                ? "Type to search the library."
+                : searching
+                  ? "Searching…"
+                  : "No match, or every match is already assigned."}
             </p>
           ) : (
             candidates.map((f) => (

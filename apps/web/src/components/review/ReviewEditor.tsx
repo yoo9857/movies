@@ -103,6 +103,12 @@ export function ReviewEditor({
   doneHref = "/me/reviews",
   draftSync = true,
 }: {
+  /**
+   * Films to seed the picker with: the newest few, plus the one this review is
+   * already about. It is **not** the library — the picker searches the server for
+   * the rest. Handing over all 118,811 rows is what made every page rendering
+   * this editor able to take the site down.
+   */
   movies: PickerMovie[];
   initial?: ReviewDraft;
   reviewId?: string;
@@ -119,6 +125,14 @@ export function ReviewEditor({
 }) {
   const router = useRouter();
   const [v, setV] = useState<ReviewDraft>(initial ?? EMPTY);
+  /**
+   * Every film this editor has seen — the seed list, plus anything picked out of
+   * a search result. The preview reads the chosen film's trailer and stills from
+   * here, because the picker no longer holds the library it could look them up in.
+   */
+  const [knownMovies, setKnownMovies] = useState<Map<string, PickerMovie>>(
+    () => new Map(movies.map((m) => [m.id, m])),
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug));
@@ -803,7 +817,12 @@ export function ReviewEditor({
 
   // Preview with the chosen film's real media, so :::trailer and :::still show
   // what the published page will show rather than a placeholder.
-  const chosen = movies.find((m) => m.id === v.movieId);
+  //
+  // Looked up in `knownMovies`, not in `movies`: the picker now finds films on
+  // the server, so a film chosen from search results was never in the seed list.
+  // Before this the preview silently fell back to "This film" with no trailer and
+  // no stills for anything the page had not been handed up front.
+  const chosen = knownMovies.get(v.movieId);
   const media: ReviewMedia = {
     title: chosen?.title ?? "This film",
     trailerKey: chosen?.trailerKey ?? null,
@@ -1009,7 +1028,17 @@ export function ReviewEditor({
         <div>
           <span className="text-sm text-muted">Film</span>
           <div className="mt-1">
-            <MoviePicker movies={movies} value={v.movieId} onChange={(id) => set("movieId", id)} />
+            <MoviePicker
+              initial={movies}
+              value={v.movieId}
+              selected={knownMovies.get(v.movieId) ?? null}
+              onChange={(m) => {
+                // Remember it before selecting it, so the preview has its media
+                // on the same render.
+                setKnownMovies((prev) => new Map(prev).set(m.id, m));
+                set("movieId", m.id);
+              }}
+            />
           </div>
         </div>
         <div>

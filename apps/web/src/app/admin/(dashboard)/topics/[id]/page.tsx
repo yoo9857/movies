@@ -8,9 +8,13 @@ import { posterUrl } from "@/lib/seo";
 
 /**
  * One axis, with the two things that make it publishable on one screen: the
- * definition and the films that carry it. The library is handed to the picker
- * whole — it is a curated shelf of a few hundred titles at most, and a search
- * endpoint for that would be ceremony.
+ * definition and the films that carry it.
+ *
+ * This used to hand the picker the library whole, on the reasoning that it "is a
+ * curated shelf of a few hundred titles at most, and a search endpoint for that
+ * would be ceremony". True when written; the Wikidata import made the shelf
+ * 118,811 rows, and the ceremony became the only thing keeping the page openable.
+ * Only the films already assigned are resolved here now — the picker searches.
  */
 
 export const dynamic = "force-dynamic";
@@ -18,17 +22,18 @@ export const dynamic = "force-dynamic";
 export default async function AdminTopicPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
 
-  const [topic, library] = await Promise.all([
-    prisma.topic.findUnique({
-      where: { id },
-      include: { movies: { orderBy: { sort: "asc" }, select: { movieId: true, note: true } } },
-    }),
-    prisma.movie.findMany({
-      orderBy: { title: "asc" },
-      select: { id: true, title: true, releaseDate: true, posterPath: true },
-    }),
-  ]);
+  const topic = await prisma.topic.findUnique({
+    where: { id },
+    include: { movies: { orderBy: { sort: "asc" }, select: { movieId: true, note: true } } },
+  });
   if (!topic) notFound();
+
+  // Only what is already on the axis. Sequential because the ids come from the
+  // topic — one round trip, against a query that used to read the whole library.
+  const assignedFilms = await prisma.movie.findMany({
+    where: { id: { in: topic.movies.map((m) => m.movieId) } },
+    select: { id: true, title: true, releaseDate: true, posterPath: true, image: true },
+  });
 
   const kindWord = topic.kind === "THEME" ? "theme" : "motif";
 
@@ -68,11 +73,13 @@ export default async function AdminTopicPage(props: { params: Promise<{ id: stri
       <TopicFilmPicker
         topicId={topic.id}
         kindWord={kindWord}
-        library={library.map((m) => ({
+        assignedFilms={assignedFilms.map((m) => ({
           id: m.id,
           title: m.title,
           year: m.releaseDate ? m.releaseDate.getUTCFullYear() : null,
-          poster: posterUrl(m.posterPath, "w92") ?? null,
+          // Our own artwork first: posterPath is set on nine rows in the whole
+          // library, so this thumbnail was almost always blank.
+          poster: m.image ?? posterUrl(m.posterPath, "w92") ?? null,
         }))}
         initial={topic.movies.map((m) => ({ movieId: m.movieId, note: m.note ?? "" }))}
       />
