@@ -39,3 +39,6 @@ var/uploads/
 /Dorothy.png
 /Marcus.png
 /vera.png
+# same kind of thing: a root-level image dropped in locally, referenced by
+# nothing in the tree. Assets the app actually serves live in apps/web/public/.
+/gb.png
