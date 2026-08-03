@@ -53,6 +53,34 @@ const DEMAND = [
 /** Below this many films in the library there is nothing honest to summarise. */
 const MIN_FILMS = 3;
 
+/**
+ * A second job is only worth naming if they hold it more than once.
+ *
+ * Henri Alekan has fifty-two photography credits here and exactly one as an
+ * actor — a documentary appearance, almost certainly. Publishing "credited here
+ * also as an actor" on a cinematographer's page is technically supported by our
+ * rows and still the wrong sentence.
+ */
+const MIN_SECONDARY_CREDITS = 2;
+
+/**
+ * Our six crew labels as role nouns.
+ *
+ * `MovieCrew.job` holds credit labels, not job titles: "Screenplay" is what a
+ * title card says, "a screenwriter" is what a person is. Mirrors the mapping in
+ * apps/web/src/lib/person-roles.ts, which cannot be imported across the package
+ * boundary — if a seventh credit label ever appears, both need the new entry.
+ */
+const ROLE_NOUN: Record<string, string> = {
+  Actor: "an actor",
+  Director: "a director",
+  Screenplay: "a screenwriter",
+  "Director of Photography": "a cinematographer",
+  Editor: "an editor",
+  "Original Music Composer": "a composer",
+  Producer: "a producer",
+};
+
 interface Credit {
   movieId: string;
   title: string;
@@ -107,12 +135,13 @@ function compose(name: string, credits: Credit[]): string | null {
     `${name} ${role} ${plural(films.size, "film")} in the CinePixo library${span}.`,
   ];
 
-  // A second job worth naming, when they hold more than one.
+  // A second job worth naming: held more than once, and named as a role rather
+  // than as the credit label a title card would print.
   const others = [...jobCount.entries()]
-    .filter(([job]) => job !== topJob)
+    .filter(([job, n]) => job !== topJob && n >= MIN_SECONDARY_CREDITS && ROLE_NOUN[job])
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
-    .map(([job]) => job.toLowerCase());
+    .map(([job]) => ROLE_NOUN[job] as string);
   if (others.length > 0) {
     sentences.push(`Credited here also as ${readableList(others)}.`);
   }
