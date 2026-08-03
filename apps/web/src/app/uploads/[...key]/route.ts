@@ -2,16 +2,27 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
-import { etagFor, resolveLocalKey, usingObjectStorage } from "@/lib/media/storage";
+import { etagFor, resolveLocalKey } from "@/lib/media/storage";
 
 /**
  * Serves locally-stored uploads.
  *
- * Only reachable when object storage is not configured; with a bucket in play
- * these URLs are never minted and this handler answers 404. Nothing here trusts
- * the request path: `resolveLocalKey` compares the *resolved* filesystem path
- * against the upload root, so a traversal attempt cannot escape it however it
- * is encoded.
+ * This used to refuse everything the moment a bucket was configured, on the
+ * assumption that a deploy provisions storage before anyone uploads anything.
+ * That assumption expired: this deploy ran the local driver through the poster
+ * and portrait passes and holds ~93,000 files, so flipping `S3_*` on would have
+ * turned every poster and every face on the site into a 404 in one restart.
+ *
+ * So the driver no longer decides. **Existence on disk does** — a key is either
+ * in the local tree or it is not, and keys are unique and never reused, so there
+ * is no case where two stores could disagree about one. New uploads go to the
+ * bucket, the legacy tree keeps answering, and the migration can move files at
+ * its own pace instead of inside a restart. When the tree is empty this handler
+ * answers 404 on its own, which is the point at which it can be deleted.
+ *
+ * Nothing here trusts the request path: `resolveLocalKey` compares the
+ * *resolved* filesystem path against the upload root, so a traversal attempt
+ * cannot escape it however it is encoded.
  *
  * Keys are unique per upload, so responses are immutable.
  *
@@ -40,8 +51,6 @@ export async function GET(
   request: Request,
   ctx: { params: Promise<{ key: string[] }> },
 ) {
-  if (usingObjectStorage) return new NextResponse(null, { status: 404 });
-
   const { key } = await ctx.params;
   const joined = key.join("/");
   const file = resolveLocalKey(joined);
