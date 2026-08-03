@@ -2,6 +2,7 @@
 //
 //   npm run db:write-reviews -- --limit=1          # one review, next film in line
 //   npm run db:write-reviews -- --film=oldboy-2003 # a specific film
+//   npm run db:write-reviews -- --film=x --again    # a second voice, on purpose
 //   npm run db:write-reviews -- --limit=4 --dry    # generate, print, write nothing
 //
 // The desk has four house critics — Vera Lindqvist (form), Marcus Reid (the
@@ -37,6 +38,8 @@ function strArg(name: string): string | null {
 const LIMIT = arg("limit", 1);
 const FILM = strArg("film");
 const DRY = process.argv.includes("--dry");
+/** Deliberately add another critic's take to a film that already has one. */
+const AGAIN = process.argv.includes("--again");
 /**
  * Seed mode: spread publication over the last N days instead of stamping
  * everything "just now". A desk that came online this afternoon and published
@@ -226,6 +229,31 @@ async function main() {
   if (films.length === 0) {
     console.log("No film with a synopsis is missing a review. Nothing to do.");
     return;
+  }
+
+  // `--film` names a slug directly and so skips the `reviews: { none: {} }` guard
+  // that the default queue applies. That is how The Dark Knight ended up with two
+  // reviews by the same critic, opening on the same section heading, four weeks
+  // apart — nothing refused the second because nothing checked.
+  //
+  // A second take on one film is a legitimate thing for a desk with four critics
+  // to publish. It should be a decision, though, not an accident, so it now needs
+  // `--again` and says whose take already exists.
+  if (FILM && !AGAIN) {
+    const existing = await prisma.review.findMany({
+      where: { movieId: films[0].id },
+      select: { slug: true, status: true, author: { select: { username: true } } },
+    });
+    if (existing.length > 0) {
+      const who = existing
+        .map((r) => `${r.author.username} (${r.slug}, ${r.status})`)
+        .join(", ");
+      console.log(
+        `${films[0].title} already has ${existing.length} review(s): ${who}\n` +
+          `Pass --again to add another voice on purpose.`,
+      );
+      return;
+    }
   }
 
   // Rotation continues from how much the desk has already written, so four
