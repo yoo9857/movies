@@ -4,6 +4,7 @@
 //   npm run db:write-reviews -- --film=oldboy-2003 # a specific film
 //   npm run db:write-reviews -- --film=x --again    # a second voice, on purpose
 //   npm run db:write-reviews -- --limit=4 --dry    # generate, print, write nothing
+//   npm run db:write-reviews -- --drafts=x.json    # publish prose written elsewhere
 //
 // The desk has four house critics — Vera Lindqvist (form), Marcus Reid (the
 // Saturday-night crowd), Amara Osei (lineage), Dorothy Kwan (the skeptic) —
@@ -17,6 +18,12 @@
 // which is what is installed and authenticated on the server. The model is asked
 // for strict JSON; anything that does not parse and validate is skipped and
 // reported, never half-written into the database.
+//
+// That CLI has a usage limit, and when it is spent no review can be generated
+// for days. `--drafts` is the way past it: a JSON file of prose written anywhere
+// else, each entry naming its film and its byline, published through the same
+// schema, the same slug minting and the same second-review guard. Nothing gets
+// in that way that generation could not have written.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,6 +44,8 @@ function strArg(name: string): string | null {
 
 const LIMIT = arg("limit", 1);
 const FILM = strArg("film");
+/** A JSON file of ready prose to publish instead of calling the model. */
+const DRAFTS = strArg("drafts");
 const DRY = process.argv.includes("--dry");
 /** Deliberately add another critic's take to a film that already has one. */
 const AGAIN = process.argv.includes("--again");
@@ -123,6 +132,20 @@ const draftSchema = z.object({
   content: z.string().min(1200).max(20000),
 });
 
+/**
+ * A draft from `--drafts`: the same review, plus the two things generation knew
+ * from context — which film it is about, and which of the desk's critics signs
+ * it. An unknown byline is a parse error, not a stray User row.
+ */
+const handwrittenSchema = draftSchema.extend({
+  film: z.string().min(1),
+  username: z.enum(PERSONAS.map((p) => p.username) as [string, ...string[]]),
+});
+
+function loadDrafts(file: string): z.infer<typeof handwrittenSchema>[] {
+  return z.array(handwrittenSchema).min(1).parse(JSON.parse(readFileSync(file, "utf8")));
+}
+
 function reviewSlug(title: string, movieSlug: string): string {
   const base = title
     .toLowerCase()
@@ -193,7 +216,12 @@ async function generate(persona: (typeof PERSONAS)[number], film: {
 }
 
 async function main() {
-  console.log(`House reviews: up to ${LIMIT}${DRY ? " (dry run)" : ""}`);
+  const drafts = DRAFTS ? loadDrafts(DRAFTS) : null;
+  console.log(
+    drafts
+      ? `House reviews: ${drafts.length} from ${DRAFTS}${DRY ? " (dry run)" : ""}`
+      : `House reviews: up to ${LIMIT}${DRY ? " (dry run)" : ""}`,
+  );
 
   const personas = await Promise.all(
     PERSONAS.map(async (p) => ({
@@ -208,12 +236,20 @@ async function main() {
     );
   }
 
+  // Either the run names its films — one `--film`, or one per draft — or it takes
+  // the next in line from the queue.
+  const named = drafts
+    ? [...new Set(drafts.map((d) => d.film))]
+    : FILM
+      ? [FILM]
+      : null;
+
   const films = await prisma.movie.findMany({
-    where: FILM
-      ? { slug: FILM }
+    where: named
+      ? { slug: { in: named } }
       : { overview: { not: null }, reviews: { none: {} } },
     orderBy: [{ wikidataSitelinks: "desc" }, { releaseDate: "desc" }],
-    take: FILM ? 1 : LIMIT,
+    take: named ? named.length : LIMIT,
     select: {
       id: true,
       slug: true,
@@ -226,46 +262,68 @@ async function main() {
       originalLanguage: true,
     },
   });
+  for (const slug of named?.filter((s) => !films.some((f) => f.slug === s)) ?? []) {
+    console.warn(`no film has the slug ${slug} — skipped`);
+  }
   if (films.length === 0) {
-    console.log("No film with a synopsis is missing a review. Nothing to do.");
+    console.log(
+      named
+        ? "None of the named films is in the library. Nothing to do."
+        : "No film with a synopsis is missing a review. Nothing to do.",
+    );
     return;
   }
 
-  // `--film` names a slug directly and so skips the `reviews: { none: {} }` guard
-  // that the default queue applies. That is how The Dark Knight ended up with two
-  // reviews by the same critic, opening on the same section heading, four weeks
-  // apart — nothing refused the second because nothing checked.
+  // A named slug skips the `reviews: { none: {} }` guard that the default queue
+  // applies. That is how The Dark Knight ended up with two reviews by the same
+  // critic, opening on the same section heading, four weeks apart — nothing
+  // refused the second because nothing checked.
   //
   // A second take on one film is a legitimate thing for a desk with four critics
   // to publish. It should be a decision, though, not an accident, so it now needs
   // `--again` and says whose take already exists.
-  if (FILM && !AGAIN) {
+  let queue = films;
+  if (named && !AGAIN) {
     const existing = await prisma.review.findMany({
-      where: { movieId: films[0].id },
-      select: { slug: true, status: true, author: { select: { username: true } } },
+      where: { movieId: { in: films.map((f) => f.id) } },
+      select: { movieId: true, slug: true, status: true, author: { select: { username: true } } },
     });
-    if (existing.length > 0) {
-      const who = existing
+    const spoken = new Set(existing.map((r) => r.movieId));
+    for (const film of films.filter((f) => spoken.has(f.id))) {
+      const theirs = existing.filter((r) => r.movieId === film.id);
+      const who = theirs
         .map((r) => `${r.author.username} (${r.slug}, ${r.status})`)
         .join(", ");
       console.log(
-        `${films[0].title} already has ${existing.length} review(s): ${who}\n` +
+        `${film.title} already has ${theirs.length} review(s): ${who}\n` +
           `Pass --again to add another voice on purpose.`,
       );
-      return;
     }
+    queue = films.filter((f) => !spoken.has(f.id));
+    if (queue.length === 0) return;
   }
 
   // Rotation continues from how much the desk has already written, so four
-  // reviews a day land as four voices, not the same byline four times.
+  // reviews a day land as four voices, not the same byline four times. A draft
+  // carries its own byline, so it needs no rotation.
   const written = await prisma.review.count();
+  const jobs = drafts
+    ? drafts.flatMap((draft) => {
+        const film = queue.find((f) => f.slug === draft.film);
+        const persona = personas.find((p) => p.username === draft.username)!;
+        return film ? [{ film, persona, draft }] : [];
+      })
+    : queue.map((film, i) => ({
+        film,
+        persona: personas[(written + i) % personas.length],
+        draft: null,
+      }));
 
   let published = 0;
   const skipped: string[] = [];
-  for (const [i, film] of films.entries()) {
-    const persona = personas[(written + i) % personas.length];
+  for (const { film, persona, draft: ready } of jobs) {
     try {
-      const draft = await generate(persona, film);
+      const draft = ready ?? (await generate(persona, film));
 
       let slug = reviewSlug(draft.title, film.slug);
       if (await prisma.review.findUnique({ where: { slug }, select: { id: true } })) {
