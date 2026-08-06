@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { eventKey, photoPlan, pickPhotos, unwrapRedirect, type Photo } from "@/lib/gather-sources";
+import {
+  eventKey,
+  licenceAllows,
+  nameMatches,
+  photoPlan,
+  pickPhotos,
+  unwrapRedirect,
+  type Photo,
+} from "@/lib/gather-sources";
 import { plainText } from "@/lib/seo";
 
 const photo = (title: string, day: string): Photo => ({
@@ -98,6 +106,76 @@ describe("photo credits never reach a summary", () => {
     expect(plainText("*This is emphasis the writer meant.*")).toBe(
       "This is emphasis the writer meant.",
     );
+  });
+});
+
+/**
+ * Two clauses this site cannot honour, and used to accept anyway: the
+ * gatherers required a licence to have a *name*, not to permit anything.
+ */
+describe("licenceAllows", () => {
+  it("takes the licences we can actually use", () => {
+    for (const l of ["CC0", "Public domain", "CC BY 4.0", "CC BY-SA 3.0", "No restrictions"]) {
+      expect(licenceAllows(l), l).toBe(true);
+    }
+  });
+
+  it("refuses NonCommercial — this site carries advertising", () => {
+    for (const l of ["CC BY-NC 4.0", "CC BY-NC-SA 3.0", "CC NonCommercial"]) {
+      expect(licenceAllows(l), l).toBe(false);
+    }
+  });
+
+  it("refuses NoDerivatives — every file here is re-encoded", () => {
+    for (const l of ["CC BY-ND 4.0", "CC BY-NC-ND 4.0"]) {
+      expect(licenceAllows(l), l).toBe(false);
+    }
+  });
+
+  it("refuses anything it does not recognise rather than guessing", () => {
+    expect(licenceAllows("All rights reserved")).toBe(false);
+    expect(licenceAllows("")).toBe(false);
+  });
+});
+
+describe("nameMatches", () => {
+  it("needs every token of the name, so a namesake does not slip through", () => {
+    expect(nameMatches("Keigo Higashino", "Keigo Higashino at a signing")).toBe(true);
+    // The failure this exists for: a search for a novelist returning a railway
+    // station of the same name, correctly licensed and completely wrong.
+    expect(nameMatches("Keigo Higashino", "Higashino Station platform 2")).toBe(false);
+  });
+
+  it("ignores case, punctuation and accents", () => {
+    expect(nameMatches("Anne Hathaway", "ANNE HATHAWAY, 2026 — premiere")).toBe(true);
+    expect(nameMatches("Léa Seydoux", "Lea Seydoux at Cannes")).toBe(true);
+  });
+
+  it("keeps two-character Hangul tokens, which are whole names", () => {
+    expect(nameMatches("송강호", "배우 송강호 2026")).toBe(true);
+    expect(nameMatches("송강호", "부산국제영화제 개막식")).toBe(false);
+  });
+});
+
+describe("pickPhotos ranking", () => {
+  it("prefers a press photograph over a snapshot from the same day", () => {
+    const snap = photo("A quiet snapshot", "2026-01-01");
+    const press = photo("At the London premiere", "2026-01-01");
+    expect(pickPhotos([snap, press], 1)[0].title).toBe("At the London premiere");
+  });
+
+  it("still takes the newer picture over the better-staged older one", () => {
+    const old = photo("At the London premiere", "2020-01-01");
+    const recent = photo("A quiet snapshot", "2026-01-01");
+    expect(pickPhotos([old, recent], 1)[0].title).toBe("A quiet snapshot");
+  });
+
+  it("drops what is not of the subject when a subject is named", () => {
+    const right = photo("Anne Hathaway at a premiere", "2026-01-01");
+    const wrong = photo("Hathaway House, Warwickshire", "2026-02-01");
+    const picked = pickPhotos([wrong, right], 5, "Anne Hathaway");
+    expect(picked).toHaveLength(1);
+    expect(picked[0].title).toBe("Anne Hathaway at a premiere");
   });
 });
 

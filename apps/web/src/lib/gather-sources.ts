@@ -158,11 +158,31 @@ export const DEFAULT_MIN_WIDTH = 1200;
 export const eventKey = (title: string): string =>
   title.replace(/[\s_]*(\(\d+\)|\d+)$/, "").toLowerCase();
 
-/** Newest first, at most PER_EVENT frames of any one occasion. */
-export function pickPhotos(photos: Photo[], want: number): Photo[] {
+/**
+ * Newest first, at most PER_EVENT frames of any one occasion.
+ *
+ * `of` narrows to pictures whose title names the subject. Pass it for **search**
+ * results, where a text index will happily return the building named after the
+ * person — and *not* for a category walk, where an editor has already asserted
+ * the subject: the best premiere photographs are titled "Ari, Cynthia y Jon",
+ * which contains neither token of her name and is unmistakably her.
+ *
+ * Within a day, a press or premiere photograph outranks a snapshot: same
+ * recency, better picture.
+ */
+export function pickPhotos(photos: Photo[], want: number, of?: string): Photo[] {
+  const eligible = of ? photos.filter((p) => nameMatches(of, p.title)) : photos;
+
+  const ranked = [...eligible].sort((a, b) => {
+    const byDay = b.day.localeCompare(a.day);
+    if (byDay !== 0) return byDay;
+    const rank = (p: Photo) => (PREFERRED.test(p.title) ? 1 : 0);
+    return rank(b) - rank(a);
+  });
+
   const perEvent = new Map<string, number>();
   const picked: Photo[] = [];
-  for (const p of [...photos].sort((a, b) => b.day.localeCompare(a.day))) {
+  for (const p of ranked) {
     const key = eventKey(p.title);
     const n = perEvent.get(key) ?? 0;
     if (n >= PER_EVENT) continue;
@@ -180,9 +200,80 @@ export function pickPhotos(photos: Photo[], want: number): Photo[] {
  * person reliably contains one, it is often the sharpest file in the category,
  * and a piece about what someone said last week illustrated with a waxwork of
  * them is a small humiliation. Statues and murals fail the same way.
+ *
+ * The rest — posters, album art, broadcast screencaps — are things a fan
+ * uploaded and tagged CC that the uploader had no right to license. A tag is
+ * not a licence, and these are the shapes where the tag is most often wrong.
  */
 const JUNK =
-  /logo|signature|autograph|poster|album|cover|map|diagram|screenshot|tussauds|wax figure|waxwork|statue|mural|graffiti|fan ?art/i;
+  /logo|signature|autograph|poster|keyart|album|cover art|dvd|blu-?ray|map|diagram|screenshot|screen ?cap|tussauds|wax figure|waxwork|statue|mural|graffiti|fan ?art/i;
+
+/**
+ * Pictures worth reaching for first: a performer at work or in front of press.
+ * Scored rather than filtered, so a category with nothing better still yields
+ * something.
+ */
+const PREFERRED = /premiere|red ?carpet|festival|press|photocall|conference|concert|performing|live|award/i;
+
+/**
+ * A licence this site is actually able to honour.
+ *
+ * Two clauses rule material out no matter how well it is attributed:
+ *
+ *  · **NonCommercial.** The site carries advertising. Even if it did not, "is
+ *    a film magazine commercial?" is not a question to answer optimistically
+ *    on someone else's behalf.
+ *  · **NoDerivatives.** Every picture here is re-encoded to WebP at 1600px and
+ *    cropped by the layout. That is a derivative work by any reading, so ND is
+ *    incompatible with the pipeline itself, not merely with a use of it.
+ *
+ * Borrowed from the moneyti project's `commonsLicenseOk`, which had reached
+ * the same conclusion. Our gatherers previously accepted anything with a
+ * licence *name*, which let both classes through.
+ */
+export function licenceAllows(license: string): boolean {
+  const l = license.toLowerCase();
+  if (/\bnc\b|noncommercial|non-commercial/.test(l)) return false;
+  if (/\bnd\b|noderiv|no-deriv/.test(l)) return false;
+  // Everything we can actually use names itself plainly.
+  return /cc0|public domain|\bpd\b|cc by|attribution|no restrictions|share ?alike/.test(l);
+}
+
+/**
+ * Is this file plausibly *of* the person we asked about?
+ *
+ * Every token of the name has to appear somewhere in the title. Commons search
+ * is a text index over descriptions, so a name query returns the person, the
+ * building named after them, and the school that hosted them — moneyti records
+ * a search for one novelist coming back with ten correctly-licensed pictures
+ * of a railway station of the same name. Tokens under three characters are
+ * dropped unless they are Hangul, where two characters is a whole name.
+ */
+export function nameMatches(name: string, title: string): boolean {
+  // NFKD to reach the combining accents, then **NFC to put Hangul back
+  // together**: decomposition splits 송 into three jamo that the 가-힣 class
+  // below does not match, so without the recomposition every Korean name
+  // folded to an empty string and matched nothing.
+  const fold = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .normalize("NFC")
+      .replace(/[^a-z0-9가-힣\s]/g, " ");
+  const haystack = fold(title);
+  const tokens = fold(name)
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 || /[가-힣]/.test(t));
+  return tokens.length > 0 && tokens.every((t) => haystack.includes(t));
+}
+
+/**
+ * A stitched broadcast grid or a banner, by shape alone. 9:16 is spared
+ * because a phone-shot portrait is a legitimate picture of a person.
+ */
+const looksLikeMontage = (w: number, h: number): boolean =>
+  w > 0 && h > 0 && (w / h > 3 || h / w > 2.4);
 
 interface CommonsInfo {
   url?: string;
@@ -204,8 +295,10 @@ function commonsCandidate(
   const license = plain(meta.LicenseShortName?.value);
   const title = rawTitle.replace(/^File:/, "").replace(/\.[a-z]+$/i, "");
   if (!info?.url || !info.descriptionurl || !license) return null;
+  if (!licenceAllows(license)) return null;
   if ((info.width ?? 0) < minWidth) return null;
   if (JUNK.test(title)) return null;
+  if (looksLikeMontage(info.width ?? 0, info.height ?? 0)) return null;
   return {
     title,
     // The rendition, never the archival master.
@@ -319,15 +412,23 @@ export async function openversePhotos(
       // 20 is the ceiling for an anonymous caller. Asking for 50 returned a 400
       // that `json` swallowed into null, so this pool contributed nothing at
       // all from the day it was added until someone checked.
-      "&license_type=all-cc&page_size=20&mature=false&format=json",
+      //
+      // `commercial,modification` rather than `all-cc`: the previous filter
+      // admitted NC and ND, and this pipeline re-encodes every file, which ND
+      // forbids outright. Asking the API for the right slice is cheaper than
+      // fetching the wrong one and rejecting it.
+      "&license_type=commercial,modification&page_size=20&mature=false&format=json",
   );
   const out: Photo[] = [];
   for (const r of data?.results ?? []) {
     if (!r.url || !r.foreign_landing_url || !r.license || !r.license_url) continue;
     if ((r.width ?? 0) < minWidth) continue;
     if (!/^https:\/\//.test(r.url)) continue;
+    const title = (r.title ?? "untitled").slice(0, 200);
+    if (JUNK.test(title)) continue;
+    if (looksLikeMontage(r.width ?? 0, r.height ?? 0)) continue;
     out.push({
-      title: (r.title ?? "untitled").slice(0, 200),
+      title,
       url: r.url,
       day: (r.indexed_on ?? "1970-01-01").slice(0, 10),
       width: r.width ?? 0,
@@ -341,16 +442,25 @@ export async function openversePhotos(
   return out.slice(0, want);
 }
 
-/** Commons leads, Openverse fills the shortfall. */
+/**
+ * Commons leads, Openverse fills the shortfall.
+ *
+ * `subject` is the name every candidate's title must contain — give it when
+ * the query is a person, and the pool that comes back is of them rather than
+ * merely near them.
+ */
 export async function gatherPhotos(
   query: string,
   want: number,
   minWidth = DEFAULT_MIN_WIDTH,
+  subject?: string,
 ): Promise<Photo[]> {
-  const commons = pickPhotos(await commonsPhotos(query, minWidth), want);
+  const commons = pickPhotos(await commonsPhotos(query, minWidth), want, subject);
   if (commons.length >= want) return commons;
-  const extra = await openversePhotos(query, want - commons.length, minWidth);
-  return [...commons, ...extra];
+  const extra = (await openversePhotos(query, want * 2, minWidth)).filter(
+    (p) => !subject || nameMatches(subject, p.title),
+  );
+  return [...commons, ...extra].slice(0, want);
 }
 
 /* ── Where the pictures go ───────────────────────────────────── */

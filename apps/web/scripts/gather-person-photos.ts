@@ -71,6 +71,9 @@ interface WdEntities {
   >;
 }
 
+/** Their name as we hold it, for the relevance gate. Set by `resolveCategory`. */
+let PERSON_NAME: string | null = null;
+
 /** The person's Commons category (P373), from whatever identity we hold. */
 async function resolveCategory(): Promise<string> {
   if (CATEGORY) return CATEGORY;
@@ -81,6 +84,7 @@ async function resolveCategory(): Promise<string> {
     select: { name: true, wikidataId: true, wikipediaUrl: true },
   });
   if (!person) throw new Error(`no person with slug ${PERSON}`);
+  PERSON_NAME = person.name;
 
   let qid = person.wikidataId;
   if (!qid && person.wikipediaUrl) {
@@ -117,6 +121,11 @@ async function main() {
   const candidates = await commonsCategoryPhotos(category, MAX_DEPTH, MAX_FILES, MIN_WIDTH);
   console.log(`${candidates.length} licensed candidates at ${MIN_WIDTH}px or wider`);
 
+  // No name gate here, deliberately. A Commons *category* is an editor's
+  // assertion that these files are of this person; a text search is not. The
+  // gate belongs on the search path, and applying it here threw away the best
+  // pictures in the set — the premiere photographs are titled "Ari, Cynthia y
+  // Jon", which contains neither of her name's tokens and is unmistakably her.
   const picked = pickPhotos(candidates, COUNT);
 
   console.log(`\npicked ${picked.length}, newest first:`);

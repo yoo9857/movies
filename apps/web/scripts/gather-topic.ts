@@ -44,6 +44,11 @@ const NEWS = Number(strArg("news")) || 6;
 const IMAGES = Number(strArg("images")) || 8;
 /** Lower it when the alternative is no picture at all. */
 const MIN_WIDTH = Number(strArg("min-width")) || DEFAULT_MIN_WIDTH;
+/**
+ * A person every picture must be named after. Without it a name query returns
+ * the person, the building named after them, and the school that hosted them.
+ */
+const SUBJECT = strArg("subject") ?? strArg("image-query");
 const CATEGORY = strArg("category") ?? "ISSUE";
 const PEOPLE = (strArg("people") ?? "").split(",").filter(Boolean);
 const FILMS = (strArg("films") ?? "").split(",").filter(Boolean);
@@ -70,7 +75,7 @@ async function main() {
 
   const [news, photos] = await Promise.all([
     latestNews(TOPIC, NEWS),
-    gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES, MIN_WIDTH),
+    gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES, MIN_WIDTH, SUBJECT ?? undefined),
   ]);
 
   console.log(`\n"${TOPIC}" — ${news.length} article(s), newest first:`);
