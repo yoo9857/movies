@@ -23,7 +23,7 @@ async function main() {
   const post = await prisma.post.findUnique({
     where: { slug: SLUG },
     select: {
-      id: true, title: true, dek: true, status: true, category: true, content: true,
+      id: true, slug: true, title: true, dek: true, status: true, category: true, content: true,
       sources: true, image: true, imageCredit: true, imageLicense: true,
       people: { orderBy: { sort: "asc" }, select: { person: { select: { slug: true } } } },
       movies: { orderBy: { sort: "asc" }, select: { movie: { select: { slug: true } } } },
