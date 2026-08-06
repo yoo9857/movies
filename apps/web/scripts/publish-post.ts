@@ -13,6 +13,8 @@
 // look at what the piece actually claims.
 import "../../../packages/db/prisma/env";
 import { prisma } from "@cinepixo/db";
+import { type PostCategory, postCategorySlug } from "@cinepixo/shared";
+import { submitUrls } from "@/lib/indexnow";
 
 const SLUG = process.argv[2];
 const UNPUBLISH = process.argv.includes("--unpublish");
@@ -28,6 +30,37 @@ const UNPUBLISH = process.argv.includes("--unpublish");
  */
 function noteListingDelay(): void {
   console.log("The piece is live now. /blog and its shelf pick it up within a minute.");
+}
+
+/**
+ * Tell the search engines that take being told.
+ *
+ * The piece, the blog front, and the shelf it landed on — the three URLs whose
+ * content actually changed. Never the sitemap: IndexNow wants pages, and a
+ * crawler finds the sitemap from robots.txt anyway.
+ *
+ * Google is not among them and cannot be; see `lib/indexnow.ts`. The message
+ * says so rather than letting a green line imply otherwise.
+ */
+async function tellSearchEngines(slug: string, category: PostCategory): Promise<void> {
+  const site = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!site) {
+    console.log("NEXT_PUBLIC_SITE_URL is not set — skipped the IndexNow submission");
+    return;
+  }
+  const urls = [
+    new URL(`/blog/${slug}`, site).href,
+    new URL("/blog", site).href,
+    new URL(`/blog/category/${postCategorySlug(category)}`, site).href,
+  ];
+  const { ok, detail } = await submitUrls(urls, site);
+  console.log(`IndexNow (Bing, Yandex, Seznam, Naver): ${detail}`);
+  if (ok) {
+    console.log(
+      "Google takes no such ping. It will find this through the sitemap and the\n" +
+        "subject pages that link to it; to hurry it, use Request Indexing in Search Console.",
+    );
+  }
 }
 
 async function main() {
@@ -77,6 +110,7 @@ async function main() {
   console.log(`\nPUBLISHED /blog/${updated.slug} at ${updated.publishedAt?.toISOString()}`);
   console.log("It is now on its shelf, in the sitemap and in the feeds.");
   noteListingDelay();
+  await tellSearchEngines(updated.slug, post.category);
 }
 
 main()
