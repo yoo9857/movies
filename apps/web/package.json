@@ -10,7 +10,11 @@
     "portraits": "tsx scripts/import-portraits.ts",
     "artwork": "tsx scripts/import-film-artwork.ts",
     "posters": "tsx scripts/import-posters.ts",
-    "free-films": "tsx scripts/import-free-films.ts"
+    "free-films": "tsx scripts/import-free-films.ts",
+    "post-images": "tsx scripts/fill-post-images.ts",
+    "person-photos": "tsx scripts/gather-person-photos.ts",
+    "topic": "tsx scripts/gather-topic.ts",
+    "save-media": "tsx scripts/save-media.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1098.0",

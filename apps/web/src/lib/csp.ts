@@ -108,8 +108,12 @@ export function contentSecurityPolicy({
     "media-src 'self' https://pokemon-dive.us-lax-4.linodeobjects.com",
     "font-src 'self'",
     join("connect-src 'self'", ads && ADS.connect),
-    // trailer embeds only — loaded on click, privacy-enhanced domain
-    join("frame-src https://www.youtube-nocookie.com", ads && ADS.frame),
+    // Embeds only, all loaded on click: trailers (privacy-enhanced domain) and
+    // the X / Instagram post frames the blog's paste-a-URL syntax renders.
+    join(
+      "frame-src https://www.youtube-nocookie.com https://platform.twitter.com https://www.instagram.com",
+      ads && ADS.frame,
+    ),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

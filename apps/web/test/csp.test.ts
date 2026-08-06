@@ -87,9 +87,13 @@ describe("the directives strict-dynamic does not cover", () => {
     expect(directive(csp, "connect-src")).toContain(cmp);
   });
 
-  it("keeps the trailer domain and our own media, ads or not", () => {
+  it("keeps the embed domains and our own media, ads or not", () => {
+    // All three load on click only: the trailer player and the X / Instagram
+    // post frames the blog's paste-a-URL syntax renders.
     for (const csp of [withAds(), withoutAds()]) {
       expect(directive(csp, "frame-src")).toContain("https://www.youtube-nocookie.com");
+      expect(directive(csp, "frame-src")).toContain("https://platform.twitter.com");
+      expect(directive(csp, "frame-src")).toContain("https://www.instagram.com");
       expect(directive(csp, "media-src")).toContain("pokemon-dive");
     }
   });

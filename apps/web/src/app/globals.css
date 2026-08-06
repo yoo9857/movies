@@ -293,6 +293,43 @@ body {
   font-style: italic;
   margin: 1.25rem 0;
 }
+/* Photo credit.
+ *
+ * A licence obligation, not a sentence of the piece: it has to be on the page
+ * and legible, and it must not read as prose. Left at body size it competed
+ * with the paragraph above it — accent-coloured licence links at 1.06rem pull
+ * the eye straight out of the argument — so it is set at caption scale, in the
+ * muted colour, with links that underline quietly instead of glowing.
+ *
+ * Not smaller than this: 0.72rem is about 11.5px, which is the floor at which
+ * a credit is still readable on a phone. The same class dresses the hero's
+ * figcaption, so every credit on the site is one size. */
+.cx-credit {
+  font-size: 0.72rem;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+}
+.cx-credit em,
+.cx-credit i {
+  font-style: normal;
+}
+.prose-review .cx-credit {
+  margin: 0.5rem 0 0;
+}
+.prose-review .cx-credit a,
+.cx-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.prose-review .cx-credit a:hover,
+.cx-credit a:hover {
+  color: var(--foreground);
+  text-decoration-color: currentColor;
+}
+
 .prose-review ul,
 .prose-review ol {
   padding-left: 1.5rem;

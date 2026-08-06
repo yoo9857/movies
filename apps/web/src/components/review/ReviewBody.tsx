@@ -10,6 +10,7 @@
 //   ==text==           highlighted phrase
 //   > line             pull quote (set large, used as a section beat)
 //
+import type { Element } from "hast";
 import Image from "next/image";
 import { Fragment, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -22,7 +23,10 @@ import remarkCjkFriendly from "remark-cjk-friendly";
 import remarkCjkFriendlyGfmStrikethrough from "remark-cjk-friendly-gfm-strikethrough";
 import remarkGfm from "remark-gfm";
 import { headingSlug } from "@cinepixo/shared";
+import { instagramEmbedUrl, xStatusId, youtubeVideoId } from "@/lib/post-image-sources";
+import { SocialEmbed } from "../SocialEmbed";
 import { TrailerEmbed } from "../TrailerEmbed";
+import { VideoEmbed } from "../VideoEmbed";
 import { Spoiler } from "./Spoiler";
 
 export interface ReviewMedia {
@@ -123,6 +127,88 @@ function headingText(children: ReactNode): string {
   return "";
 }
 
+/**
+ * A paragraph that is nothing but a pasted URL — link text equal to the
+ * href — is a request to embed. A written link (`[the video](url)`, or a URL
+ * inside a sentence) stays a link: the author chose words, so the words
+ * stand. This is the whole embed syntax on purpose — it survives the Tiptap
+ * round-trip (which may rewrite `<url>` as `[url](url)`, leaving
+ * text === href) and degrades to a plain link in the `.md` renditions and
+ * anywhere else the components don't run.
+ */
+function soloLinkHref(node: Element | undefined): string | null {
+  if (!node) return null;
+  const kids = node.children.filter((c) => !(c.type === "text" && !c.value.trim()));
+  if (kids.length !== 1) return null;
+  const a = kids[0];
+  if (a.type !== "element" || a.tagName !== "a") return null;
+  const href = typeof a.properties?.href === "string" ? a.properties.href : null;
+  if (!href) return null;
+  const label = a.children.length === 1 && a.children[0].type === "text" ? a.children[0].value : null;
+  return label === href ? href : null;
+}
+
+/**
+ * Is this paragraph a photo credit rather than a sentence of the piece?
+ *
+ * The house convention, written by `fill-post-images --body`: one emphasis
+ * run opening with "Photo:" or "Photos:". Recognised so it can be set at
+ * caption scale — a licence line at body size competes with the prose it
+ * belongs to, which is the readability problem this exists to fix. In the
+ * `.md` renditions it stays ordinary emphasis, which is what a credit should
+ * degrade to.
+ */
+function isCreditLine(node: Element | undefined): boolean {
+  if (!node) return false;
+  const kids = node.children.filter((c) => !(c.type === "text" && !c.value.trim()));
+  if (kids.length !== 1) return false;
+  const em = kids[0];
+  if (em.type !== "element" || (em.tagName !== "em" && em.tagName !== "i")) return false;
+  const first = em.children[0];
+  return first?.type === "text" && /^Photos?:/.test(first.value.trimStart());
+}
+
+/**
+ * How many pictures a paragraph is made of, ignoring the whitespace between
+ * them. Two or more set side by side — `![a](x)` and `![b](y)` on consecutive
+ * lines of one paragraph is the whole syntax, so a pair survives the editor
+ * round-trip and degrades to stacked pictures wherever these components do
+ * not run.
+ */
+function imageCount(node: Element | undefined): number {
+  if (!node) return 0;
+  const kids = node.children.filter((c) => !(c.type === "text" && !c.value.trim()));
+  return kids.every((c) => c.type === "element" && c.tagName === "img") ? kids.length : 0;
+}
+
+/**
+ * What a pasted URL embeds as: YouTube's click-to-load player, or an X /
+ * Instagram post served by the platform's own embed endpoint — showing a
+ * post where the platform offers to show it, which is the sanctioned
+ * opposite of copying its picture out. Everything else — including these
+ * hosts' profile and search pages — stays a link.
+ */
+function embedFor(href: string): ReactNode | null {
+  const video = youtubeVideoId(href);
+  if (video) return <VideoEmbed youtubeKey={video} title="YouTube video" />;
+
+  const status = xStatusId(href);
+  if (status) {
+    return (
+      <SocialEmbed
+        src={`https://platform.twitter.com/embed/Tweet.html?id=${status}`}
+        network="X"
+        height={560}
+      />
+    );
+  }
+
+  const instagram = instagramEmbedUrl(href);
+  if (instagram) return <SocialEmbed src={instagram} network="Instagram" height={640} />;
+
+  return null;
+}
+
 const components: Components = {
   h2: ({ children }) => (
     <h2 id={headingSlug(headingText(children))} className="scroll-mt-24">
@@ -134,7 +220,25 @@ const components: Components = {
       {withHighlights(children)}
     </h3>
   ),
-  p: ({ children }) => <p>{withHighlights(children)}</p>,
+  p: ({ node, children }) => {
+    const href = soloLinkHref(node);
+    const embed = href ? embedFor(href) : null;
+    if (embed) {
+      return <div className="my-8 not-prose flex justify-center">{embed}</div>;
+    }
+    // Two or more pictures in one paragraph are a row, not a stack. Heights
+    // are left alone rather than cropped to match: a tidy grid is not worth
+    // slicing the top off someone's head.
+    if (imageCount(node) >= 2) {
+      return (
+        <div className="mt-8 mb-2 not-prose grid items-start gap-3 sm:grid-cols-2 [&>img]:my-0">
+          {children}
+        </div>
+      );
+    }
+    if (isCreditLine(node)) return <p className="cx-credit">{children}</p>;
+    return <p>{withHighlights(children)}</p>;
+  },
   li: ({ children }) => <li>{withHighlights(children)}</li>,
   // Blockquotes are the review's section beats — set large, not indented prose.
   blockquote: ({ children }) => (
@@ -163,7 +267,9 @@ const components: Components = {
       alt={alt ?? ""}
       loading="lazy"
       decoding="async"
-      className="my-8 w-full rounded-xl border border-line"
+      // Asymmetric on purpose: the credit that follows belongs to this
+      // picture, so the gap below is small and the next paragraph's is not.
+      className="mt-8 mb-2 w-full rounded-xl border border-line"
     />
   ),
 };

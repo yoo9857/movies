@@ -357,7 +357,7 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
                 className="w-full rounded-xl border border-line object-cover"
               />
               {(post.imageAlt || post.imageCredit) && (
-                <figcaption className="mt-2 text-xs leading-relaxed text-muted">
+                <figcaption className="cx-credit mt-2 block">
                   {post.imageAlt}
                   {post.imageAlt && post.imageCredit ? " · " : ""}
                   {post.imageCredit}
@@ -369,7 +369,6 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
                           href={post.imageLicenseUrl}
                           rel="license noopener noreferrer"
                           target="_blank"
-                          className="underline hover:text-foreground"
                         >
                           {post.imageLicense}
                         </a>
