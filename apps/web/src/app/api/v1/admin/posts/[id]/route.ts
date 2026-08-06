@@ -1,11 +1,25 @@
 import { prisma } from "@cinepixo/db";
 import { postInputSchema } from "@cinepixo/shared";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { assertHeroIsOurs, postWriteData, syncPostSubjects } from "@/lib/post-write";
 
 const idSchema = z.string().min(1).max(64);
+
+/**
+ * Drop the cached post listings after an edit.
+ *
+ * `{ expire: 0 }` rather than the recommended `"max"`: that profile marks the
+ * tag stale and serves the old rows once more while the fresh ones load, which
+ * is right for a reader and wrong for the editor who just pressed save and is
+ * looking for their change. `updateTag` would say this more directly but is
+ * Server-Actions-only, and this is a route handler.
+ */
+function dropPostListings(): void {
+  revalidateTag("posts", { expire: 0 });
+}
 
 export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: string }> }) => {
   requireSameOrigin(request);
@@ -39,6 +53,7 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
     select: { id: true, slug: true },
   });
   await syncPostSubjects(post.id, input);
+  dropPostListings();
 
   return json({ post });
 });
@@ -57,5 +72,6 @@ export const DELETE = handle(async (request: Request, ctx: { params: Promise<{ i
   // never deleted when text stops referencing them — orphans are cheap, and a
   // GC that deletes a file still linked from somewhere is not.
   await prisma.post.delete({ where: { id: postId } });
+  dropPostListings();
   return json({ ok: true });
 });

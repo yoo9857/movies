@@ -1018,6 +1018,11 @@ export interface PageMetaInput {
   tags?: readonly string[];
   /** Clean-Markdown rendition, advertised as `rel=alternate`. */
   markdownPath?: string;
+  /**
+   * Section feeds this page belongs to, offered ahead of the site feed —
+   * a reader subscribing from a blog page wants the blog.
+   */
+  feeds?: readonly { path: string; title: string }[];
 }
 
 /**
@@ -1067,7 +1072,16 @@ export function pageMetadata(input: PageMetaInput): Metadata {
     alternates: {
       canonical: url,
       types: {
-        "application/rss+xml": absUrl("/feed.xml"),
+        // A section's own feed is listed first so a reader subscribing from
+        // inside the blog gets the blog, not the whole site. Both are offered:
+        // a feed reader shows the list, and dropping the site feed here would
+        // make the blog the only way to subscribe from a blog page.
+        "application/rss+xml": input.feeds?.length
+          ? [
+              ...input.feeds.map((f) => ({ url: absUrl(f.path), title: f.title })),
+              { url: absUrl("/feed.xml"), title: `${SITE_NAME} — everything` },
+            ]
+          : absUrl("/feed.xml"),
         "application/feed+json": absUrl("/feed.json"),
         ...(input.markdownPath ? { "text/markdown": absUrl(input.markdownPath) } : {}),
       },

@@ -1,6 +1,7 @@
 import { prisma } from "@cinepixo/db";
 import {
   POST_CATEGORY_LABELS,
+  type PostCategory,
   extractHeadings,
   postCategorySlug,
   readingMinutes,
@@ -8,10 +9,11 @@ import {
   sourceHost,
 } from "@cinepixo/shared";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { cache } from "react";
+import { Suspense, cache } from "react";
 import { AdSlot } from "@/components/ads/AdSlot";
 import { Avatar } from "@/components/Avatar";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -22,6 +24,7 @@ import { ReelDivider, SectionHead } from "@/components/ReelDivider";
 import { MarkdownProse } from "@/components/review/ReviewBody";
 import { ShareRow } from "@/components/review/ShareRow";
 import { PostRow } from "@/components/blog/PostRow";
+import { BLOG_FEED } from "../page";
 import { isAdmin } from "@/lib/auth";
 import {
   absUrl,
@@ -73,6 +76,127 @@ export const dynamic = "force-dynamic";
  * the .md endpoint and the share card. A draft is visible at its URL to one
  * account and is marked `noindex` while it is.
  */
+/**
+ * What else to read, resolved after the piece has already streamed.
+ *
+ * Two queries: more from the same shelf, and anything else written about the
+ * same people — the second is the one a tag cloud cannot answer, and the
+ * reciprocal link that makes a person's page worth crawling. Both are
+ * navigation, so neither belongs on the critical path of the article itself.
+ *
+ * Cached by shelf and subject rather than by post: two pieces about the same
+ * actor want the same answer.
+ */
+const relatedFor = unstable_cache(
+  async (postId: string, category: PostCategory, peopleSlugs: string[]) =>
+    Promise.all([
+      prisma.post.findMany({
+        where: { status: "PUBLISHED", category, NOT: { id: postId } },
+        orderBy: { publishedAt: "desc" },
+        take: 4,
+        select: {
+          slug: true,
+          title: true,
+          dek: true,
+          category: true,
+          publishedAt: true,
+          image: true,
+          imageAlt: true,
+          author: { select: { username: true, displayName: true } },
+        },
+      }),
+      peopleSlugs.length === 0
+        ? Promise.resolve([])
+        : prisma.post.findMany({
+            where: {
+              status: "PUBLISHED",
+              NOT: { id: postId },
+              people: { some: { person: { slug: { in: peopleSlugs } } } },
+            },
+            orderBy: { publishedAt: "desc" },
+            take: 4,
+            select: { slug: true, title: true, publishedAt: true },
+          }),
+    ]),
+  ["blog-related"],
+  { revalidate: 300, tags: ["posts"] },
+);
+
+/** Height held while the two queries run, so the footer does not jump. */
+function RelatedFallback() {
+  return <div className="h-40" aria-hidden="true" />;
+}
+
+async function Related({
+  postId,
+  category,
+  peopleSlugs,
+  leadName,
+}: {
+  postId: string;
+  category: PostCategory;
+  peopleSlugs: string[];
+  leadName?: string;
+}) {
+  const [alsoOnShelf, alsoAboutThem] = await relatedFor(postId, category, peopleSlugs);
+
+  return (
+    <>
+      {alsoAboutThem.length > 0 && (
+        <section>
+          <SectionHead>Also written about {leadName}</SectionHead>
+          <ul className="mt-3 divide-y divide-line border-y border-line">
+            {alsoAboutThem.map((p) => (
+              <li key={p.slug}>
+                <Link
+                  href={`/blog/${p.slug}`}
+                  className="group flex items-baseline justify-between gap-4 py-3 text-sm"
+                >
+                  <span className="min-w-0 font-medium transition-colors group-hover:text-accent">
+                    {p.title}
+                  </span>
+                  {p.publishedAt && (
+                    <time
+                      dateTime={new Date(p.publishedAt).toISOString()}
+                      className="shrink-0 font-mono text-xs text-muted"
+                    >
+                      {new Date(p.publishedAt).toLocaleDateString("en-US", {
+                        dateStyle: "medium",
+                      })}
+                    </time>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {alsoOnShelf.length > 0 && (
+        <section>
+          <SectionHead
+            action={
+              <Link
+                href={`/blog/category/${postCategorySlug(category)}`}
+                className="text-sm text-accent hover:opacity-80"
+              >
+                All of it →
+              </Link>
+            }
+          >
+            More {POST_CATEGORY_LABELS[category]}
+          </SectionHead>
+          <div className="mt-3 divide-y divide-line border-y border-line">
+            {alsoOnShelf.map((p) => (
+              <PostRow key={p.slug} post={p} />
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
 const getPost = cache(async (rawSlug: string) => {
   const parsed = slugSchema.safeParse(rawSlug);
   if (!parsed.success) return null;
@@ -160,6 +284,7 @@ export async function generateMetadata(props: {
     // rendered below.
     keywords: [...post.tags, ...post.people.map((p) => p.person.name)],
     markdownPath: `/blog/${post.slug}.md`,
+    feeds: BLOG_FEED,
   });
 }
 
@@ -194,38 +319,6 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
   const trail = trailFor(post);
   const people = post.people.map((p) => p.person);
   const films = post.movies.map((m) => m.movie);
-
-  // More from the same shelf, and anything else written about the same people —
-  // the second is the query a tag cloud cannot answer.
-  const [alsoOnShelf, alsoAboutThem] = await Promise.all([
-    prisma.post.findMany({
-      where: { status: "PUBLISHED", category: post.category, NOT: { id: post.id } },
-      orderBy: { publishedAt: "desc" },
-      take: 4,
-      select: {
-        slug: true,
-        title: true,
-        dek: true,
-        category: true,
-        publishedAt: true,
-        image: true,
-        imageAlt: true,
-        author: { select: { username: true, displayName: true } },
-      },
-    }),
-    people.length === 0
-      ? Promise.resolve([])
-      : prisma.post.findMany({
-          where: {
-            status: "PUBLISHED",
-            NOT: { id: post.id },
-            people: { some: { person: { slug: { in: people.map((p) => p.slug) } } } },
-          },
-          orderBy: { publishedAt: "desc" },
-          take: 4,
-          select: { slug: true, title: true, publishedAt: true },
-        }),
-  ]);
 
   // `about` first, `mentions` after — the curated sort order, honoured. A piece
   // on one actor should not claim to be equally about the six films under it.
@@ -531,57 +624,13 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
               </div>
             </section>
 
-            {alsoAboutThem.length > 0 && (
-              <section>
-                <SectionHead>Also written about {people[0]?.name}</SectionHead>
-                <ul className="mt-3 divide-y divide-line border-y border-line">
-                  {alsoAboutThem.map((p) => (
-                    <li key={p.slug}>
-                      <Link
-                        href={`/blog/${p.slug}`}
-                        className="group flex items-baseline justify-between gap-4 py-3 text-sm"
-                      >
-                        <span className="min-w-0 font-medium transition-colors group-hover:text-accent">
-                          {p.title}
-                        </span>
-                        {p.publishedAt && (
-                          <time
-                            dateTime={new Date(p.publishedAt).toISOString()}
-                            className="shrink-0 font-mono text-xs text-muted"
-                          >
-                            {new Date(p.publishedAt).toLocaleDateString("en-US", {
-                              dateStyle: "medium",
-                            })}
-                          </time>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {alsoOnShelf.length > 0 && (
-              <section>
-                <SectionHead
-                  action={
-                    <Link
-                      href={`/blog/category/${postCategorySlug(post.category)}`}
-                      className="text-sm text-accent hover:opacity-80"
-                    >
-                      All of it →
-                    </Link>
-                  }
-                >
-                  More {POST_CATEGORY_LABELS[post.category]}
-                </SectionHead>
-                <div className="mt-3 divide-y divide-line border-y border-line">
-                  {alsoOnShelf.map((p) => (
-                    <PostRow key={p.slug} post={p} />
-                  ))}
-                </div>
-              </section>
-            )}
+            {/* Two more queries' worth of navigation, streamed in after the
+                piece rather than in front of it. Nobody arriving from a search
+                result should wait on "what else is on this shelf" before the
+                first paragraph exists. */}
+            <Suspense fallback={<RelatedFallback />}>
+              <Related postId={post.id} category={post.category} peopleSlugs={people.map((p) => p.slug)} leadName={people[0]?.name} />
+            </Suspense>
           </footer>
         </article>
 

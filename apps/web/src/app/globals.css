@@ -293,6 +293,24 @@ body {
   font-style: italic;
   margin: 1.25rem 0;
 }
+/* Body pictures reserve their space before they arrive.
+ *
+ * Markdown carries no dimensions, so these `<img>`s used to be zero-height
+ * until the bytes landed and then shoved the rest of the piece down — the
+ * layout shift the ad slot is carefully designed to avoid, reintroduced by the
+ * photographs. `contain-intrinsic-size` gives the box a stand-in height at the
+ * shape our pipeline actually produces (1600px wide, landscape more often than
+ * not), and `content-visibility` lets the browser skip laying out the ones
+ * still far below the fold.
+ *
+ * A guess, not a measurement: the real height arrives with the file and wins.
+ * It removes most of the shift rather than all of it, which is the honest
+ * ceiling until dimensions travel in the Markdown. */
+.prose-review img {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 640px;
+}
+
 /* Photo credit.
  *
  * A licence obligation, not a sentence of the piece: it has to be on the page

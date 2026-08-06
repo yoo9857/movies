@@ -64,6 +64,15 @@ const nextConfig: NextConfig = {
         ? [{ protocol: "https" as const, hostname: uploadHost }]
         : []),
     ],
+    // AVIF first, WebP behind it. Every source here is already WebP out of the
+    // ingest pipeline, so this buys roughly a further 20% on the hero — the one
+    // image on a post that is fetched before anything else — and costs a slower
+    // first encode per size, which the cache below then holds.
+    formats: ["image/avif", "image/webp"],
+    // Our objects are immutable: a changed picture is a new key, never a new
+    // version of an old one. The default 60s cache made the optimiser re-encode
+    // files that cannot change. A month is still far short of the truth.
+    minimumCacheTTL: 2_592_000,
   },
   async headers() {
     return [

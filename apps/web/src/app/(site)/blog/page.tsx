@@ -7,6 +7,7 @@ import {
   postCategorySlug,
 } from "@cinepixo/shared";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { PostRow } from "@/components/blog/PostRow";
@@ -35,10 +36,15 @@ import {
  * else this place writes.
  */
 
+// The page is per-request (the CSP nonce alone rules out a static one), but the
+// read behind it is not: see `frontPosts`.
 export const dynamic = "force-dynamic";
 
 const LATEST = 8;
 const PER_SHELF = 3;
+
+/** Offered on every blog page, ahead of the site-wide feed. */
+export const BLOG_FEED = [{ path: "/blog/feed.xml", title: "Off Camera — the CinePixo blog" }] as const;
 
 const postSelect = {
   slug: true,
@@ -50,6 +56,31 @@ const postSelect = {
   imageAlt: true,
   author: { select: { username: true, displayName: true } },
 } as const;
+
+/**
+ * The front page's one query, cached for a minute.
+ *
+ * Publishing is a person typing a command a few times a week; a visitor is not.
+ * Reading the same 23 rows out of PostgreSQL for every arrival was the only
+ * uncached listing left on the site — `/movies` and `/people` have wrapped
+ * their reads since they were built. A minute is short enough that a piece
+ * published now appears while the author is still looking at it, and long
+ * enough that a link doing well costs one query rather than thousands.
+ *
+ * Tagged so publishing can drop it deliberately as well as waiting it out.
+ */
+const frontPosts = unstable_cache(
+  () =>
+    prisma.post.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      // Enough to fill the strip and every shelf even if one category dominates.
+      take: LATEST + postCategorySchema.options.length * PER_SHELF,
+      select: postSelect,
+    }),
+  ["blog-front"],
+  { revalidate: 60, tags: ["posts"] },
+);
 
 export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata({
@@ -64,6 +95,7 @@ export async function generateMetadata(): Promise<Metadata> {
       "film industry",
       "what to watch",
     ],
+    feeds: BLOG_FEED,
   });
 }
 
@@ -71,13 +103,7 @@ export default async function BlogPage() {
   // One query for the front page, sliced in memory. The alternative is six
   // queries — latest plus one per shelf — to render at most 23 rows, and the
   // shelves are the same rows the latest strip already read.
-  const posts = await prisma.post.findMany({
-    where: { status: "PUBLISHED" },
-    orderBy: { publishedAt: "desc" },
-    // Enough to fill the strip and every shelf even if one category dominates.
-    take: LATEST + postCategorySchema.options.length * PER_SHELF,
-    select: postSelect,
-  });
+  const posts = await frontPosts();
 
   const latest = posts.slice(0, LATEST);
   const shelves = postCategorySchema.options

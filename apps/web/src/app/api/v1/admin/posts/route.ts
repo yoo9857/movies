@@ -1,5 +1,6 @@
 import { prisma } from "@cinepixo/db";
 import { postInputSchema } from "@cinepixo/shared";
+import { revalidateTag } from "next/cache";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { assertHeroIsOurs, postWriteData, syncPostSubjects } from "@/lib/post-write";
@@ -52,6 +53,9 @@ export const POST = handle(async (request: Request) => {
     select: { id: true, slug: true },
   });
   await syncPostSubjects(post.id, input);
+  // The listings hold their rows for a minute; a new piece should not. Expire
+  // rather than mark stale — the editor is about to go looking for it.
+  revalidateTag("posts", { expire: 0 });
 
   return json({ post }, { status: 201 });
 });

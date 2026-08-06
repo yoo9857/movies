@@ -245,7 +245,10 @@ async function buildDoc(): Promise<string> {
     "## Optional",
     "",
     `- [Full text of every review](${absUrl("/llms-full.txt")}): one document, for indexing.`,
-    `- [RSS feed](${absUrl("/feed.xml")}) and [JSON feed](${absUrl("/feed.json")}): the newest reviews.`,
+    // Said accurately: these carry reviews, blog posts and topic essays
+    // interleaved, which is why the blog has its own feed beside them.
+    `- [RSS feed](${absUrl("/feed.xml")}) and [JSON feed](${absUrl("/feed.json")}): the newest writing of every kind — reviews, blog posts and topic essays.`,
+    `- [Blog feed](${absUrl("/blog/feed.xml")}): Off Camera on its own.`,
     `- [Sitemap](${absUrl("/sitemap.xml")}): every indexable URL.`,
     "",
     `Canonical origin: ${SITE_URL}`,

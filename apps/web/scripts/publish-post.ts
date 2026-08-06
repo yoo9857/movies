@@ -17,6 +17,19 @@ import { prisma } from "@cinepixo/db";
 const SLUG = process.argv[2];
 const UNPUBLISH = process.argv.includes("--unpublish");
 
+/**
+ * The piece is live at its own URL immediately; the listings that link to it
+ * are cached for a minute.
+ *
+ * Said out loud because the alternative is the author reloading `/blog`, not
+ * seeing the piece, and reaching for a restart. A CLI cannot reach into the
+ * running server's cache — the admin routes call `revalidateTag` because they
+ * are inside it, and this is not.
+ */
+function noteListingDelay(): void {
+  console.log("The piece is live now. /blog and its shelf pick it up within a minute.");
+}
+
 async function main() {
   if (!SLUG || SLUG.startsWith("--")) throw new Error("usage: publish-post.ts <slug> [--unpublish]");
 
@@ -63,6 +76,7 @@ async function main() {
   });
   console.log(`\nPUBLISHED /blog/${updated.slug} at ${updated.publishedAt?.toISOString()}`);
   console.log("It is now on its shelf, in the sitemap and in the feeds.");
+  noteListingDelay();
 }
 
 main()

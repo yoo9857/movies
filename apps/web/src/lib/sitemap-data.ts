@@ -329,6 +329,10 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         // site publishes, and the one a reader arriving from a search for a name
         // rather than a film lands on.
         { url: absUrl("/blog"), lastModified: post?.updatedAt, changeFrequency: "daily", priority: 0.9 },
+        // The blog's own feed. Listed because it is a distinct, subscribable
+        // resource — the site feed interleaves reviews and topic essays, which
+        // is not what someone following Off Camera asked for.
+        { url: absUrl("/blog/feed.xml"), lastModified: post?.updatedAt, changeFrequency: "daily", priority: 0.4 },
         { url: absUrl("/movies"), lastModified: movie?.updatedAt, changeFrequency: "weekly", priority: 0.8 },
         { url: absUrl("/people"), lastModified: person?.updatedAt, changeFrequency: "weekly", priority: 0.6 },
         { url: absUrl("/topics"), lastModified: topic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },

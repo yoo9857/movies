@@ -2,18 +2,21 @@ import { prisma } from "@cinepixo/db";
 import {
   POST_CATEGORY_BLURBS,
   POST_CATEGORY_LABELS,
+  type PostCategory,
   paginationSchema,
   postCategoryFromSlug,
   postCategorySlug,
   postCategorySchema,
 } from "@cinepixo/shared";
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { PostRow } from "@/components/blog/PostRow";
+import { BLOG_FEED } from "../../page";
 import { ReelDivider } from "@/components/ReelDivider";
 import {
   blogNode,
@@ -46,31 +49,46 @@ function pathFor(slug: string, page: number): string {
   return page > 1 ? `/blog/category/${slug}?page=${page}` : `/blog/category/${slug}`;
 }
 
+/**
+ * One shelf page, cached for a minute and keyed by (category, page).
+ *
+ * `cache()` on top of it because `generateMetadata` and the body both ask for
+ * the same shelf within one request — that de-duplicates the call; the
+ * `unstable_cache` underneath is what stops every visitor to a shelf costing a
+ * count plus a page scan.
+ */
+const readShelf = unstable_cache(
+  async (category: PostCategory, page: number) => {
+    const where = { status: "PUBLISHED" as const, category };
+    const [total, posts] = await Promise.all([
+      prisma.post.count({ where }),
+      prisma.post.findMany({
+        where,
+        orderBy: { publishedAt: "desc" },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        select: {
+          slug: true,
+          title: true,
+          dek: true,
+          category: true,
+          publishedAt: true,
+          image: true,
+          imageAlt: true,
+          author: { select: { username: true, displayName: true } },
+        },
+      }),
+    ]);
+    return { total, posts };
+  },
+  ["blog-shelf"],
+  { revalidate: 60, tags: ["posts"] },
+);
+
 const getShelf = cache(async (raw: string, page: number) => {
   const category = postCategoryFromSlug(raw);
   if (!category) return null;
-
-  const where = { status: "PUBLISHED" as const, category };
-  const [total, posts] = await Promise.all([
-    prisma.post.count({ where }),
-    prisma.post.findMany({
-      where,
-      orderBy: { publishedAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      select: {
-        slug: true,
-        title: true,
-        dek: true,
-        category: true,
-        publishedAt: true,
-        image: true,
-        imageAlt: true,
-        author: { select: { username: true, displayName: true } },
-      },
-    }),
-  ]);
-  return { category, total, posts };
+  return { category, ...(await readShelf(category, page)) };
 });
 
 export async function generateMetadata(props: {
@@ -91,6 +109,7 @@ export async function generateMetadata(props: {
     title: page > 1 ? `${label} — page ${page}` : label,
     description: POST_CATEGORY_BLURBS[shelf.category],
     keywords: [label, "film blog", "CinePixo"],
+    feeds: BLOG_FEED,
   });
 }
 
