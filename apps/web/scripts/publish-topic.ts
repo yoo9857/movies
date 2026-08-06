@@ -44,10 +44,12 @@ import { prisma } from "@cinepixo/db";
 import {
   type Article,
   type Photo,
+  gatherForSubjects,
   gatherPhotos,
   latestNews,
   photoAlt,
   photoPlan,
+  rhythmCapacity,
 } from "@/lib/gather-sources";
 import { youtubeVideoId, youtubeWatchUrl } from "@/lib/post-image-sources";
 
@@ -133,9 +135,31 @@ async function main() {
     if (!id) throw new Error(`not a YouTube video URL: ${YOUTUBE}`);
     video = { watch: youtubeWatchUrl(id), title: null };
   }
+  /**
+   * Who the pictures should be of: the operator's steer first, then everyone
+   * the piece links. One name cannot fill a page — see `gatherForSubjects` —
+   * so the subjects the piece already declares become the picture queries.
+   */
+  const subjectNames = PEOPLE.length
+    ? (
+        await prisma.person.findMany({
+          where: { slug: { in: PEOPLE } },
+          select: { slug: true, name: true },
+        })
+      )
+        // findMany does not preserve the order asked for, and the order is the
+        // piece's own ranking of who it is about.
+        .sort((a, b) => PEOPLE.indexOf(a.slug) - PEOPLE.indexOf(b.slug))
+        .map((p) => p.name)
+    : [];
+  const subjects = [...(IMAGE_QUERY ? [IMAGE_QUERY] : []), ...subjectNames];
+  if (subjects.length) console.log(`  picture subjects: ${subjects.join(", ")}`);
+
   const [news, photos]: [Article[], Photo[]] = await Promise.all([
     latestNews(TOPIC, NEWS),
-    gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES),
+    subjects.length
+      ? gatherForSubjects(subjects, IMAGES)
+      : gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES),
   ]);
   const sources = [...news.map((a) => a.url), ...(video ? [video.watch] : [])];
 
@@ -144,7 +168,10 @@ async function main() {
   console.log(`  ${photos.length} licensed photograph(s):`);
   for (const p of photos) console.log(`    ${p.day}  ${p.license.padEnd(14)} ${p.title.slice(0, 62)}`);
   if (photos.length === 0) {
-    console.log(`    none matched "${IMAGE_QUERY ?? TOPIC}" — try --image-query with a plain name`);
+    console.log(
+      `    none matched ${subjects.length ? subjects.join(" / ") : `"${IMAGE_QUERY ?? TOPIC}"`}` +
+        " — try --image-query with a plain name",
+    );
   }
   if (SOURCED.includes(CATEGORY) && sources.length === 0) {
     throw new Error(`${CATEGORY} needs at least one source and the gather found none`);
@@ -232,8 +259,18 @@ async function main() {
     /* 3 ── illustrate */
     if (photos.length > 0) {
       const headings = [...created.content.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
-      const plan = photoPlan(headings, photos.length - 1); // one is held back for the hero
-      const [hero, ...rest] = photos;
+      // Exactly what the rhythm holds, and no more. `photoPlan` never drops a
+      // picture, so a generous gather used to end 1 / 2 / 2 / 7 — the overflow
+      // stacked under the last heading, which is the layout the rhythm exists
+      // to avoid. The extras are left ungathered rather than dumped.
+      const [hero, ...rest] = photos.slice(0, 1 + rhythmCapacity(headings));
+      const plan = photoPlan(headings, rest.length);
+      if (photos.length > 1 + rest.length) {
+        console.log(
+          `  ${photos.length - 1 - rest.length} picture(s) held back: ` +
+            `${headings.length} heading(s) hold ${rest.length} in the body`,
+        );
+      }
 
       console.log(`\nHero: ${hero.title.slice(0, 70)}`);
       step("fill-post-images.ts", [

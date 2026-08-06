@@ -517,6 +517,49 @@ export async function gatherPhotos(
   return [...commons, ...extra].slice(0, want);
 }
 
+/**
+ * Pictures for a piece that is about several people, round-robin.
+ *
+ * One query cannot fill a page. `PER_EVENT` counts frames of one occasion, and
+ * for someone whose entire free archive is a single red carpet — 36 of the 37
+ * Commons files of Catherine Laga'aia are one CinemaCon afternoon — that caps
+ * the piece at two pictures no matter how many are asked for. The honest way
+ * past it is not to raise the cap but to ask about the rest of the story: the
+ * actor who watched the audition, the cast she joined.
+ *
+ * Interleaved rather than concatenated so a row of two is rarely two frames of
+ * one person, and deduped on `sourceUrl` because two subjects photographed
+ * together return the same file to both queries.
+ */
+export async function gatherForSubjects(
+  subjects: string[],
+  want: number,
+  minWidth = DEFAULT_MIN_WIDTH,
+): Promise<Photo[]> {
+  if (subjects.length === 0 || want <= 0) return [];
+  const perSubject = Math.max(2, Math.ceil(want / subjects.length) + 1);
+  const pools = await Promise.all(
+    subjects.map((s) => gatherPhotos(s, perSubject, minWidth, s)),
+  );
+
+  const out: Photo[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; out.length < want; i++) {
+    let reached = false;
+    for (const pool of pools) {
+      const p = pool[i];
+      if (!p) continue;
+      reached = true;
+      if (seen.has(p.sourceUrl)) continue;
+      seen.add(p.sourceUrl);
+      out.push(p);
+      if (out.length >= want) break;
+    }
+    if (!reached) break;
+  }
+  return out;
+}
+
 /* ── Where the pictures go ───────────────────────────────────── */
 
 export interface PhotoPlacement {
@@ -553,4 +596,20 @@ export function photoPlan(
   }
   if (left > 0 && plan.length > 0) plan[plan.length - 1].take += left;
   return plan;
+}
+
+/**
+ * How many pictures this piece can hold before the rhythm breaks.
+ *
+ * `photoPlan` never drops a photograph — the overflow joins the last row — so
+ * handing it twelve pictures for four headings produces 1 / 2 / 2 / 7, which
+ * is a stack with extra steps. Gathering asks this first and takes exactly
+ * that many, so the page reads 1 / 2 / 2 / 1 as designed.
+ */
+export function rhythmCapacity(headings: string[], rhythm: number[] = [1, 2, 2, 1]): number {
+  if (headings.length === 0) return 0;
+  const targets = headings.length > 1 ? headings.slice(1) : headings;
+  let total = 0;
+  for (let i = 0; i < targets.length; i++) total += rhythm[i % rhythm.length];
+  return total;
 }

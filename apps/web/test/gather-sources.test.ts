@@ -6,6 +6,7 @@ import {
   photoAlt,
   photoPlan,
   pickPhotos,
+  rhythmCapacity,
   unwrapRedirect,
   type Photo,
 } from "@/lib/gather-sources";
@@ -87,6 +88,34 @@ describe("photoAlt", () => {
     expect(photoAlt("   ", "Dwayne Johnson-1690")).toBe("Dwayne Johnson-1690");
     // A description that is *only* an instruction leaves nothing behind.
     expect(photoAlt("Please attribute to X if used elsewhere.", "A title")).toBe("A title");
+  });
+});
+
+/**
+ * The layout this exists to hold: a generous gather used to hand `photoPlan`
+ * twelve pictures for four headings and get 1 / 2 / 2 / 7 — the overflow
+ * stacked under the last heading, which is exactly what the rhythm is for.
+ */
+describe("rhythmCapacity", () => {
+  const five = ["Open", "Two", "Three", "Four", "Five"];
+
+  it("is what the rhythm lays against the headings after the first", () => {
+    expect(rhythmCapacity(five)).toBe(6); // 1 + 2 + 2 + 1 over four targets
+    expect(photoPlan(five, rhythmCapacity(five)).map((r) => r.take)).toEqual([1, 2, 2, 1]);
+  });
+
+  it("keeps the rhythm intact for any heading count", () => {
+    for (let n = 2; n <= 9; n++) {
+      const headings = Array.from({ length: n }, (_, i) => "H" + i);
+      const plan = photoPlan(headings, rhythmCapacity(headings));
+      // No row ever exceeds the rhythm's own largest step.
+      expect(Math.max(...plan.map((r) => r.take))).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("has no capacity for a piece with no headings", () => {
+    expect(rhythmCapacity([])).toBe(0);
+    expect(photoPlan([], rhythmCapacity([]))).toEqual([]);
   });
 });
 
