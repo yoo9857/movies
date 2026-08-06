@@ -27,6 +27,7 @@
     "db:import-wikidata-people": "npm run import-wikidata-people -w @cinepixo/db --",
     "db:import-wikidata-details": "npm run import-wikidata-details -w @cinepixo/db --",
     "db:write-reviews": "npm run write-reviews -w @cinepixo/db --",
+    "db:write-posts": "npm run write-posts -w @cinepixo/db --",
     "db:import-sitelinks": "npm run import-wikidata-sitelinks -w @cinepixo/db --",
     "db:person-notes": "npm run person-notes -w @cinepixo/db --",
     "db:migrate-uploads": "npm run migrate-uploads -w @cinepixo/db --",

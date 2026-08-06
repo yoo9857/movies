@@ -500,7 +500,7 @@ export function TopicCard(input: {
 export function PostCard(input: {
   title: string;
   dek?: string | null;
-  /** The shelf label as the site prints it — "Off Camera", not "PEOPLE". */
+  /** The shelf label as the site prints it — "Away From Set", not "PEOPLE". */
   section: string;
   author: string;
   /** Already formatted for display; this file does no locale work. */

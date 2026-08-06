@@ -92,7 +92,7 @@ const getCriticism = cache(async (movieIds: string[]) => {
 /**
  * Blog posts written about this person — the other half of `PostPerson`.
  *
- * A piece filed under Off Camera links here; this is the link back. The pair is
+ * A piece filed under Away From Set links here; this is the link back. The pair is
  * the point of having the join table at all: without it a post about an actor is
  * a page a crawler reaches once from a feed, and their page stays a filmography
  * with nothing written on it.
@@ -662,7 +662,7 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
             <section>
               <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
-                  Off camera · {writing.length}
+                  Away from set · {writing.length}
                 </h2>
                 <Link href="/blog" className="text-xs text-accent hover:opacity-80">
                   The blog →

@@ -15,7 +15,7 @@ export default function NewPostPage() {
       <p className="max-w-2xl text-sm leading-relaxed text-muted">
         Not a review: a review argues about one film and carries a score, and there is no score
         field here on purpose. Pick the shelf first — it decides whether the piece has to cite
-        anything, and Off Camera and The Argument both do.
+        anything, and Away From Set and The Argument both do.
       </p>
       <PostForm />
     </div>

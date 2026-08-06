@@ -61,7 +61,7 @@ const FAQ = [
   },
   {
     q: "How does CinePixo source what it writes about real people?",
-    a: "Every blog post filed under Off Camera or The Argument lists the sources its factual claims rest on, and the page prints all of them. This is enforced in the database, not left to good intentions: a post in either of those categories cannot be published with an empty source list. The reading of the sources is ours; the underlying facts belong to whoever we cited, and corrections are welcome at the contact address.",
+    a: "Every blog post filed under Away From Set or The Argument lists the sources its factual claims rest on, and the page prints all of them. This is enforced in the database, not left to good intentions: a post in either of those categories cannot be published with an empty source list. The reading of the sources is ours; the underlying facts belong to whoever we cited, and corrections are welcome at the contact address.",
   },
   {
     q: "Who can publish a review on CinePixo?",

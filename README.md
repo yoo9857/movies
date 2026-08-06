@@ -92,7 +92,7 @@ Five shelves (`PostCategory`), at `/blog/category/{people,issue,industry,craft,w
 
 | Shelf | What goes on it |
 | --- | --- |
-| **Off Camera** (`PEOPLE`) | The people who make films, away from the film |
+| **Away From Set** (`PEOPLE`) | The people who make films, away from the film. Not called "Off Camera" — that is the blog's own name, and reusing it gave the front and the shelf the same heading |
 | **The Argument** (`ISSUE`) | A live controversy, explained |
 | **Industry** (`INDUSTRY`) | Production, box office, festivals, awards |
 | **Craft** (`CRAFT`) | Camera, cutting, score, design |
@@ -131,6 +131,40 @@ Written at `/admin/blog`, on the same Tiptap surface as reviews (markdown stays 
 storage format). The hero image goes through `lib/media/`; `Post_image_is_ours`
 refuses anything that is not on our origin or in our bucket, and a licence without
 its source is refused too.
+
+**Writing them from sources** — `npm run db:write-posts`, the sibling of
+`db:write-reviews`:
+
+```bash
+npm run db:write-posts -- --sources=jobs.json            # a post per source, as DRAFT
+npm run db:write-posts -- --sources=jobs.json --dry      # generate, print, write nothing
+npm run db:write-posts -- --sources=jobs.json --publish  # opt in to going live now
+npm run db:write-posts -- --drafts=prose.json            # prose written elsewhere, same checks
+```
+
+A review is generated from facts the library already owns. A post about a person
+is the opposite — every fact comes from somewhere else — so a source is the unit of
+work here, not optional input:
+
+```json
+[{
+  "sources": ["https://example.com/report"],
+  "category": "ISSUE",
+  "brief": "The facts, pasted. Required when the source cannot be fetched.",
+  "angle": "optional: the line the desk wants, in one sentence",
+  "people": ["bong-joon-ho"],
+  "films": ["parasite-2019"]
+}]
+```
+
+It lands `DRAFT` unless `--publish` is passed. `Post_claims_are_sourced` can prove
+a citation exists; nothing in a database can prove the prose above it is faithful
+to that citation, and for a piece about a living person that gap is the whole risk
+— so the default is a draft waiting at its own URL for someone to read it against
+its sources. `brief` is the field that makes this usable: Naver and the outlets
+syndicated through it refuse automated fetches from some clients, so the operator
+pastes the facts and the URL stays as the citation the page prints. Generation goes
+through `codex exec`, which is installed on the server rather than locally.
 
 ## API (v1)
 

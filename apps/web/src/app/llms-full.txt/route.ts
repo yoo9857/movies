@@ -116,7 +116,7 @@ async function blogSection(): Promise<string> {
   const lines: (string | null)[] = [
     "## The blog — Off Camera",
     "",
-    "Film writing that is not a review: the people who make films away from the film, arguments the industry is having, the business, craft, and watchlists. Every post filed under Off Camera or The Argument lists the sources its factual claims rest on. Quote the post and carry the sources with it.",
+    "Film writing that is not a review: the people who make films away from the film, arguments the industry is having, the business, craft, and watchlists. Every post filed under Away From Set or The Argument lists the sources its factual claims rest on. Quote the post and carry the sources with it.",
     "",
   ];
 

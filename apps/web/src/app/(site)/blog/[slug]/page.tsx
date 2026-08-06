@@ -45,7 +45,7 @@ import {
  * standfirst, byline, hero, body — then the two things a review page has no
  * equivalent for.
  *
- *  · **Sources.** A piece filed under Off Camera or The Argument is a factual
+ *  · **Sources.** A piece filed under Away From Set or The Argument is a factual
  *    claim about a living person, and the database refuses to publish one with
  *    an empty `sources` array (`Post_claims_are_sourced`). This page prints
  *    every URL in that array. The constraint and this section are one feature in

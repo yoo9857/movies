@@ -254,9 +254,16 @@ export const postCategorySchema = z.enum([
 ]);
 export type PostCategory = z.infer<typeof postCategorySchema>;
 
-/** The shelf label, as it reads in navigation and on a card. */
+/**
+ * The shelf label, as it reads in navigation and on a card.
+ *
+ * `PEOPLE` is **not** "Off Camera": that is the blog's own name, and using it
+ * twice gave `/blog` and `/blog/category/people` the same heading — two
+ * indexable pages claiming to be the same thing, and a reader with no way to
+ * tell which one they were on.
+ */
 export const POST_CATEGORY_LABELS: Record<PostCategory, string> = {
-  PEOPLE: "Off Camera",
+  PEOPLE: "Away From Set",
   ISSUE: "The Argument",
   INDUSTRY: "Industry",
   CRAFT: "Craft",

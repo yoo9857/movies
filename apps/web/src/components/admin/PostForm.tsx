@@ -5,7 +5,7 @@
  *
  * Two fields on this form are not conveniences and the screen says so:
  *
- *  · **Sources.** A post filed under Off Camera or The Argument is a factual
+ *  · **Sources.** A post filed under Away From Set or The Argument is a factual
  *    claim about a living person. `Post_claims_are_sourced` refuses to let one
  *    reach PUBLISHED with an empty list, so the form disables Publish and says
  *    why rather than letting the save come back as a constraint violation. The

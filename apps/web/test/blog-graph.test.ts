@@ -35,7 +35,7 @@ const POST: PostInput = {
   title: "Song Kang-ho on the year he stopped saying yes",
   dek: "Two refusals, one of them to a director he had never turned down before.",
   content: "## The first no\n\nHe was reading four scripts a week.",
-  categoryLabel: "Off Camera",
+  categoryLabel: "Away From Set",
   tags: ["korean cinema", "casting"],
   sources: ["https://example.com/interview", "https://example.org/report"],
   publishedAt: new Date("2026-08-05T09:00:00.000Z"),
@@ -59,7 +59,7 @@ describe("postNode identity", () => {
 
   it("names the shelf as articleSection and the tags as keywords", () => {
     const n = node();
-    expect(n.articleSection).toBe("Off Camera");
+    expect(n.articleSection).toBe("Away From Set");
     expect(n.keywords).toBe("korean cinema, casting");
   });
 
