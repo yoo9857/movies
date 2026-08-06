@@ -38,7 +38,9 @@ and it is deliberately separate — nothing in a database can prove the prose is
 faithful to its sources, so it waits for a person:
 
 ```sh
-npx tsx -e "const{prisma}=require('@cinepixo/db');prisma.post.update({where:{slug:'anne-hathaway-plays-the-one-who-waits-and-the-oscar-race-cant-decide-what-to-call-it'},data:{status:'PUBLISHED',publishedAt:new Date()}}).then(()=>process.exit(0))"
+cd apps/web
+npx tsx scripts/publish-post.ts anne-hathaway-plays-the-one-who-waits-and-the-oscar-race-cant-decide-what-to-call-it
+# and if it should come back down: … <slug> --unpublish
 ```
 
 If a subject slug does not exist on production the script warns and skips that

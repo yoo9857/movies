@@ -41,6 +41,7 @@
     "person-photos": "npm run person-photos -w web --",
     "topic": "npm run topic -w web --",
     "publish": "npm run publish -w web --",
+    "publish-post": "npm run publish-post -w web --",
     "save-media": "npm run save-media -w web --",
     "db:refresh-library": "npm run refresh-library -w @cinepixo/db",
     "db:studio": "npm run studio -w @cinepixo/db",
