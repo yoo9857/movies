@@ -2,6 +2,7 @@
 //
 //   cd apps/web && npx tsx scripts/publish-post.ts <slug>
 //   npx tsx scripts/publish-post.ts <slug> --unpublish
+//   npx tsx scripts/publish-post.ts <slug> --ping        # resubmit, no status change
 //
 // Separate from everything that writes, because `Post_claims_are_sourced` can
 // prove a citation exists and nothing in a database can prove the prose is
@@ -18,6 +19,8 @@ import { submitUrls } from "@/lib/indexnow";
 
 const SLUG = process.argv[2];
 const UNPUBLISH = process.argv.includes("--unpublish");
+/** Resubmit an already-published piece — after an edit, or a first key. */
+const PING = process.argv.includes("--ping");
 
 /**
  * The piece is live at its own URL immediately; the listings that link to it
@@ -98,7 +101,13 @@ async function main() {
   if (post.image && !post.imageLicense) console.log("             hero states no licence (fine for our own file)");
 
   if (post.status === "PUBLISHED") {
-    console.log("\nalready published — nothing to do");
+    if (PING) {
+      // The piece did not change status, but something about it did — an edit,
+      // or a key that did not exist when it went live.
+      await tellSearchEngines(post.slug, post.category);
+      return;
+    }
+    console.log("\nalready published — nothing to do (--ping to resubmit it)");
     return;
   }
 
