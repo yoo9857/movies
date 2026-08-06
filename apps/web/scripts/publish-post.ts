@@ -16,7 +16,6 @@ import "../../../packages/db/prisma/env";
 import { prisma } from "@cinepixo/db";
 import { type PostCategory, postCategorySlug } from "@cinepixo/shared";
 import { submitUrls } from "@/lib/indexnow";
-import { autoAttachPostHero } from "@/lib/auto-post-hero";
 
 const SLUG = process.argv[2];
 const UNPUBLISH = process.argv.includes("--unpublish");
@@ -90,11 +89,6 @@ async function main() {
     });
     console.log(`back to draft: /blog/${post.slug}`);
     return;
-  }
-
-  if (!post.image) {
-    const imported = await autoAttachPostHero(post.id);
-    if (imported) post.image = imported.image;
   }
 
   console.log(`${post.title}\n${post.dek ?? ""}\n`);
