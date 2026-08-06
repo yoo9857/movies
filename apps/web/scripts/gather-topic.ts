@@ -30,7 +30,7 @@
 // instead, from the platforms' own endpoints. A photograph the desk has real
 // permission for comes in by hand: post-images --file with the post as source.
 import { writeFileSync } from "node:fs";
-import { gatherPhotos, latestNews } from "@/lib/gather-sources";
+import { DEFAULT_MIN_WIDTH, gatherPhotos, latestNews } from "@/lib/gather-sources";
 import { youtubeVideoId, youtubeWatchUrl } from "@/lib/post-image-sources";
 
 function strArg(name: string): string | null {
@@ -42,6 +42,8 @@ const TOPIC = strArg("topic");
 const IMAGE_QUERY = strArg("image-query");
 const NEWS = Number(strArg("news")) || 6;
 const IMAGES = Number(strArg("images")) || 8;
+/** Lower it when the alternative is no picture at all. */
+const MIN_WIDTH = Number(strArg("min-width")) || DEFAULT_MIN_WIDTH;
 const CATEGORY = strArg("category") ?? "ISSUE";
 const PEOPLE = (strArg("people") ?? "").split(",").filter(Boolean);
 const FILMS = (strArg("films") ?? "").split(",").filter(Boolean);
@@ -68,19 +70,28 @@ async function main() {
 
   const [news, photos] = await Promise.all([
     latestNews(TOPIC, NEWS),
-    gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES),
+    gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES, MIN_WIDTH),
   ]);
 
   console.log(`\n"${TOPIC}" — ${news.length} article(s), newest first:`);
   for (const a of news) console.log(`  ${a.date}  ${a.host}  ${a.title}`);
   if (video) console.log(`  video: ${video.title ?? video.watch}`);
 
-  console.log(`\n${photos.length} licensed photograph(s), newest first:`);
+  console.log(`\n${photos.length} licensed photograph(s), newest first (min ${MIN_WIDTH}px wide):`);
   for (const p of photos) {
-    console.log(`  ${p.day}  ${p.title} — ${p.license} — ${p.credit ?? "no credit"}`);
+    // Size is printed because recency and sharpness trade off, and only a
+    // person looking at both can decide which the piece needs.
+    console.log(
+      `  ${p.day}  ${String(p.width).padStart(4)}×${String(p.height).padEnd(4)}  ` +
+        `${p.title} — ${p.license} — ${p.credit ?? "no credit"}`,
+    );
   }
   if (photos.length === 0) {
-    console.log(`  none matched "${IMAGE_QUERY ?? TOPIC}" — try --image-query with the plain name`);
+    console.log(
+      `  none matched "${IMAGE_QUERY ?? TOPIC}" at ${MIN_WIDTH}px — try --image-query with the\n` +
+        "  plain name, --min-width to accept softer files, or gather-person-photos, which walks\n" +
+        "  a person's whole Commons category instead of ranking a search by relevance.",
+    );
   }
   console.log(
     "\nNot gathered: X and Instagram photographs (anonymous reads are walled, nothing there" +

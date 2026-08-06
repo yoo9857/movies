@@ -6,6 +6,8 @@ const photo = (title: string, day: string): Photo => ({
   title,
   day,
   url: `https://upload.example/${title}.jpg`,
+  width: 1600,
+  height: 1067,
   credit: "Someone",
   license: "CC BY-SA 4.0",
   licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0",

@@ -28,7 +28,7 @@
 import "../../../packages/db/prisma/env";
 import { writeFileSync } from "node:fs";
 import { prisma } from "@cinepixo/db";
-import { commonsCategoryPhotos, pickPhotos } from "@/lib/gather-sources";
+import { DEFAULT_MIN_WIDTH, commonsCategoryPhotos, pickPhotos } from "@/lib/gather-sources";
 
 function strArg(name: string): string | null {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -49,6 +49,8 @@ const COMMONS = "https://commons.wikimedia.org/w/api.php";
 const MAX_DEPTH = 2;
 /** Enough files to sort; more is just more API calls. */
 const MAX_FILES = 400;
+/** Lower it when the alternative is no picture at all. */
+const MIN_WIDTH = Number(strArg("min-width")) || DEFAULT_MIN_WIDTH;
 
 async function json<T>(url: string): Promise<T | null> {
   try {
@@ -112,13 +114,24 @@ async function main() {
   // `eventKey` never learned the "(1)"/"(2)" frame form that the shared one
   // handles and the test suite pins, and it left the query string on every
   // rendition URL.
-  const candidates = await commonsCategoryPhotos(category, MAX_DEPTH, MAX_FILES);
-  console.log(`${candidates.length} licensed candidates in the category tree`);
+  const candidates = await commonsCategoryPhotos(category, MAX_DEPTH, MAX_FILES, MIN_WIDTH);
+  console.log(`${candidates.length} licensed candidates at ${MIN_WIDTH}px or wider`);
 
   const picked = pickPhotos(candidates, COUNT);
 
   console.log(`\npicked ${picked.length}, newest first:`);
-  for (const c of picked) console.log(`  ${c.day}  ${c.title} — ${c.license} — ${c.credit ?? "no credit"}`);
+  for (const c of picked) {
+    // Recency and sharpness pull against each other for a living performer —
+    // the crisp pictures are agency-owned and the free ones are whatever a fan
+    // could upload. Both numbers are printed so the choice is an informed one.
+    console.log(
+      `  ${c.day}  ${String(c.width).padStart(4)}×${String(c.height).padEnd(4)}  ` +
+        `${c.title} — ${c.license} — ${c.credit ?? "no credit"}`,
+    );
+  }
+  if (picked.length === 0) {
+    console.log(`  nothing at ${MIN_WIDTH}px — lower it with --min-width if a soft file will do`);
+  }
 
   if (!OUT) return;
   if (!POST) throw new Error("--out needs --post=<post slug> to aim the jobs at");

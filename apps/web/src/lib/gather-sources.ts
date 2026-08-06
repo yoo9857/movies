@@ -130,11 +130,29 @@ export interface Photo {
   url: string;
   /** Capture day where the file records one, else the upload day. */
   day: string;
+  /** Of the source file, so a caller can judge how it will hold up. */
+  width: number;
+  height: number;
   credit: string | null;
   license: string;
   licenseUrl: string | null;
   sourceUrl: string;
 }
+
+/**
+ * How wide a source has to be before it is worth placing.
+ *
+ * A body picture renders about 768 CSS pixels across, which a phone at 2×
+ * fetches as 1536 — so the old 700px floor let through files that arrived
+ * visibly soft and looked, correctly, like a mistake. 1200 is a compromise:
+ * strict enough that most placements are crisp, loose enough that a subject
+ * whose only recent photographs are press-pool crops is not left with none.
+ *
+ * `--min-width` lowers it when the alternative is nothing at all — which for a
+ * living pop star is a real case, since the sharp pictures are agency-owned
+ * and the free ones are whatever a fan could upload.
+ */
+export const DEFAULT_MIN_WIDTH = 1200;
 
 /** "V at Festival 2025 03" and "…02" are one event; the key drops the frame number. */
 export const eventKey = (title: string): string =>
@@ -155,30 +173,46 @@ export function pickPhotos(photos: Photo[], want: number): Photo[] {
   return picked;
 }
 
-const JUNK = /logo|signature|autograph|poster|album|cover|map|diagram|screenshot/i;
+/**
+ * Titles that are not a photograph of the subject.
+ *
+ * `tussauds` and `wax figure` are here because a Commons category for a famous
+ * person reliably contains one, it is often the sharpest file in the category,
+ * and a piece about what someone said last week illustrated with a waxwork of
+ * them is a small humiliation. Statues and murals fail the same way.
+ */
+const JUNK =
+  /logo|signature|autograph|poster|album|cover|map|diagram|screenshot|tussauds|wax figure|waxwork|statue|mural|graffiti|fan ?art/i;
 
 interface CommonsInfo {
   url?: string;
   thumburl?: string;
   descriptionurl?: string;
   width?: number;
+  height?: number;
   timestamp?: string;
   extmetadata?: Record<string, { value?: string }>;
 }
 
 /** Turn one Commons imageinfo answer into a candidate, or null if unusable. */
-function commonsCandidate(rawTitle: string, info: CommonsInfo | undefined): Photo | null {
+function commonsCandidate(
+  rawTitle: string,
+  info: CommonsInfo | undefined,
+  minWidth: number,
+): Photo | null {
   const meta = info?.extmetadata ?? {};
   const license = plain(meta.LicenseShortName?.value);
   const title = rawTitle.replace(/^File:/, "").replace(/\.[a-z]+$/i, "");
   if (!info?.url || !info.descriptionurl || !license) return null;
-  if ((info.width ?? 0) < 700) return null;
+  if ((info.width ?? 0) < minWidth) return null;
   if (JUNK.test(title)) return null;
   return {
     title,
     // The rendition, never the archival master.
     url: (info.thumburl ?? info.url).split("?")[0],
     day: commonsCaptureDay(meta.DateTimeOriginal?.value) ?? (info.timestamp ?? "1970-01-01").slice(0, 10),
+    width: info.width ?? 0,
+    height: info.height ?? 0,
     credit: plain(meta.Artist?.value) ?? plain(meta.Credit?.value),
     license,
     licenseUrl: plain(meta.LicenseUrl?.value),
@@ -187,7 +221,7 @@ function commonsCandidate(rawTitle: string, info: CommonsInfo | undefined): Phot
 }
 
 /** Metadata for a batch of file titles. */
-async function commonsInfo(titles: string[]): Promise<Photo[]> {
+async function commonsInfo(titles: string[], minWidth: number): Promise<Photo[]> {
   const out: Photo[] = [];
   for (let i = 0; i < titles.length; i += 50) {
     const data = await json<{
@@ -198,15 +232,22 @@ async function commonsInfo(titles: string[]): Promise<Photo[]> {
         "&format=json&origin=*",
     );
     for (const page of Object.values(data?.query?.pages ?? {})) {
-      const candidate = commonsCandidate(page.title ?? "", page.imageinfo?.[0]);
+      const candidate = commonsCandidate(page.title ?? "", page.imageinfo?.[0], minWidth);
       if (candidate) out.push(candidate);
     }
   }
   return out;
 }
 
-/** Commons file search, by what the picture is of. */
-export async function commonsPhotos(query: string): Promise<Photo[]> {
+/**
+ * Commons file search, by what the picture is of.
+ *
+ * Relevance-ranked, which is not the same as complete: searching a performer's
+ * name found none of the premiere photographs that sit in their category, and
+ * left a 2026 piece illustrated with 2019. Prefer `commonsCategoryPhotos` when
+ * the subject is a person; this is for topics that are not one.
+ */
+export async function commonsPhotos(query: string, minWidth = DEFAULT_MIN_WIDTH): Promise<Photo[]> {
   const search = await json<{ query?: { search?: { title: string }[] } }>(
     `${COMMONS}?action=query&list=search&srnamespace=6&srsearch=${encodeURIComponent(query)}` +
       "&srlimit=50&format=json&origin=*",
@@ -214,11 +255,16 @@ export async function commonsPhotos(query: string): Promise<Photo[]> {
   const titles = (search?.query?.search ?? [])
     .map((s) => s.title)
     .filter((t) => /\.(jpe?g|png)$/i.test(t));
-  return titles.length === 0 ? [] : commonsInfo(titles);
+  return titles.length === 0 ? [] : commonsInfo(titles, minWidth);
 }
 
 /** Every file in a person's Commons category tree, depth-limited. */
-export async function commonsCategoryPhotos(category: string, maxDepth = 2, maxFiles = 400): Promise<Photo[]> {
+export async function commonsCategoryPhotos(
+  category: string,
+  maxDepth = 2,
+  maxFiles = 400,
+  minWidth = DEFAULT_MIN_WIDTH,
+): Promise<Photo[]> {
   const members = async (cat: string, type: "file" | "subcat"): Promise<string[]> => {
     const data = await json<{ query?: { categorymembers?: { title: string }[] } }>(
       `${COMMONS}?action=query&list=categorymembers&cmtitle=${encodeURIComponent(cat)}` +
@@ -238,7 +284,7 @@ export async function commonsCategoryPhotos(category: string, maxDepth = 2, maxF
       for (const sub of await members(cat, "subcat")) queue.push({ cat: sub, depth: depth + 1 });
     }
   }
-  return commonsInfo(titles);
+  return commonsInfo(titles, minWidth);
 }
 
 /**
@@ -249,13 +295,18 @@ export async function commonsCategoryPhotos(category: string, maxDepth = 2, maxF
  * licences harder — Flickr-side licence laundering is real, which is one more
  * reason the jobs file is a review step and not a publish step.
  */
-export async function openversePhotos(query: string, want: number): Promise<Photo[]> {
+export async function openversePhotos(
+  query: string,
+  want: number,
+  minWidth = DEFAULT_MIN_WIDTH,
+): Promise<Photo[]> {
   if (want <= 0) return [];
   const data = await json<{
     results?: {
       title?: string;
       url?: string;
       width?: number;
+      height?: number;
       creator?: string;
       license?: string;
       license_version?: string;
@@ -265,17 +316,22 @@ export async function openversePhotos(query: string, want: number): Promise<Phot
     }[];
   }>(
     `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}` +
-      "&license_type=all-cc&page_size=50&mature=false&format=json",
+      // 20 is the ceiling for an anonymous caller. Asking for 50 returned a 400
+      // that `json` swallowed into null, so this pool contributed nothing at
+      // all from the day it was added until someone checked.
+      "&license_type=all-cc&page_size=20&mature=false&format=json",
   );
   const out: Photo[] = [];
   for (const r of data?.results ?? []) {
     if (!r.url || !r.foreign_landing_url || !r.license || !r.license_url) continue;
-    if ((r.width ?? 0) < 700) continue;
+    if ((r.width ?? 0) < minWidth) continue;
     if (!/^https:\/\//.test(r.url)) continue;
     out.push({
       title: (r.title ?? "untitled").slice(0, 200),
       url: r.url,
       day: (r.indexed_on ?? "1970-01-01").slice(0, 10),
+      width: r.width ?? 0,
+      height: r.height ?? 0,
       credit: r.creator ?? null,
       license: `CC ${r.license.toUpperCase()}${r.license_version ? ` ${r.license_version}` : ""}`,
       licenseUrl: r.license_url,
@@ -286,10 +342,14 @@ export async function openversePhotos(query: string, want: number): Promise<Phot
 }
 
 /** Commons leads, Openverse fills the shortfall. */
-export async function gatherPhotos(query: string, want: number): Promise<Photo[]> {
-  const commons = pickPhotos(await commonsPhotos(query), want);
+export async function gatherPhotos(
+  query: string,
+  want: number,
+  minWidth = DEFAULT_MIN_WIDTH,
+): Promise<Photo[]> {
+  const commons = pickPhotos(await commonsPhotos(query, minWidth), want);
   if (commons.length >= want) return commons;
-  const extra = await openversePhotos(query, want - commons.length);
+  const extra = await openversePhotos(query, want - commons.length, minWidth);
   return [...commons, ...extra];
 }
 
