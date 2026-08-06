@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { assertHeroIsOurs, postWriteData, syncPostSubjects } from "@/lib/post-write";
+import { autoAttachPostHero } from "@/lib/auto-post-hero";
 
 const idSchema = z.string().min(1).max(64);
 
@@ -53,6 +54,7 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
     select: { id: true, slug: true },
   });
   await syncPostSubjects(post.id, input);
+  if (input.status === "PUBLISHED" && !input.image) await autoAttachPostHero(post.id);
   dropPostListings();
 
   return json({ post });

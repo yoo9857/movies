@@ -3,6 +3,7 @@ import {
   eventKey,
   licenceAllows,
   nameMatches,
+  photoAlt,
   photoPlan,
   pickPhotos,
   unwrapRedirect,
@@ -20,6 +21,7 @@ const photo = (title: string, day: string): Photo => ({
   license: "CC BY-SA 4.0",
   licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0",
   sourceUrl: `https://commons.example/${title}`,
+  description: null,
 });
 
 describe("photoPlan", () => {
@@ -55,6 +57,36 @@ describe("photoPlan", () => {
   it("has nothing to say about a piece with no pictures or no headings", () => {
     expect(photoPlan(headings, 0)).toEqual([]);
     expect(photoPlan([], 4)).toEqual([]);
+  });
+});
+
+/**
+ * The alt text a piece shipped with: "Catherine Laga'aia (55221039143)" — the
+ * subject's name and a Flickr upload id, non-blank enough to satisfy
+ * `Post_image_needs_alt` and useless to the reader it exists for.
+ */
+describe("photoAlt", () => {
+  const commons =
+    "Catherine Laga'aia on the red carpet at the Big Screen Achievement Awards at the 2026 CinemaCon in Las Vegas, Nevada. Please attribute to Gage Skidmore if used elsewhere.";
+
+  it("says what the picture shows instead of naming the file", () => {
+    const alt = photoAlt(commons, "Catherine Laga'aia (55221039143)");
+    expect(alt).toContain("red carpet");
+    expect(alt).not.toContain("55221039143");
+  });
+
+  it("drops the uploader's licence instruction, which is not a description", () => {
+    const alt = photoAlt(commons, "Catherine Laga'aia (55221039143)");
+    expect(alt).not.toMatch(/please attribute/i);
+    expect(alt).not.toMatch(/Gage Skidmore/);
+    expect(alt.endsWith("Nevada.")).toBe(true);
+  });
+
+  it("falls back to the title when the file describes nothing", () => {
+    expect(photoAlt(null, "Dwayne_Johnson-1690")).toBe("Dwayne Johnson-1690");
+    expect(photoAlt("   ", "Dwayne Johnson-1690")).toBe("Dwayne Johnson-1690");
+    // A description that is *only* an instruction leaves nothing behind.
+    expect(photoAlt("Please attribute to X if used elsewhere.", "A title")).toBe("A title");
   });
 });
 

@@ -137,6 +137,37 @@ export interface Photo {
   license: string;
   licenseUrl: string | null;
   sourceUrl: string;
+  /**
+   * What the file says it shows, where it says anything. This is alt text —
+   * the caller has nothing else to write one from, and a Commons title is a
+   * filename.
+   */
+  description: string | null;
+}
+
+/**
+ * The sentence a picture's alt text should be.
+ *
+ * A Commons title is "Catherine Laga'aia (55221039143)" — the subject's name
+ * and a Flickr upload id. Written into `imageAlt` it satisfies
+ * `Post_image_needs_alt`, which only demands a non-blank string, and tells a
+ * screen-reader user nothing: the constraint is there so the piece's subject
+ * is named to the reader who most needs it, and a serial number is not that.
+ *
+ * `ImageDescription` carries the real sentence, usually with the uploader's
+ * licence instruction stapled to the end ("Please attribute to Gage Skidmore
+ * if used elsewhere") — an instruction to us, not a description of the
+ * photograph, and it goes in the credit line anyway. Those sentences are
+ * dropped; the title stays as the fallback for a file that describes nothing.
+ */
+export function photoAlt(description: string | null, title: string): string {
+  const kept = (description ?? "")
+    .split(/(?<=[.!?])\s+/)
+    .filter((s) => s.trim() && !/please attribute|if used elsewhere|do not (?:use|reuse)|all rights reserved|©/i.test(s))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return kept || title.replace(/_/g, " ");
 }
 
 /**
@@ -329,6 +360,7 @@ function commonsCandidate(
     license,
     licenseUrl: plain(meta.LicenseUrl?.value),
     sourceUrl: info.descriptionurl,
+    description: plain(meta.ImageDescription?.value),
   };
 }
 
@@ -456,6 +488,9 @@ export async function openversePhotos(
       license: `CC ${r.license.toUpperCase()}${r.license_version ? ` ${r.license_version}` : ""}`,
       licenseUrl: r.license_url,
       sourceUrl: r.foreign_landing_url,
+      // Openverse's index has no description field of its own; the title is
+      // all this pool offers, and `photoAlt` falls back to it.
+      description: null,
     });
   }
   return out.slice(0, want);

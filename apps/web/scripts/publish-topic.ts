@@ -46,6 +46,7 @@ import {
   type Photo,
   gatherPhotos,
   latestNews,
+  photoAlt,
   photoPlan,
 } from "@/lib/gather-sources";
 import { youtubeVideoId, youtubeWatchUrl } from "@/lib/post-image-sources";
@@ -238,7 +239,7 @@ async function main() {
       step("fill-post-images.ts", [
         `--post=${created.slug}`,
         `--url=${hero.url}`,
-        `--alt=${clampField(hero.title.replace(/_/g, " "), 300)}`,
+        `--alt=${clampField(photoAlt(hero.description, hero.title), 300)}`,
         ...(hero.credit ? [`--credit=${clampField(hero.credit, 300)}`] : []),
         `--license=${hero.license}`,
         ...(hero.licenseUrl ? [`--license-url=${hero.licenseUrl}`] : []),
@@ -260,7 +261,7 @@ async function main() {
             post: created.slug,
             at: row.at,
             url: p.url,
-            alt: clampField(p.title.replace(/_/g, " "), 300),
+            alt: clampField(photoAlt(p.description, p.title), 300),
             ...(p.credit ? { credit: clampField(p.credit, 300) } : {}),
             license: p.license,
             ...(p.licenseUrl ? { licenseUrl: p.licenseUrl } : {}),
