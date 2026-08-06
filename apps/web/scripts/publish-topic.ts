@@ -227,12 +227,15 @@ async function main() {
     if (DRY) {
       console.log(`\n(dry) would write from ${useProse ? "--prose" : "the gathered sources"}`);
       // One is held back for the hero, and the real headings are not known
-      // until the piece exists — so this is the shape, not the placement.
-      const shape = photoPlan(["a", "b", "c", "d", "e"], Math.max(0, photos.length - 1))
+      // until the piece exists — so this is the shape against a typical five,
+      // trimmed the same way the real run trims it.
+      const typical = ["a", "b", "c", "d", "e"];
+      const body = Math.min(Math.max(0, photos.length - 1), rhythmCapacity(typical));
+      const shape = photoPlan(typical, body)
         .map((r) => r.take)
         .join(" / ");
       console.log(
-        `(dry) 1 hero + ${Math.max(0, photos.length - 1)} in the body as ${shape || "nothing to place"}`,
+        `(dry) 1 hero + ${body} in the body as ${shape || "nothing to place"}`,
       );
       return;
     }
