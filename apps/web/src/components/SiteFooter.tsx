@@ -15,6 +15,7 @@ export function SiteFooter() {
         />
         <nav className="flex flex-wrap gap-x-6 gap-y-2">
           <Link href="/reviews" className="hover:text-foreground">Reviews</Link>
+          <Link href="/blog" className="hover:text-foreground">Off Camera</Link>
           <Link href="/movies" className="hover:text-foreground">Movies</Link>
           <Link href="/watch" className="hover:text-foreground">Watch</Link>
           <Link href="/critics" className="hover:text-foreground">Critics</Link>

@@ -8,6 +8,7 @@
 // silently — a truncated corpus that claims to be complete is worse than one that
 // says where it stopped.
 import { prisma } from "@cinepixo/db";
+import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
 import { exportMarkdownBody, markdownResponse } from "@/lib/markdown-export";
 import { absUrl, isoDay } from "@/lib/seo";
 import { SITE_ABOUT, SITE_NAME } from "@/lib/site";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 /** Hard limits. Whichever is hit first stops the document. */
 const MAX_REVIEWS = 300;
+const MAX_POSTS = 200;
 const MAX_CHARS = 2_000_000;
 
 /**
@@ -77,9 +79,88 @@ async function taxonomySection(): Promise<string> {
   return lines.filter((l) => l !== null).join("\n");
 }
 
+/**
+ * Every published blog post, in full.
+ *
+ * Sits between the taxonomy and the reviews because it is the writing most
+ * likely to be quoted about a person rather than a film — and because the
+ * sources line has to travel with it. A model that carries the claim "X is
+ * working on Y" out of this document without the URL beside it has turned our
+ * reporting into an unattributed fact, which is exactly what the database
+ * constraint behind these posts exists to prevent.
+ */
+async function blogSection(): Promise<string> {
+  const posts = await prisma.post.findMany({
+    where: { status: "PUBLISHED" },
+    orderBy: { publishedAt: "desc" },
+    take: MAX_POSTS,
+    select: {
+      slug: true,
+      title: true,
+      dek: true,
+      content: true,
+      category: true,
+      tags: true,
+      sources: true,
+      publishedAt: true,
+      author: { select: { username: true, displayName: true } },
+      people: { orderBy: { sort: "asc" }, select: { person: { select: { name: true, slug: true } } } },
+      movies: {
+        orderBy: { sort: "asc" },
+        select: { movie: { select: { title: true, slug: true, releaseDate: true } } },
+      },
+    },
+  });
+  if (posts.length === 0) return "";
+
+  const lines: (string | null)[] = [
+    "## The blog — Off Camera",
+    "",
+    "Film writing that is not a review: the people who make films away from the film, arguments the industry is having, the business, craft, and watchlists. Every post filed under Off Camera or The Argument lists the sources its factual claims rest on. Quote the post and carry the sources with it.",
+    "",
+  ];
+
+  for (const p of posts) {
+    const author = p.author.displayName ?? p.author.username;
+    lines.push(
+      `### ${p.title}`,
+      "",
+      `- Section: ${POST_CATEGORY_LABELS[p.category]}`,
+      `- Author: ${author}`,
+      p.publishedAt ? `- Published: ${isoDay(p.publishedAt)}` : null,
+      `- Source: ${absUrl(`/blog/${p.slug}`)}`,
+      p.people.length > 0
+        ? `- About: ${p.people.map((x) => `${x.person.name} (${absUrl(`/people/${x.person.slug}`)})`).join(", ")}`
+        : null,
+      p.movies.length > 0
+        ? `- Films: ${p.movies
+            .map((x) => {
+              const y = x.movie.releaseDate ? new Date(x.movie.releaseDate).getFullYear() : null;
+              return `${x.movie.title}${y ? ` (${y})` : ""} (${absUrl(`/movies/${x.movie.slug}`)})`;
+            })
+            .join(", ")}`
+        : null,
+      p.tags.length > 0 ? `- Tags: ${p.tags.join(", ")}` : null,
+      p.sources.length > 0 ? `- Sources: ${p.sources.join(" · ")}` : null,
+      "",
+      p.dek ? `**${p.dek}**` : null,
+      p.dek ? "" : null,
+      exportMarkdownBody(p.content).trim(),
+      "",
+      "---",
+      "",
+    );
+  }
+
+  return lines.filter((l) => l !== null).join("\n");
+}
+
 export async function GET(): Promise<Response> {
-  const total = await prisma.review.count({ where: { status: "PUBLISHED" } });
-  const taxonomy = await taxonomySection();
+  const [total, postTotal] = await Promise.all([
+    prisma.review.count({ where: { status: "PUBLISHED" } }),
+    prisma.post.count({ where: { status: "PUBLISHED" } }),
+  ]);
+  const [taxonomy, blog] = await Promise.all([taxonomySection(), blogSection()]);
   const reviews = await prisma.review.findMany({
     where: { status: "PUBLISHED" },
     orderBy: { publishedAt: "desc" },
@@ -110,9 +191,10 @@ export async function GET(): Promise<Response> {
 
   const parts: string[] = [];
   let included = 0;
-  // The taxonomy counts against the same ceiling as the reviews — a cap that
-  // only measured part of the document would not be a cap on the document.
-  let chars = taxonomy.length;
+  // The taxonomy and the blog count against the same ceiling as the reviews — a
+  // cap that only measured part of the document would not be a cap on the
+  // document.
+  let chars = taxonomy.length + blog.length;
 
   for (const r of reviews) {
     const author = r.author.displayName ?? r.author.username;
@@ -152,12 +234,17 @@ export async function GET(): Promise<Response> {
 
   const omitted = total - included;
 
+  const postsOmitted = postTotal - Math.min(postTotal, MAX_POSTS);
+
   const doc = [
-    `# ${SITE_NAME} — full review corpus`,
+    `# ${SITE_NAME} — full corpus`,
     "",
     `> ${SITE_ABOUT}`,
     "",
-    `This document contains the editorial taxonomy in full, then the complete text of ${included} published review${included === 1 ? "" : "s"}, newest first.`,
+    `This document contains the editorial taxonomy in full, then every blog post, then the complete text of ${included} published review${included === 1 ? "" : "s"}, newest first.`,
+    postsOmitted > 0
+      ? `${postsOmitted} further blog post${postsOmitted === 1 ? " is" : "s are"} not included — this document is capped at ${MAX_POSTS} posts. The remainder are listed at ${absUrl("/blog")} and each is available individually by appending \`.md\` to its URL.`
+      : null,
     omitted > 0
       ? `${omitted} further review${omitted === 1 ? " is" : "s are"} not included here — this document is capped at ${MAX_REVIEWS} reviews and ${(MAX_CHARS / 1_000_000).toFixed(0)}M characters. The remainder are listed at ${absUrl("/reviews")} and each is available individually by appending \`.md\` to its URL.`
       : "This is every published review on the site.",
@@ -170,10 +257,11 @@ export async function GET(): Promise<Response> {
     // taxonomy heading — no wrapper heading, or the tree would claim a level
     // that isn't there.
     ...(taxonomy ? [taxonomy, ""] : []),
+    ...(blog ? [blog, ""] : []),
     ...parts,
     `Generated from ${absUrl("/")} · see also ${absUrl("/llms.txt")}`,
   ];
 
   // No canonical: this document is not a rendition of a page, it *is* the page.
-  return markdownResponse(doc.join("\n"), { maxAge: 1800 });
+  return markdownResponse(doc.filter((l) => l !== null).join("\n"), { maxAge: 1800 });
 }

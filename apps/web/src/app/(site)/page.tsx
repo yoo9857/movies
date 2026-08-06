@@ -8,8 +8,10 @@ import { BillboardMedia } from "@/components/BillboardMedia";
 import { JsonLd } from "@/components/JsonLd";
 import { Poster } from "@/components/Poster";
 import { Rail } from "@/components/Rail";
+import { PostRow } from "@/components/blog/PostRow";
 import { StarRating } from "@/components/StarRating";
 import {
+  blogNode,
   graph,
   hosted,
   itemListNode,
@@ -18,6 +20,10 @@ import {
   reviewEntityId,
   webPageNode,
 } from "@/lib/seo";
+
+/** Newest of a set of maybe-dates. The front page mixes two kinds of writing. */
+const newest = (dates: (Date | null | undefined)[]): Date | undefined =>
+  dates.reduce<Date | undefined>((a, d) => (d && (!a || d > a) ? d : a), undefined);
 import { SITE_ABOUT, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -141,12 +147,27 @@ const reviewSelect = {
 } as const;
 
 export default async function HomePage() {
-  const [latest, shelf, topRated, critics, counts] = await Promise.all([
+  const [latest, posts, shelf, topRated, critics, counts] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
       take: 14,
       select: reviewSelect,
+    }),
+    prisma.post.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: 4,
+      select: {
+        slug: true,
+        title: true,
+        dek: true,
+        category: true,
+        publishedAt: true,
+        image: true,
+        imageAlt: true,
+        author: { select: { username: true, displayName: true } },
+      },
     }),
     libraryRail(),
     topRatedRail(),
@@ -176,8 +197,15 @@ export default async function HomePage() {
       name: `${SITE_NAME} — ${SITE_TAGLINE}`,
       description: SITE_ABOUT,
       kind: "CollectionPage",
-      dateModified: latest[0]?.publishedAt,
+      // The newest thing on the page, whichever kind it is. Reporting only the
+      // newest review told crawlers nothing had changed on a day the front page
+      // gained a blog section.
+      dateModified: newest([latest[0]?.publishedAt, posts[0]?.publishedAt]),
     }),
+    // The blog as a publication. No second ItemList: `itemListNode` derives its
+    // `@id` from the path, so two on "/" would collide — and the reviews list is
+    // the one this page is primarily an index of.
+    posts.length > 0 && blogNode(),
     latest.length > 0 &&
       itemListNode({
         path: "/",
@@ -430,6 +458,35 @@ export default async function HomePage() {
               className="w-36 rotate-2 rounded-xl border border-line shadow-2xl transition-transform hover:rotate-0"
             />
           </Link>
+        </section>
+      )}
+
+      {/* ── ⑤ Off Camera — the writing that isn't scored ──
+            Between the editorial spread and the rankings, which is where it
+            belongs in the reading order: a visitor who has just been shown one
+            critic's argument about one film is exactly the visitor for whom
+            "and here is what that actor did next" is the next click. It is also
+            the shelf a search for a *name* rather than a film lands on, so the
+            home page has to admit it exists. */}
+      {posts.length > 0 && (
+        <section className="border-y border-line py-10">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
+              Off Camera
+            </h2>
+            <Link href="/blog" className="text-sm text-accent hover:opacity-80">
+              The blog →
+            </Link>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+            Film writing that isn&rsquo;t a review — the people who make pictures away from the
+            picture, the arguments the industry is having, and what to watch next.
+          </p>
+          <div className="mt-4 divide-y divide-line border-t border-line">
+            {posts.map((p) => (
+              <PostRow key={p.slug} post={p} />
+            ))}
+          </div>
         </section>
       )}
 

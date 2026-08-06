@@ -77,12 +77,67 @@ file builds a throwaway database from the real migration files and drops it
 afterwards; the name is always the configured one suffixed with `_test_*`, so it
 cannot touch a development database. Set `TEST_DATABASE_URL` to override.
 
+## The blog (`/blog` — "Off Camera")
+
+Reviews cover one axis well: an argument about a single film, scored and signed by
+a member. They are the wrong shape for everything a reader searches for *around* a
+film — what an actor is doing away from it, why a casting decision started a row,
+which five films to watch before the sequel. That is what the blog is for, and it
+is **editorial**: written by the desk, not by members, with no rating column
+anywhere in the schema. A piece that scores a film is a review filed under the
+wrong URL, and leaving the column out is what keeps that mistake from being one
+line of code away.
+
+Five shelves (`PostCategory`), at `/blog/category/{people,issue,industry,craft,watchlist}`:
+
+| Shelf | What goes on it |
+| --- | --- |
+| **Off Camera** (`PEOPLE`) | The people who make films, away from the film |
+| **The Argument** (`ISSUE`) | A live controversy, explained |
+| **Industry** (`INDUSTRY`) | Production, box office, festivals, awards |
+| **Craft** (`CRAFT`) | Camera, cutting, score, design |
+| **Watchlist** (`WATCHLIST`) | What to watch, and in what order |
+
+Posts themselves stay flat at `/blog/{slug}`. The shelf gets the extra segment,
+not the post, because a slug is the piece's public identity and must not move when
+it is recategorised — the same rule film slugs follow. `RESERVED_POST_SLUGS` keeps
+a post from claiming `category`, which would publish it at a URL nothing can reach.
+
+**Sources are enforced, not encouraged.** A `PEOPLE` or `ISSUE` post is a factual
+claim about a living person, so `Post_claims_are_sourced` refuses to let one reach
+`PUBLISHED` with an empty `sources` array. `CRAFT` and `WATCHLIST` are our own
+reading of films we have watched and need nothing. The same rule appears in four
+more places, and they have to stay in step:
+
+- `SOURCED_CATEGORIES` and a zod `.refine()` in `packages/shared`, so the failure
+  is a sentence on the `sources` field rather than a 500 from the database
+- the editor, which disables Publish and says why
+- the post page, the `.md` rendition, `feed.json` and `llms.txt`, all of which
+  print every URL — a citation the database demands and a surface hides is a lie
+  told to the schema
+
+**The link graph is the reason it is worth building next to a library.**
+`PostPerson` and `PostMovie` are ordered join tables: a post renders links to our
+own person and film pages, and those pages render the post back (`subjectOf` in the
+person's JSON-LD). The first subject becomes `about` in the post's markup and the
+rest become `mentions`, so a profile of one actor does not claim to be equally
+about the films listed under it.
+
+Drafts are readable at their own URL by an admin — `noindex`, no view count, no
+`BlogPosting` node, on no shelf and in no feed. A piece making a claim about a real
+person should be proofread on the page, not by publishing it and looking.
+
+Written at `/admin/blog`, on the same Tiptap surface as reviews (markdown stays the
+storage format). The hero image goes through `lib/media/`; `Post_image_is_ours`
+refuses anything that is not on our origin or in our bucket, and a licence without
+its source is refused too.
+
 ## API (v1)
 
 Public: `GET /api/v1/reviews`, `GET /api/v1/reviews/:slug`, `GET /api/v1/critics`, `GET /api/v1/critics/:slug`, `GET /api/v1/movies`
 Auth: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`
 Authors: `POST /api/v1/my/review-images` — multipart image upload for review bodies (probed, re-encoded to WebP, EXIF stripped)
-Admin: `GET|POST /api/v1/admin/reviews`, `GET|PUT|DELETE /api/v1/admin/reviews/:id`, `GET /api/v1/admin/tmdb/search?q=`, `POST /api/v1/admin/movies/import`
+Admin: `GET|POST /api/v1/admin/reviews`, `GET|PUT|DELETE /api/v1/admin/reviews/:id`, `GET|POST /api/v1/admin/posts`, `GET|PUT|DELETE /api/v1/admin/posts/:id`, `GET /api/v1/admin/people/lookup?q=` (our own rows, unlike `.../people/search` which asks TMDB), `GET /api/v1/admin/tmdb/search?q=`, `POST /api/v1/admin/movies/import`
 
 A future native app consumes the same `/api/v1` endpoints.
 
@@ -97,7 +152,7 @@ declares its canonical home to be `localhost`.
 | URL | What it is |
 | --- | --- |
 | `/robots.txt` | Crawl policy; search and assistant agents named explicitly |
-| `/sitemap.xml` | Sitemap **index** → `/sitemaps/{pages,reviews,movies,people,topics,critics}.xml`. Styled via XSL: a browser shows a folder listing and per-section tables, crawlers see standard XML |
+| `/sitemap.xml` | Sitemap **index** → `/sitemaps/{pages,reviews,blog,movies,people,topics,critics}.xml`. Styled via XSL: a browser shows a folder listing and per-section tables, crawlers see standard XML |
 | `/feed.xml` | RSS 2.0 — full text via `content:encoded`; styled via XSL for humans |
 | `/feed.json` | JSON Feed 1.1 — same content, real author objects, ratings |
 | `/ads.txt` | Authorised ad sellers (IAB format), derived from the same env var as the AdSense meta tag |
@@ -107,6 +162,7 @@ declares its canonical home to be `localhost`.
 | `/movies/{slug}.md` | One film: credits (linked to people pages), cast, and the criticism on it |
 | `/people/{slug}.md` | One person: sourced facts, filmography with this site's ratings, the criticism |
 | `/topics/{slug}.md` | One theme or motif: the definition, the essay, and every film under it with the sentence that placed it there |
+| `/blog/{slug}.md` | One blog post: the standfirst, the piece, who and what it is about — and its sources, in the front matter *and* the body |
 
 The `.md` URLs are rewrites onto `/md/*` handlers (see `next.config.ts`) and are
 advertised from each page as `rel="alternate" type="text/markdown"`.
@@ -114,8 +170,8 @@ advertised from each page as `rel="alternate" type="text/markdown"`.
 **Structured data** — `src/lib/seo.ts` builds one `@graph` per page from nodes that
 reference each other by `@id`, so a crawler resolves one Organization, one film and
 one review across the whole site rather than a fresh copy per URL. `Review`,
-`Movie`, `Person`, `DefinedTerm`, `DefinedTermSet`, `BreadcrumbList`, `ItemList`,
-`FAQPage` and `Dataset` are all emitted. A film page carries its themes and
+`Movie`, `Person`, `DefinedTerm`, `DefinedTermSet`, `Blog`, `BlogPosting`,
+`BreadcrumbList`, `ItemList`, `FAQPage` and `Dataset` are all emitted. A film page carries its themes and
 motifs as `about` **references** to those `DefinedTerm` ids — the definitions
 themselves live on the topic pages that render them. Two rules hold everywhere:
 

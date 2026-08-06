@@ -200,6 +200,12 @@ export const topicEntityId = (slug: string) => `${SITE_URL}/topics/${slug}#term`
 /** The taxonomy itself — the set every topic term belongs to. */
 export const TOPIC_SET_ID = `${SITE_URL}/topics#termset`;
 
+/** The blog as a publication. Every post is `isPartOf` this one node. */
+export const BLOG_ID = `${SITE_URL}/blog#blog`;
+
+/** A blog post. Its page owns it, exactly as a review's page owns the review. */
+export const postEntityId = (slug: string) => `${SITE_URL}/blog/${slug}#post`;
+
 /* ───────────────────────────── site-wide nodes ───────────────────────────── */
 
 export function organizationNode(): JsonLdNode {
@@ -769,6 +775,127 @@ export function definedTermNode(topic: {
     termCode: topic.kind,
     url: absUrl(`/topics/${topic.slug}`),
     inDefinedTermSet: ref(TOPIC_SET_ID),
+  });
+}
+
+/* ─────────────────────────────── the blog ─────────────────────────────── */
+
+/**
+ * The blog as a publication in its own right.
+ *
+ * One `Blog` node every post hangs off, rather than a bare `Article` per page.
+ * The difference matters to the audience this file exists for: a crawler that
+ * sees forty unconnected articles has forty pages, while one that sees a Blog
+ * with forty `blogPost`s has a publication with an editorial line — which is
+ * what gets a piece surfaced as "CinePixo reported" instead of as a stray URL.
+ */
+export function blogNode(): JsonLdNode {
+  return compact({
+    "@type": "Blog",
+    "@id": BLOG_ID,
+    url: absUrl("/blog"),
+    name: `${SITE_NAME} — Off Camera`,
+    description:
+      "Film writing that isn't a review: the people who make films away from the film, the arguments the industry is having, and what to watch next.",
+    inLanguage: SITE_LANG,
+    publisher: ref(ORG_ID),
+    isPartOf: ref(WEBSITE_ID),
+  });
+}
+
+export interface PostInput {
+  slug: string;
+  title: string;
+  dek?: Nullable<string>;
+  content: string;
+  /** The `PostCategory` label as the page prints it, not the enum member. */
+  categoryLabel: string;
+  tags?: readonly string[];
+  /** Source URLs — every one of which the page renders. */
+  sources?: readonly string[];
+  publishedAt?: Nullable<Date>;
+  updatedAt?: Nullable<Date>;
+  viewCount?: Nullable<number>;
+  /** Our own hero object, as stored (a path or a bucket URL). */
+  image?: Nullable<string>;
+  imageAlt?: Nullable<string>;
+  imageCredit?: Nullable<string>;
+  imageLicenseUrl?: Nullable<string>;
+}
+
+export interface PostNodeOptions {
+  author: { username: string; displayName?: Nullable<string>; bio?: Nullable<string> };
+  /** Full body in `articleBody`. Off for list pages, where identity is enough. */
+  includeBody?: boolean;
+  /**
+   * What the piece is about, in the order the page presents it. The first entry
+   * becomes `about`; the rest become `mentions` — which is the honest reading of
+   * a curated `sort` column, and keeps a piece on one actor from claiming to be
+   * equally about the six films listed under it.
+   */
+  subjectIds?: readonly string[];
+}
+
+export function postNode(post: PostInput, opts: PostNodeOptions): JsonLdNode {
+  const path = `/blog/${post.slug}`;
+  const prose = opts.includeBody ? plainText(post.content) : undefined;
+  const words = opts.includeBody ? wordCount(post.content) : undefined;
+  const [primary, ...rest] = opts.subjectIds ?? [];
+
+  return compact({
+    "@type": "BlogPosting",
+    "@id": postEntityId(post.slug),
+    url: absUrl(path),
+    // Google truncates a headline past ~110 characters; the column allows 200,
+    // so this is clamped rather than trusted.
+    headline: clamp(post.title, 110),
+    name: post.title,
+    // The standfirst is the sentence written to be quoted out of context, so it
+    // is both the abstract and the description.
+    abstract: post.dek ?? undefined,
+    description: clamp(post.dek ?? undefined, 300),
+    articleBody: prose,
+    wordCount: words,
+    timeRequired: words ? isoDuration(Math.max(1, Math.round(words / 220))) : undefined,
+    datePublished: isoStamp(post.publishedAt),
+    dateModified: isoStamp(post.updatedAt ?? post.publishedAt),
+    inLanguage: SITE_LANG,
+    isAccessibleForFree: true,
+    articleSection: post.categoryLabel,
+    keywords: post.tags?.length ? post.tags.join(", ") : undefined,
+    author: memberNode(opts.author),
+    publisher: ref(ORG_ID),
+    copyrightHolder: ref(ORG_ID),
+    about: primary ? ref(primary) : undefined,
+    mentions: rest.length > 0 ? rest.map(ref) : undefined,
+    // The sources line, as a machine can read it. This is the part that makes a
+    // claim about a living person checkable rather than merely asserted — and
+    // every URL here is printed on the page, which is the rule for this file.
+    citation: post.sources?.length
+      ? post.sources.map((url) => ({ "@type": "CreativeWork", url }))
+      : undefined,
+    image: post.image
+      ? {
+          "@type": "ImageObject",
+          url: hosted(post.image),
+          contentUrl: hosted(post.image),
+          caption: post.imageAlt ?? undefined,
+          // Credit and licence travel with a free file wherever it is described,
+          // markup included — the page renders the same two strings.
+          creditText: post.imageCredit ?? undefined,
+          license: post.imageLicenseUrl ?? undefined,
+        }
+      : undefined,
+    interactionStatistic:
+      post.viewCount != null && post.viewCount > 0
+        ? {
+            "@type": "InteractionCounter",
+            interactionType: "https://schema.org/ReadAction",
+            userInteractionCount: post.viewCount,
+          }
+        : undefined,
+    isPartOf: ref(BLOG_ID),
+    mainEntityOfPage: ref(pageId(path)),
   });
 }
 

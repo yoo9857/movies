@@ -18,6 +18,7 @@ import { ReviewIndex } from "@/components/ReviewIndex";
 import { ScoreBand } from "@/components/ScoreBand";
 import { TrailerEmbed } from "@/components/TrailerEmbed";
 import { VideoGallery } from "@/components/VideoGallery";
+import { PostRow } from "@/components/blog/PostRow";
 import {
   absUrl,
   backdropUrl,
@@ -193,6 +194,25 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         select: { id: true, slug: true, title: true, posterPath: true, image: true, releaseDate: true },
       })
     : [];
+
+  // Blog posts about this film — the other half of `PostMovie`. A piece links
+  // here; this is the link back, and it is the only way a film page carries
+  // writing that is not a scored review.
+  const writing = await prisma.post.findMany({
+    where: { status: "PUBLISHED", movies: { some: { movieId: movie.id } } },
+    orderBy: { publishedAt: "desc" },
+    take: 4,
+    select: {
+      slug: true,
+      title: true,
+      dek: true,
+      category: true,
+      publishedAt: true,
+      image: true,
+      imageAlt: true,
+      author: { select: { username: true, displayName: true } },
+    },
+  });
 
   const socials = [
     movie.homepage && { label: "Official site", href: movie.homepage },
@@ -635,7 +655,27 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         )}
       </section>
 
-      {/* ⑩ Similar movies */}
+      {/* ⑩ Our blog, on this film — writing that isn't a scored review */}
+      {writing.length > 0 && (
+        <section>
+          <SectionHead
+            action={
+              <Link href="/blog" className="text-sm text-accent hover:opacity-80">
+                The blog →
+              </Link>
+            }
+          >
+            Written here · {writing.length}
+          </SectionHead>
+          <div className="mt-4 divide-y divide-line border-y border-line">
+            {writing.map((p) => (
+              <PostRow key={p.slug} post={p} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ⑪ Similar movies */}
       {similar.length > 0 && (
         <section>
           <SectionHead>More like this</SectionHead>

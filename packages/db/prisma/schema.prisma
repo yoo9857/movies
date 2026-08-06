@@ -45,6 +45,25 @@ enum TopicKind {
   MOTIF
 }
 
+/// What kind of piece a blog post is.
+///
+/// Deliberately not the Topic taxonomy: a THEME says what a *film* is about,
+/// these say what an *article* is. The two that carry claims about living
+/// people — PEOPLE and ISSUE — are the reason `Post.sources` exists and is
+/// enforced, so the split is load-bearing rather than presentational.
+enum PostCategory {
+  /// The person off camera: what they are working on, saying, doing.
+  PEOPLE
+  /// A live argument — a controversy, a decision, a row worth explaining.
+  ISSUE
+  /// The business: production, box office, festivals, awards.
+  INDUSTRY
+  /// How films are made — camera, cutting, score, design.
+  CRAFT
+  /// What to watch, and in what order.
+  WATCHLIST
+}
+
 /// Fan account. Reviews are written by users; the site owner is role=ADMIN.
 model User {
   id           String   @id @default(cuid())
@@ -60,6 +79,7 @@ model User {
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
   reviews      Review[]
   votes        ReviewVote[]
+  posts        Post[]
 }
 
 /// A professional film critic the fandom follows — profile directory.
@@ -178,6 +198,7 @@ model Movie {
   videos        MovieVideo[]
   images        MovieImage[]
   topics        MovieTopic[]
+  posts         PostMovie[]
 
   @@index([title])
   @@index([collectionId])
@@ -243,6 +264,7 @@ model Person {
 
   castRoles MovieCast[]
   crewRoles MovieCrew[]
+  posts     PostPerson[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -418,4 +440,103 @@ model ReviewVote {
 
   @@unique([reviewId, userId])
   @@index([userId])
+}
+
+/// An editorial blog post — the writing this site does that is not a review.
+///
+/// A Review argues about one film and carries a score. A Post is everything
+/// else we have to say: what an actor is doing off camera, an argument the
+/// industry is having, what to watch this month. It has **no rating column**,
+/// on purpose — a piece that scores a film is a review filed under the wrong
+/// URL, and giving this table a rating would make that mistake cheap.
+///
+/// `status` reuses `ReviewStatus`. It is the same two-state machine, and a
+/// second enum with identical members would be one more thing to keep in step.
+model Post {
+  id      String @id @default(cuid())
+  /// URL identity: "/blog/song-kang-ho-off-camera". Minted once and never
+  /// rewritten — same rule as a film slug, for the same reason.
+  slug    String @unique
+  title   String
+  /// The standfirst: one or two sentences under the headline. Doubles as the
+  /// meta description and the share card's line, so it is written to survive
+  /// being read with no page around it.
+  dek     String?
+  /// Markdown body, rendered by the same component as a review with raw HTML
+  /// disabled. Markdown stays the storage format here too.
+  content String
+  category PostCategory
+  status   ReviewStatus @default(DRAFT)
+  publishedAt DateTime? @db.Timestamptz(3)
+  /// The long-tail phrases this piece is written for. Rendered on the page as
+  /// its tag row, so nothing here is a keyword the reader cannot see — the
+  /// same rule the JSON-LD follows.
+  tags    String[]
+  /// Where the claims come from, as URLs. The page renders every one of them.
+  ///
+  /// Not decoration: a post about a living person is a factual claim about
+  /// someone who can be harmed by getting it wrong, and a CHECK refuses to
+  /// publish a PEOPLE or ISSUE post with an empty array. Per-URL shape is
+  /// zod's job (see `postInputSchema`) — a CHECK cannot walk an array without
+  /// a subquery.
+  sources String[]
+  /// The hero image: our own object, uploaded through lib/media, never a
+  /// hotlink — the CHECK names our bucket exactly, as every other file column
+  /// here does. A free licence's terms travel with the file and the page
+  /// renders them.
+  image           String?
+  imageCredit     String?
+  imageLicense    String?
+  imageLicenseUrl String?
+  imageSourceUrl  String?
+  /// Alt text for `image`. A hero with no alt text is a hero we cannot ship.
+  imageAlt        String?
+  viewCount Int    @default(0)
+  authorId  String
+  author    User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  people    PostPerson[]
+  movies    PostMovie[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  /// The category shelves — /blog/category/people and friends — read through this.
+  @@index([category, status, publishedAt(sort: Desc)])
+  @@index([authorId, updatedAt(sort: Desc)])
+  /// Tag filtering uses the array containment operator, so GIN is the right
+  /// index — the same reason Movie.genres has one.
+  @@index([tags], type: Gin)
+}
+
+/// A post about a person, and the reason the blog is worth building: a piece on
+/// an actor links to their page, and their page links back to the piece. That
+/// pair is the internal link graph a tag cloud never produces.
+model PostPerson {
+  postId   String
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  personId String
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  /// Curated order — the person the piece is *about* comes first. Not derived
+  /// from createdAt: the editor rewrites the whole list in one transaction and
+  /// now() is transaction-scoped, so every row would share a timestamp.
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([postId, personId])
+  @@index([personId])
+  @@index([postId, sort])
+}
+
+/// A post about a film. Same contract as PostPerson.
+model PostMovie {
+  postId  String
+  post    Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([postId, movieId])
+  @@index([movieId])
+  @@index([postId, sort])
 }

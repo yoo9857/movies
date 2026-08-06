@@ -18,6 +18,7 @@
  * convention cannot express.
  */
 import { prisma } from "@cinepixo/db";
+import { postCategorySlug } from "@cinepixo/shared";
 import { absUrl, backdropUrl, posterUrl } from "@/lib/seo";
 
 export interface SitemapUrl {
@@ -28,7 +29,15 @@ export interface SitemapUrl {
   images?: string[];
 }
 
-export const SECTIONS = ["pages", "reviews", "movies", "people", "topics", "critics"] as const;
+export const SECTIONS = [
+  "pages",
+  "reviews",
+  "blog",
+  "movies",
+  "people",
+  "topics",
+  "critics",
+] as const;
 export type Section = (typeof SECTIONS)[number];
 
 /** Newest timestamp in a set of rows, or undefined when there are none. */
@@ -66,6 +75,30 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
           backdropUrl(r.movie.backdropPath, "w1280"),
           posterUrl(r.movie.posterPath, "w780"),
         ].filter((u): u is string => Boolean(u)),
+      }));
+    }
+    case "blog": {
+      // Every published post, with no threshold to clear. Unlike a film or a
+      // person, a post is not a database row with a page around it — it does not
+      // exist until someone writes it, so there is no thin-page problem to
+      // filter for here.
+      const posts = await prisma.post.findMany({
+        where: { status: "PUBLISHED" },
+        orderBy: { updatedAt: "desc" },
+        select: { slug: true, updatedAt: true, image: true },
+      });
+      return posts.map((p) => ({
+        url: absUrl(`/blog/${p.slug}`),
+        lastModified: p.updatedAt,
+        // A post is finished when it is published; corrections happen, wholesale
+        // rewrites do not.
+        changeFrequency: "monthly",
+        // Level with a review: both are writing of ours that exists nowhere
+        // else, and both are what the site is here to be read for.
+        priority: 0.9,
+        // Only our own object — the hero is uploaded through lib/media, and a
+        // CHECK constraint refuses anything else into that column.
+        images: p.image ? [absUrl(p.image)] : [],
       }));
     }
     case "movies": {
@@ -192,7 +225,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       // The handful of listing pages. Their lastmod is derived from the newest
       // row they list, not `new Date()` — claiming freshness on every fetch
       // means nothing.
-      const [review, movie, critic, person, topic, genreRows, decadeRows] = await Promise.all([
+      const [review, movie, critic, person, topic, post, shelfRows, genreRows, decadeRows] = await Promise.all([
         prisma.review.findFirst({
           where: { status: "PUBLISHED" },
           orderBy: { updatedAt: "desc" },
@@ -202,6 +235,19 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         prisma.critic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.person.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
         prisma.topic.findFirst({ orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+        prisma.post.findFirst({
+          where: { status: "PUBLISHED" },
+          orderBy: { updatedAt: "desc" },
+          select: { updatedAt: true },
+        }),
+        // One row per shelf that has anything on it. A shelf with no posts is a
+        // heading and a blurb — the same thin page an empty topic would be, and
+        // it joins this file the moment something is filed there.
+        prisma.post.groupBy({
+          by: ["category"],
+          where: { status: "PUBLISHED" },
+          _max: { updatedAt: true },
+        }),
         // The browse states, aggregated in the database.
         //
         // This used to read one column of every film and group them in JS, which
@@ -232,6 +278,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         critic?.updatedAt,
         person?.updatedAt,
         topic?.updatedAt,
+        post?.updatedAt,
       ]);
 
       // Genre and decade change *which* films are listed, so /movies gives each
@@ -245,6 +292,16 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       // different address as their canonical.
       const browseUrl = (params: Record<string, string>) =>
         absUrl(`/movies?${new URLSearchParams(params).toString()}`);
+
+      // The blog's shelves. Each is a real canonical URL with its own heading,
+      // blurb and pagination, and — like the genre and decade states above —
+      // nothing else on the site announces them.
+      const shelves: SitemapUrl[] = shelfRows.map((s) => ({
+        url: absUrl(`/blog/category/${postCategorySlug(s.category)}`),
+        lastModified: s._max.updatedAt ?? undefined,
+        changeFrequency: "weekly" as const,
+        priority: 0.7,
+      }));
 
       const browseStates: SitemapUrl[] = [
         ...genreRows.map((g) => ({
@@ -268,6 +325,10 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         // spelling a sitemap conventionally carries.
         { url: absUrl("/"), lastModified: anything, changeFrequency: "daily", priority: 1 },
         { url: absUrl("/reviews"), lastModified: review?.updatedAt, changeFrequency: "daily", priority: 0.9 },
+        // The blog front. Level with /reviews: it is the other half of what this
+        // site publishes, and the one a reader arriving from a search for a name
+        // rather than a film lands on.
+        { url: absUrl("/blog"), lastModified: post?.updatedAt, changeFrequency: "daily", priority: 0.9 },
         { url: absUrl("/movies"), lastModified: movie?.updatedAt, changeFrequency: "weekly", priority: 0.8 },
         { url: absUrl("/people"), lastModified: person?.updatedAt, changeFrequency: "weekly", priority: 0.6 },
         { url: absUrl("/topics"), lastModified: topic?.updatedAt, changeFrequency: "weekly", priority: 0.7 },
@@ -282,6 +343,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         { url: absUrl("/contact"), lastModified: anything, changeFrequency: "monthly", priority: 0.4 },
         { url: absUrl("/privacy"), lastModified: anything, changeFrequency: "monthly", priority: 0.3 },
         { url: absUrl("/terms"), lastModified: anything, changeFrequency: "monthly", priority: 0.3 },
+        ...shelves,
         ...browseStates,
       ];
     }
@@ -290,7 +352,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
 
 /** Section lastmods for the index — one cheap query per shelf. */
 export async function sectionLastmods(): Promise<Record<Section, Date | undefined>> {
-  const [review, movie, critic, person, topic, assignment] = await Promise.all([
+  const [review, movie, critic, person, topic, assignment, post] = await Promise.all([
     prisma.review.findFirst({
       where: { status: "PUBLISHED" },
       orderBy: { updatedAt: "desc" },
@@ -306,6 +368,11 @@ export async function sectionLastmods(): Promise<Record<Section, Date | undefine
       select: { updatedAt: true },
     }),
     prisma.movieTopic.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+    prisma.post.findFirst({
+      where: { status: "PUBLISHED" },
+      orderBy: { updatedAt: "desc" },
+      select: { updatedAt: true },
+    }),
   ]);
   // The film shelf moves when an assignment lands, not only when a Movie row is
   // written — same reason the per-URL lastmod above folds these in.
@@ -316,10 +383,12 @@ export async function sectionLastmods(): Promise<Record<Section, Date | undefine
     critic?.updatedAt,
     person?.updatedAt,
     topic?.updatedAt,
+    post?.updatedAt,
   ]);
   return {
     pages: anything,
     reviews: review?.updatedAt,
+    blog: post?.updatedAt,
     movies: films,
     people: person?.updatedAt,
     topics: topic?.updatedAt,

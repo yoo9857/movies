@@ -7,6 +7,7 @@
 //
 // Spec: https://www.jsonfeed.org/version/1.1/
 import { prisma } from "@cinepixo/db";
+import { POST_CATEGORY_LABELS, type PostCategory } from "@cinepixo/shared";
 import { absUrl, clamp, hosted, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_LANG, SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -15,9 +16,9 @@ export const dynamic = "force-dynamic";
 const ITEMS = 30;
 
 export async function GET(): Promise<Response> {
-  // Reviews and topic essays, interleaved by date — the same two kinds of
-  // published writing /feed.xml carries.
-  const [reviews, topics] = await Promise.all([
+  // Reviews, blog posts and topic essays, interleaved by date — the same three
+  // kinds of published writing /feed.xml carries.
+  const [reviews, posts, topics] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
@@ -33,6 +34,24 @@ export async function GET(): Promise<Response> {
         updatedAt: true,
         author: { select: { username: true, displayName: true } },
         movie: { select: { title: true, releaseDate: true, posterPath: true, image: true, genres: true } },
+      },
+    }),
+    prisma.post.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: ITEMS,
+      select: {
+        slug: true,
+        title: true,
+        dek: true,
+        content: true,
+        category: true,
+        tags: true,
+        sources: true,
+        publishedAt: true,
+        updatedAt: true,
+        image: true,
+        author: { select: { username: true, displayName: true } },
       },
     }),
     prisma.topic.findMany({
@@ -61,7 +80,7 @@ export async function GET(): Promise<Response> {
     icon: absUrl("/icon-512.png"),
     favicon: absUrl("/icon-192.png"),
     authors: [{ name: SITE_NAME, url: `${SITE_URL}/` }],
-    items: buildItems(reviews, topics),
+    items: buildItems(reviews, posts, topics),
   };
 
   return new Response(JSON.stringify(feed, null, 2), {
@@ -91,6 +110,20 @@ type ReviewRow = {
   };
 };
 
+type PostRow = {
+  slug: string;
+  title: string;
+  dek: string | null;
+  content: string;
+  category: PostCategory;
+  tags: string[];
+  sources: string[];
+  publishedAt: Date | null;
+  updatedAt: Date;
+  image: string | null;
+  author: { username: string; displayName: string | null };
+};
+
 type TopicRow = {
   slug: string;
   name: string;
@@ -101,7 +134,7 @@ type TopicRow = {
   updatedAt: Date;
 };
 
-function buildItems(reviews: ReviewRow[], topics: TopicRow[]) {
+function buildItems(reviews: ReviewRow[], posts: PostRow[], topics: TopicRow[]) {
   const reviewItems = reviews.map((r) => {
     const url = absUrl(`/reviews/${r.slug}`);
     const author = r.author.displayName ?? r.author.username;
@@ -138,6 +171,34 @@ function buildItems(reviews: ReviewRow[], topics: TopicRow[]) {
     };
   });
 
+  const postItems = posts.map((p) => {
+    const url = absUrl(`/blog/${p.slug}`);
+    const author = p.author.displayName ?? p.author.username;
+    return {
+      date: p.publishedAt ?? new Date(0),
+      item: {
+        id: url,
+        url,
+        title: p.title,
+        summary: p.dek ?? clamp(plainText(p.content), 300),
+        content_text: plainText(p.content),
+        image: hosted(p.image),
+        date_published: p.publishedAt?.toISOString(),
+        date_modified: p.updatedAt.toISOString(),
+        authors: [{ name: author }],
+        tags: [POST_CATEGORY_LABELS[p.category], ...p.tags],
+        _cinepixo: {
+          category: p.category,
+          // The sources travel with the piece. A reader taking this feed into a
+          // reader still gets the evidence the page prints — which is the point
+          // of having demanded it at the database.
+          sources: p.sources,
+          markdown_url: `${url}.md`,
+        },
+      },
+    };
+  });
+
   const topicItems = topics.map((t) => {
     const url = absUrl(`/topics/${t.slug}`);
     const kindLabel = t.kind === "THEME" ? "Theme" : "Motif";
@@ -162,7 +223,7 @@ function buildItems(reviews: ReviewRow[], topics: TopicRow[]) {
     };
   });
 
-  return [...reviewItems, ...topicItems]
+  return [...reviewItems, ...postItems, ...topicItems]
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .slice(0, ITEMS)
     .map((i) => i.item);

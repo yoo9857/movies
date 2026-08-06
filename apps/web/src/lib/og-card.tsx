@@ -488,6 +488,74 @@ export function TopicCard(input: {
   );
 }
 
+/**
+ * A blog post: the shelf it sits on, the headline, the standfirst, and the
+ * byline with the date.
+ *
+ * No score anywhere, deliberately — a post has no rating, and a card that put a
+ * number on one would be advertising a review. The date is on the card because
+ * this is the one kind of writing here where "when" is part of the claim: a
+ * piece about what an actor is doing is a piece about a moment.
+ */
+export function PostCard(input: {
+  title: string;
+  dek?: string | null;
+  /** The shelf label as the site prints it — "Off Camera", not "PEOPLE". */
+  section: string;
+  author: string;
+  /** Already formatted for display; this file does no locale work. */
+  date?: string | null;
+  /** Absolute URL of the hero, as a PNG satori can decode. */
+  hero?: string | null;
+}): ReactElement {
+  const hasHero = Boolean(input.hero);
+  return (
+    <Card poster={input.hero}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        <Eyebrow>{input.section}</Eyebrow>
+        <div
+          style={{
+            display: "flex",
+            fontSize: hasHero ? 54 : 66,
+            fontWeight: 700,
+            lineHeight: 1.1,
+            letterSpacing: -1.5,
+            maxWidth: hasHero ? 620 : 1000,
+          }}
+        >
+          {clampText(input.title, hasHero ? 72 : 92)}
+        </div>
+        {input.dek && (
+          <div
+            style={{
+              display: "flex",
+              fontSize: 27,
+              lineHeight: 1.35,
+              color: MUTED,
+              maxWidth: hasHero ? 620 : 940,
+            }}
+          >
+            {clampText(input.dek, hasHero ? 130 : 190)}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 25 }}>
+          <span style={{ color: FOREGROUND }}>{clampText(input.author, 34)}</span>
+          {input.date && (
+            <>
+              <span style={{ color: MUTED }}>·</span>
+              <span style={{ color: MUTED }}>{input.date}</span>
+            </>
+          )}
+        </div>
+        <Footer note={hasHero ? undefined : "film writing that isn't a review"} />
+      </div>
+    </Card>
+  );
+}
+
 export function PersonCard(input: {
   name: string;
   role?: string | null;

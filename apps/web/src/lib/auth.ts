@@ -38,3 +38,18 @@ export async function requireAdmin(): Promise<SafeUser> {
   if (user.role !== "ADMIN") throw new ApiError(403, "Admin access required");
   return user;
 }
+
+/**
+ * Is the viewer the desk? The same DAL check as `requireAdmin`, asked as a
+ * question rather than made as a demand — for a page that renders *differently*
+ * for an admin instead of refusing the request, which is what a draft blog post
+ * preview needs.
+ *
+ * Deliberately not a shortcut around `requireAdmin`: anything that authorises an
+ * action still calls that, so the throwing path remains the only way to permit
+ * one. This decides what to render, and nothing else.
+ */
+export async function isAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
+  return user?.role === "ADMIN";
+}

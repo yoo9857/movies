@@ -8,6 +8,7 @@
 //
 // See /feed.json for the same content without the namespace gymnastics.
 import { prisma } from "@cinepixo/db";
+import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
 import { exportMarkdownBody } from "@/lib/markdown-export";
 import { absUrl, clamp, hosted, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
@@ -38,10 +39,11 @@ function cdata(s: string): string {
 }
 
 export async function GET() {
-  // Two kinds of writing feed this feed: signed reviews, and the editorial
-  // essays that open a topic. Both are published prose with a URL; a reader
-  // following the site should hear about either, interleaved by date.
-  const [reviews, topics] = await Promise.all([
+  // Three kinds of writing feed this feed: signed reviews, blog posts, and the
+  // editorial essays that open a topic. All three are published prose with a
+  // URL; a reader following the site should hear about any of them, interleaved
+  // by date.
+  const [reviews, posts, topics] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
@@ -56,6 +58,22 @@ export async function GET() {
         publishedAt: true,
         author: { select: { username: true, displayName: true } },
         movie: { select: { title: true, releaseDate: true, posterPath: true, image: true, genres: true } },
+      },
+    }),
+    prisma.post.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: ITEMS,
+      select: {
+        slug: true,
+        title: true,
+        dek: true,
+        content: true,
+        category: true,
+        tags: true,
+        publishedAt: true,
+        image: true,
+        author: { select: { username: true, displayName: true } },
       },
     }),
     prisma.topic.findMany({
@@ -108,6 +126,36 @@ export async function GET() {
       return { date: r.publishedAt ?? new Date(0), entry };
     });
 
+  const postItems = posts.map((p) => {
+    const url = absUrl(`/blog/${p.slug}`);
+    const author = p.author.displayName ?? p.author.username;
+    const summary = clamp(p.dek ?? plainText(p.content), 400) ?? p.title;
+    const hero = hosted(p.image);
+
+    const entry = [
+      "    <item>",
+      `      <title>${xml(p.title)}</title>`,
+      `      <link>${xml(url)}</link>`,
+      `      <guid isPermaLink="true">${xml(url)}</guid>`,
+      `      <description>${xml(summary)}</description>`,
+      `      <content:encoded>${cdata(exportMarkdownBody(p.content))}</content:encoded>`,
+      `      <dc:creator>${xml(author)}</dc:creator>`,
+      // The shelf, then the tags the page prints. No rating element: a post has
+      // no score, and inventing one here would misreport the piece.
+      `      <category>${xml(POST_CATEGORY_LABELS[p.category])}</category>`,
+      ...p.tags.map((t) => `      <category>${xml(t)}</category>`),
+      p.publishedAt ? `      <pubDate>${new Date(p.publishedAt).toUTCString()}</pubDate>` : "",
+      hero
+        ? `      <media:thumbnail url="${xml(hero)}" />\n      <enclosure url="${xml(hero)}" type="${hero.endsWith(".webp") ? "image/webp" : "image/jpeg"}" length="0" />`
+        : "",
+      "    </item>",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return { date: p.publishedAt ?? new Date(0), entry };
+  });
+
   const topicItems = topics.map((t) => {
     const url = absUrl(`/topics/${t.slug}`);
     const kindLabel = t.kind === "THEME" ? "Theme" : "Motif";
@@ -132,7 +180,7 @@ export async function GET() {
     return { date: t.createdAt, entry };
   });
 
-  const merged = [...reviewItems, ...topicItems].sort(
+  const merged = [...reviewItems, ...postItems, ...topicItems].sort(
     (a, b) => b.date.getTime() - a.date.getTime(),
   );
   const items = merged

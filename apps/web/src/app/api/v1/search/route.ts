@@ -18,7 +18,7 @@ export const GET = handle(async (request: Request) => {
   const url = new URL(request.url);
   const q = querySchema.parse(url.searchParams.get("q") ?? "");
 
-  const [reviews, movies, critics, people, topics] = await Promise.all([
+  const [reviews, posts, movies, critics, people, topics] = await Promise.all([
     prisma.review.findMany({
       where: {
         status: "PUBLISHED",
@@ -35,6 +35,25 @@ export const GET = handle(async (request: Request) => {
         excerpt: true,
         rating: true,
         movie: { select: { title: true } },
+      },
+    }),
+    // Blog posts, searched like reviews: the body too, because the phrase a
+    // reader remembers from a piece about a person is in the prose and not in
+    // the headline. Served by Post_content_trgm.
+    prisma.post.findMany({
+      where: {
+        status: "PUBLISHED",
+        OR: [{ title: ci(q) }, { dek: ci(q) }, { content: ci(q) }, { tags: { has: q } }],
+      },
+      orderBy: { publishedAt: "desc" },
+      take: 10,
+      select: {
+        slug: true,
+        title: true,
+        dek: true,
+        category: true,
+        publishedAt: true,
+        people: { orderBy: { sort: "asc" }, select: { person: { select: { name: true } } } },
       },
     }),
     prisma.movie.findMany({
@@ -83,6 +102,16 @@ export const GET = handle(async (request: Request) => {
 
   return json({
     reviews,
+    posts: posts.map((p) => ({
+      slug: p.slug,
+      title: p.title,
+      dek: p.dek,
+      category: p.category,
+      publishedAt: p.publishedAt,
+      // Who the piece is about, flattened — a consumer of this endpoint should
+      // not have to walk a join table to answer "is this the actor I meant?".
+      about: p.people.map((x) => x.person.name),
+    })),
     movies,
     critics,
     topics: topics.map((t) => ({

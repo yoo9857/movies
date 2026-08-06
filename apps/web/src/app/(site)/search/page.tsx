@@ -4,6 +4,7 @@ import { PersonPortrait } from "@/components/PersonPortrait";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Poster } from "@/components/Poster";
+import { PostRow } from "@/components/blog/PostRow";
 import { StarRating } from "@/components/StarRating";
 import { pageMetadata } from "@/lib/seo";
 
@@ -20,7 +21,8 @@ export async function generateMetadata(props: {
     // otherwise mint an unbounded number of thin, near-duplicate URLs.
     path: "/search",
     title: q ? `Search — ${q}` : "Search",
-    description: "Search reviews, films, people, themes and critics on CinePixo.",
+    description:
+      "Search reviews, blog posts, films, people, themes and critics on CinePixo.",
     // Results pages are excluded from the index but still followed, so the
     // reviews and films they link to keep being discovered through them.
     noIndex: true,
@@ -37,7 +39,7 @@ export default async function SearchPage(props: {
   // exist precisely for this; see the search API route for the history.
   const ci = (value: string) => ({ contains: value, mode: "insensitive" as const });
 
-  const [reviews, movies, critics, people, topics] = q
+  const [reviews, posts, movies, critics, people, topics] = q
     ? await Promise.all([
         prisma.review.findMany({
           where: {
@@ -53,6 +55,28 @@ export default async function SearchPage(props: {
             excerpt: true,
             rating: true,
             movie: { select: { title: true } },
+          },
+        }),
+        // Blog posts, searched the way reviews are — headline, standfirst, body
+        // and the tag row. A reader looking for a piece about an actor almost
+        // never remembers its headline: the headline is usually a claim, and the
+        // name they typed is in the prose. Served by Post_content_trgm.
+        prisma.post.findMany({
+          where: {
+            status: "PUBLISHED",
+            OR: [{ title: ci(q) }, { dek: ci(q) }, { content: ci(q) }, { tags: { has: q } }],
+          },
+          orderBy: { publishedAt: "desc" },
+          take: 10,
+          select: {
+            slug: true,
+            title: true,
+            dek: true,
+            category: true,
+            publishedAt: true,
+            image: true,
+            imageAlt: true,
+            author: { select: { username: true, displayName: true } },
           },
         }),
         prisma.movie.findMany({
@@ -107,11 +131,12 @@ export default async function SearchPage(props: {
           },
         }),
       ])
-    : [[], [], [], [], []];
+    : [[], [], [], [], [], []];
 
   const empty =
     q &&
     reviews.length === 0 &&
+    posts.length === 0 &&
     movies.length === 0 &&
     critics.length === 0 &&
     people.length === 0 &&
@@ -125,7 +150,7 @@ export default async function SearchPage(props: {
           name="q"
           defaultValue={q}
           maxLength={100}
-          placeholder="Reviews, films, people, themes…"
+          placeholder="Reviews, posts, films, people, themes…"
           className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
         />
         <button
@@ -162,6 +187,17 @@ export default async function SearchPage(props: {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {posts.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold uppercase text-muted">Off Camera</h2>
+          <div className="mt-3 divide-y divide-line border-y border-line">
+            {posts.map((p) => (
+              <PostRow key={p.slug} post={p} />
+            ))}
+          </div>
         </section>
       )}
 

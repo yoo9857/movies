@@ -102,6 +102,7 @@ const nextConfig: NextConfig = {
       { source: "/movies/:slug.md", destination: "/md/movies/:slug" },
       { source: "/people/:slug.md", destination: "/md/people/:slug" },
       { source: "/topics/:slug.md", destination: "/md/topics/:slug" },
+      { source: "/blog/:slug.md", destination: "/md/blog/:slug" },
       // Pre-slug movie URLs (/movies/<cuid>) must answer a real HTTP 308, and
       // the page cannot deliver one: Next streams metadata, so by the time a
       // redirect thrown in the page runs, 200 is already on the wire and the

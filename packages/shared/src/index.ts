@@ -234,6 +234,166 @@ export const topicFilmsSchema = z.object({
 });
 export type TopicFilmsInput = z.infer<typeof topicFilmsSchema>;
 
+// ── Blog posts ───────────────────────────────────────────────────
+
+/**
+ * What kind of piece a post is.
+ *
+ * These are not the Topic axes. A THEME says what a *film* is about; these say
+ * what an *article* is, and the split earns its keep in one place: PEOPLE and
+ * ISSUE pieces make factual claims about living people, so those two require a
+ * source before they can be published. CRAFT and WATCHLIST are our own reading
+ * of films we have watched and require none.
+ */
+export const postCategorySchema = z.enum([
+  "PEOPLE",
+  "ISSUE",
+  "INDUSTRY",
+  "CRAFT",
+  "WATCHLIST",
+]);
+export type PostCategory = z.infer<typeof postCategorySchema>;
+
+/** The shelf label, as it reads in navigation and on a card. */
+export const POST_CATEGORY_LABELS: Record<PostCategory, string> = {
+  PEOPLE: "Off Camera",
+  ISSUE: "The Argument",
+  INDUSTRY: "Industry",
+  CRAFT: "Craft",
+  WATCHLIST: "Watchlist",
+};
+
+/** One line saying what the shelf is for — rendered on /blog and its shelves. */
+export const POST_CATEGORY_BLURBS: Record<PostCategory, string> = {
+  PEOPLE:
+    "The people who make films, away from the film: what they are working on, what they have said, where they have gone.",
+  ISSUE:
+    "An argument the film world is having, explained — what happened, who is on which side, and what actually turns on it.",
+  INDUSTRY:
+    "The business of pictures: what got made, what it cost, what it took, and which festival said so.",
+  CRAFT:
+    "How films are made — the camera, the cut, the score, the design — read closely on the films that show it best.",
+  WATCHLIST: "What to watch, in what order, and why that order.",
+};
+
+/** The URL segment for a shelf: PEOPLE → /blog/people. */
+export const postCategorySlug = (c: PostCategory) => c.toLowerCase();
+
+/** The reverse, for a route param. Anything unrecognised is not a shelf. */
+export function postCategoryFromSlug(raw: string): PostCategory | null {
+  const found = postCategorySchema.options.find((c) => c.toLowerCase() === raw);
+  return found ?? null;
+}
+
+/**
+ * The categories whose claims must be sourced before publication.
+ *
+ * Stated once, here, because three places need the same answer: the editor (to
+ * ask for a source), the API (to refuse the save with a readable message) and
+ * the CHECK constraint `Post_claims_are_sourced` (to refuse it regardless). The
+ * database is the one that actually holds; this is what makes the error legible.
+ */
+export const SOURCED_CATEGORIES: readonly PostCategory[] = ["PEOPLE", "ISSUE"];
+
+/**
+ * Slugs the /blog routes have already spent.
+ *
+ * `/blog/category/people` is the shelf, `/blog/<slug>` is a post, and Next
+ * resolves the static segment first — so a post slugged "category" would be a
+ * published page with a canonical URL that nothing can reach. Refused at the
+ * input rather than discovered later by a crawler.
+ */
+export const RESERVED_POST_SLUGS: readonly string[] = ["category", "page", "feed"];
+
+export const postInputSchema = z
+  .object({
+    slug: slugSchema.refine((s) => !RESERVED_POST_SLUGS.includes(s), {
+      message: "That slug is taken by a /blog route and would be unreachable",
+    }),
+    title: z.string().trim().min(1).max(200),
+    /** The standfirst — also the meta description and the share card's line. */
+    dek: optionalText(500),
+    content: z.string().min(1).max(100_000),
+    category: postCategorySchema,
+    status: reviewStatusSchema,
+    /** Long-tail phrases the piece is written for; the page renders them. */
+    tags: z.array(z.string().trim().min(1).max(60)).max(12).default([]),
+    /**
+     * Where the claims come from. http(s) only — the same rule as every other
+     * outward link on the site, and the array shape the database cannot check
+     * element by element (a CHECK cannot walk an array without a subquery).
+     */
+    sources: z.array(httpUrl).max(20).default([]),
+    /** People and films the piece is about, in the order it is about them. */
+    personIds: z.array(z.string().min(1).max(64)).max(20).default([]),
+    movieIds: z.array(z.string().min(1).max(64)).max(20).default([]),
+    /**
+     * The hero, as our upload pipeline returned it: a site-relative path or a
+     * URL on our own bucket. Which hosts count as ours is the web app's
+     * question (`isOurObjectUrl`) and the database's (`Post_image_is_ours`);
+     * this only refuses the shapes that can never be either.
+     */
+    image: z
+      .union([
+        z.literal(""),
+        z
+          .string()
+          .max(500)
+          .refine((u) => u.startsWith("/") || /^https:\/\//.test(u), {
+            message: "A hero image must be one of ours — upload it, don't link it",
+          }),
+      ])
+      .transform((v) => (v === "" ? undefined : v))
+      .optional(),
+    imageAlt: optionalText(300),
+    imageCredit: optionalText(300),
+    imageLicense: optionalText(120),
+    imageLicenseUrl: optionalHttpUrl,
+    imageSourceUrl: optionalHttpUrl,
+  })
+  // The application half of the two image CHECKs. A free licence's terms travel
+  // with the file: a licence with no source is unverifiable, and credit or alt
+  // text with no file describes nothing.
+  .refine((p) => !p.imageLicense || Boolean(p.imageSourceUrl), {
+    path: ["imageSourceUrl"],
+    message: "A licence needs the page it was taken from",
+  })
+  .refine((p) => Boolean(p.image) || (!p.imageAlt && !p.imageCredit), {
+    path: ["image"],
+    message: "Alt text and credit describe a hero image — add one, or clear them",
+  })
+  // The application half of `Post_claims_are_sourced`. The database refuses the
+  // row either way; this is what turns a 500 into a sentence the editor can act
+  // on, attached to the field that is wrong.
+  .refine(
+    (p) =>
+      p.status !== "PUBLISHED" ||
+      !SOURCED_CATEGORIES.includes(p.category) ||
+      p.sources.length > 0,
+    {
+      path: ["sources"],
+      message:
+        "A post about people or a live argument needs at least one source before it can be published",
+    },
+  );
+export type PostInput = z.infer<typeof postInputSchema>;
+
+/**
+ * The hostname a source URL is credited as: "variety.com" from a Variety link.
+ *
+ * Derived rather than typed in, because a label the editor types is a label
+ * that can disagree with the link beside it — and the one thing a sources line
+ * must not do is misattribute. `www.` goes; the rest is the publisher's own
+ * name for itself.
+ */
+export function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 // ── Movies ───────────────────────────────────────────────────────
 
 /**

@@ -49,6 +49,23 @@ export function buildKey(kind: string, ext: string): string {
   return `${safeKind}/${yyyy}/${mm}/${randomUUID()}.${safeExt}`;
 }
 
+/**
+ * Is this URL one of ours — something this module minted?
+ *
+ * The application half of the `*_is_ours` CHECK constraints. Those columns take
+ * a site-relative path or our own bucket prefix and nothing else, because "any
+ * https URL" would readmit the hotlink they exist to forbid — which is how a
+ * photograph we hold no licence for reaches a page.
+ *
+ * Checked here so a pasted third-party URL is a readable 400 from the route
+ * rather than a constraint violation surfacing as a 500. The database stays the
+ * authority; this is the error message.
+ */
+export function isOurObjectUrl(url: string): boolean {
+  if (url.startsWith("/")) return true;
+  return usingObjectStorage && url.startsWith(`${S3_PUBLIC}/`);
+}
+
 // The SDK is imported lazily so a deploy without object storage never loads it.
 let s3Client: unknown = null;
 async function s3() {

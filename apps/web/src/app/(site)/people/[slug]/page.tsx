@@ -10,6 +10,7 @@ import { PersonPortrait } from "@/components/PersonPortrait";
 import { Poster } from "@/components/Poster";
 import { ReelDivider } from "@/components/ReelDivider";
 import { ReviewIndex } from "@/components/ReviewIndex";
+import { PostRow } from "@/components/blog/PostRow";
 import { Collaborators, type Collaborator } from "@/components/person/Collaborators";
 import { PersonStats, type RatedFilm } from "@/components/person/PersonStats";
 import { rankedRoles } from "@/lib/person-roles";
@@ -23,6 +24,7 @@ import {
   movieEntityId,
   pageMetadata,
   peopleEntityId,
+  postEntityId,
   webPageNode,
 } from "@/lib/seo";
 
@@ -86,6 +88,32 @@ const getCriticism = cache(async (movieIds: string[]) => {
     },
   });
 });
+
+/**
+ * Blog posts written about this person — the other half of `PostPerson`.
+ *
+ * A piece filed under Off Camera links here; this is the link back. The pair is
+ * the point of having the join table at all: without it a post about an actor is
+ * a page a crawler reaches once from a feed, and their page stays a filmography
+ * with nothing written on it.
+ */
+const getWritingAbout = cache(async (personId: string) =>
+  prisma.post.findMany({
+    where: { status: "PUBLISHED", people: { some: { personId } } },
+    orderBy: { publishedAt: "desc" },
+    take: 6,
+    select: {
+      slug: true,
+      title: true,
+      dek: true,
+      category: true,
+      publishedAt: true,
+      image: true,
+      imageAlt: true,
+      author: { select: { username: true, displayName: true } },
+    },
+  }),
+);
 
 /**
  * Everyone else credited on the same films, ranked by how many they share.
@@ -313,9 +341,10 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
   }
 
   const movieIds = [...byFilm.keys()];
-  const [criticism, collaborators] = await Promise.all([
+  const [criticism, collaborators, writing] = await Promise.all([
     getCriticism(movieIds),
     getCollaborators(movieIds, person.id),
+    getWritingAbout(person.id),
   ]);
 
   const filmography = [...byFilm.values()]
@@ -398,6 +427,13 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
       ...(person.birthPlace ? { birthPlace: { "@type": "Place", name: person.birthPlace } } : {}),
       ...(roleLine.length > 0 ? { jobTitle: roleLine } : {}),
       ...(sources.length > 0 ? { sameAs: sources.map((s) => s.url) } : {}),
+      // Our own writing about them, by `@id`. `subjectOf` is the property that
+      // says "this person is the subject of that article" — which is exactly
+      // what a PostPerson row records, and the claim an answer engine needs to
+      // credit us rather than the wire service we cited.
+      ...(writing.length > 0
+        ? { subjectOf: writing.map((p) => ({ "@id": postEntityId(p.slug) })) }
+        : {}),
     },
     // The filmography as a list of movie entities the graph already knows —
     // each entry points at the film's own @id, so a crawler resolves the same
@@ -617,6 +653,28 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
               </div>
             )}
           </section>
+
+          {/* ── Our blog, on them ──
+              Reviews cover the work; these cover the person. Rendered only when
+              there is something, because a heading promising writing that does
+              not exist is worse than no heading. */}
+          {writing.length > 0 && (
+            <section>
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
+                  Off camera · {writing.length}
+                </h2>
+                <Link href="/blog" className="text-xs text-accent hover:opacity-80">
+                  The blog →
+                </Link>
+              </div>
+              <div className="mt-4 divide-y divide-line border-y border-line">
+                {writing.map((p) => (
+                  <PostRow key={p.slug} post={p} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* ── The panel a reader scans ── */}

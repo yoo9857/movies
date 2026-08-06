@@ -6,6 +6,9 @@ import { UserMenu } from "./UserMenu";
 
 const NAV = [
   { href: "/reviews", label: "Reviews" },
+  // Second, not last: it is the other half of what the site publishes, and the
+  // shelf a reader who arrived searching for a name rather than a film wants.
+  { href: "/blog", label: "Off Camera" },
   { href: "/movies", label: "Movies" },
   { href: "/people", label: "People" },
   { href: "/topics", label: "Topics" },

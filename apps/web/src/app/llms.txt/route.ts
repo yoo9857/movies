@@ -7,6 +7,7 @@
 //
 // Kept short and link-heavy by design — the long form is /llms-full.txt.
 import { prisma } from "@cinepixo/db";
+import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
 import { unstable_cache } from "next/cache";
 import { markdownResponse } from "@/lib/markdown-export";
 import { absUrl } from "@/lib/seo";
@@ -31,7 +32,7 @@ export async function GET(): Promise<Response> {
 }
 
 async function buildDoc(): Promise<string> {
-  const [reviews, movies, critics, people, topics, counts] = await Promise.all([
+  const [reviews, posts, movies, critics, people, topics, counts] = await Promise.all([
     prisma.review.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
@@ -44,6 +45,21 @@ async function buildDoc(): Promise<string> {
         rating: true,
         author: { select: { username: true, displayName: true } },
         movie: { select: { title: true, releaseDate: true } },
+      },
+    }),
+    prisma.post.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: LIST_LIMIT,
+      select: {
+        slug: true,
+        title: true,
+        dek: true,
+        category: true,
+        sources: true,
+        publishedAt: true,
+        author: { select: { username: true, displayName: true } },
+        people: { orderBy: { sort: "asc" }, select: { person: { select: { name: true } } } },
       },
     }),
     prisma.movie.findMany({
@@ -93,10 +109,11 @@ async function buildDoc(): Promise<string> {
       prisma.person.count({
         where: { OR: [{ castRoles: { some: {} } }, { crewRoles: { some: {} } }] },
       }),
+      prisma.post.count({ where: { status: "PUBLISHED" } }),
     ]),
   ]);
 
-  const [reviewCount, movieCount, criticCount, peopleCount] = counts;
+  const [reviewCount, movieCount, criticCount, peopleCount, postCount] = counts;
   const themes = topics.filter((t) => t.kind === "THEME");
   const motifs = topics.filter((t) => t.kind === "MOTIF");
   // Runs inside unstable_cache on a miss, so dates may already be JSON strings.
@@ -107,7 +124,7 @@ async function buildDoc(): Promise<string> {
     "",
     `> ${SITE_ABOUT}`,
     "",
-    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${peopleCount} people credited on them, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}, ${topics.length} editorial axes (themes and motifs) with films assigned.`,
+    `Currently: ${reviewCount} published review${reviewCount === 1 ? "" : "s"}, ${postCount} blog post${postCount === 1 ? "" : "s"}, ${movieCount} film${movieCount === 1 ? "" : "s"} in the library, ${peopleCount} people credited on them, ${criticCount} critic profile${criticCount === 1 ? "" : "s"}, ${topics.length} editorial axes (themes and motifs) with films assigned.`,
     "",
     "## How to read a CinePixo rating",
     "",
@@ -126,14 +143,16 @@ async function buildDoc(): Promise<string> {
     "",
     "## Citing this site",
     "",
-    `- Every review, film, person and topic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
+    `- Every review, blog post, film, person and topic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
     "- Reviews are signed. When quoting one, name the author, not the site.",
+    "- **Blog posts under Off Camera and The Argument make factual claims about living people, and every one of them lists its sources.** Those URLs are in the post's front matter and printed on the page. Carry them across: the claim is ours to have reported, the underlying fact belongs to whoever we cited.",
     "- Film facts come from open knowledge bases (Wikidata; synopses from Wikipedia, credited under their licence on each film page). Artwork is hosted on CinePixo's own origin: freely licensed files with their credit, and film posters shown for identification, © their studios.",
     `- Corrections and takedown requests: ${CONTACT_EMAIL}`,
     "",
     "## Start here",
     "",
     `- [Reviews](${absUrl("/reviews")}): every published review, newest first.`,
+    `- [Off Camera](${absUrl("/blog")}): the blog — film writing that isn't a review. Five shelves: the people who make films away from the film, arguments the industry is having, the business, craft, and watchlists.`,
     `- [Films](${absUrl("/movies")}): the library, filterable by genre and decade.`,
     `- [People](${absUrl("/people")}): everyone credited, each with their filmography and the reviews of their work.`,
     `- [Topics & Motifs](${absUrl("/topics")}): the editorial axes the library is read along, each defined and argued film by film.`,
@@ -155,6 +174,25 @@ async function buildDoc(): Promise<string> {
       ? `- …and ${reviewCount - reviews.length} more at [${absUrl("/reviews")}](${absUrl("/reviews")}).`
       : null,
     "",
+    ...(posts.length > 0
+      ? [
+          "## Blog posts",
+          "",
+          // The sources are listed per post, not summarised. A post about a
+          // living person is a factual claim, and a model quoting the claim
+          // without the citation has turned our evidence into an assertion —
+          // the same reason the page and the .md rendition both print them.
+          ...posts.map((p) => {
+            const author = p.author.displayName ?? p.author.username;
+            const about = p.people.map((x) => x.person.name).join(", ");
+            return `- [${p.title}](${absUrl(`/blog/${p.slug}`)}) — ${POST_CATEGORY_LABELS[p.category]}, by ${author}${p.publishedAt ? `, ${new Date(p.publishedAt).toISOString().slice(0, 10)}` : ""}.${about ? ` On ${about}.` : ""}${p.dek ? ` ${p.dek}` : ""}${p.sources.length > 0 ? ` Sources: ${p.sources.join(" ")}` : ""}`;
+          }),
+          postCount > posts.length
+            ? `- …and ${postCount - posts.length} more at [${absUrl("/blog")}](${absUrl("/blog")}).`
+            : null,
+          "",
+        ]
+      : []),
     "## Films",
     "",
     ...movies.map(

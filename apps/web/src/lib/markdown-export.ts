@@ -586,6 +586,89 @@ export function topicToMarkdown(topic: TopicExport): string {
   return `${lines.filter((l) => l !== null).join("\n")}\n`;
 }
 
+export interface PostExport {
+  slug: string;
+  title: string;
+  dek: Nullable<string>;
+  content: string;
+  /** The shelf label as the site prints it, not the enum member. */
+  categoryLabel: string;
+  tags: readonly string[];
+  sources: readonly string[];
+  publishedAt: Nullable<Date>;
+  updatedAt: Nullable<Date>;
+  author: { username: string; displayName: Nullable<string> };
+  people: { slug: string; name: string }[];
+  films: { slug: string; title: string; year: number | null }[];
+}
+
+/**
+ * A blog post as Markdown: the standfirst, the piece, who and what it is about,
+ * and then the sources.
+ *
+ * The sources are the reason this endpoint matters more here than anywhere else
+ * on the site. A review is an opinion and can be quoted as one; a post under Off
+ * Camera or The Argument is a factual claim about a living person, and an answer
+ * engine that quotes the claim without the citation has laundered our evidence
+ * into an assertion. So the URLs go in the front matter *and* the body — read
+ * either way, the claim arrives with its receipts.
+ */
+export function postToMarkdown(post: PostExport): string {
+  const author = post.author.displayName ?? post.author.username;
+
+  const head = frontMatter([
+    ["title", post.title],
+    ["type", "blog post"],
+    ["section", post.categoryLabel],
+    ["standfirst", post.dek ?? undefined],
+    ["author", author],
+    ["published", isoDay(post.publishedAt)],
+    ["updated", isoDay(post.updatedAt)],
+    ["about_people", post.people.map((p) => p.name)],
+    ["about_films", post.films.map((f) => (f.year ? `${f.title} (${f.year})` : f.title))],
+    ["tags", [...post.tags]],
+    ["sources", [...post.sources]],
+    ["canonical", absUrl(`/blog/${post.slug}`)],
+    ["publisher", SITE_NAME],
+  ]);
+
+  const lines: (string | null)[] = [head, "", `# ${post.title}`, ""];
+
+  if (post.dek) lines.push(`*${post.dek.trim()}*`, "");
+  lines.push(
+    `By ${author}${post.publishedAt ? `, ${isoDay(post.publishedAt)}` : ""} · ${post.categoryLabel}`,
+    "",
+    exportMarkdownBody(post.content).trim(),
+    "",
+  );
+
+  if (post.people.length > 0 || post.films.length > 0) {
+    lines.push("## In this piece", "");
+    for (const p of post.people) {
+      lines.push(`- [${p.name}](${absUrl(`/people/${p.slug}`)})`);
+    }
+    for (const f of post.films) {
+      lines.push(
+        `- ${f.year ?? "—"} · [${f.title}](${absUrl(`/movies/${f.slug}`)})`,
+      );
+    }
+    lines.push("");
+  }
+
+  if (post.sources.length > 0) {
+    lines.push("## Sources", "");
+    for (const src of post.sources) lines.push(`- ${src}`);
+    lines.push("", "Every factual claim above is drawn from these. The reading of them is ours.", "");
+  }
+
+  lines.push(
+    `Source: ${absUrl(`/blog/${post.slug}`)}`,
+    `Written for ${SITE_NAME}. Nothing on this page is imported prose.`,
+  );
+
+  return `${lines.filter((l) => l !== null).join("\n")}\n`;
+}
+
 /**
  * Response shape shared by every Markdown endpoint.
  *

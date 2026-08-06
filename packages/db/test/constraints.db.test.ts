@@ -495,13 +495,251 @@ describe("MovieTopic assignments", () => {
   });
 });
 
+/**
+ * The blog's invariants.
+ *
+ * One of these is unlike anything else in this file. Every other constraint here
+ * protects data shape — a rating in range, a slug that parses, a counter that
+ * cannot go negative. `Post_claims_are_sourced` protects a *person*: a post filed
+ * under PEOPLE or ISSUE is a factual claim about someone who can be harmed by our
+ * getting it wrong and can sue us for it, and the database refuses to let one
+ * reach PUBLISHED with nothing to cite. Which means it is the constraint most
+ * worth proving actually fires.
+ */
+describe("Post", () => {
+  const key = () => Math.random().toString(36).slice(2, 10);
+  const BUCKET = "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/posts/x.webp";
+
+  function insertPost(over: Record<string, unknown> = {}) {
+    const row = {
+      id: `p-${key()}`,
+      slug: `post-${key()}`,
+      title: `A Headline ${key()}`,
+      content: "Body.",
+      category: "CRAFT",
+      status: "DRAFT",
+      publishedAt: null,
+      tags: [],
+      sources: [],
+      viewCount: 0,
+      authorId: USER,
+      ...over,
+    };
+    const cols = Object.keys(row);
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
+    return db.query(
+      `INSERT INTO "Post" (${cols.map((c) => `"${c}"`).join(", ")}, "updatedAt")
+       VALUES (${placeholders}, CURRENT_TIMESTAMP)`,
+      Object.values(row) as never[],
+    );
+  }
+
+  const PUBLISHED = { status: "PUBLISHED", publishedAt: new Date("2026-08-05") };
+
+  describe("claims about people must be sourced", () => {
+    it.each(["PEOPLE", "ISSUE"])(
+      "refuses a published %s post with an empty sources array",
+      async (category) => {
+        // Post_claims_are_sourced
+        await rejects(() => insertPost({ category, ...PUBLISHED }), SQLSTATE.check);
+      },
+    );
+
+    it.each(["PEOPLE", "ISSUE"])("allows a %s draft with nothing cited yet", async (category) => {
+      // Drafting is where the reporting happens; the bar is at publication.
+      await expect(insertPost({ category, status: "DRAFT" })).resolves.toBeTruthy();
+    });
+
+    it.each(["PEOPLE", "ISSUE"])("publishes %s once a source exists", async (category) => {
+      await expect(
+        insertPost({ category, ...PUBLISHED, sources: ["https://example.com/x"] }),
+      ).resolves.toBeTruthy();
+    });
+
+    it.each(["INDUSTRY", "CRAFT", "WATCHLIST"])(
+      "leaves %s free to publish uncited — it is our own reading",
+      async (category) => {
+        await expect(insertPost({ category, ...PUBLISHED })).resolves.toBeTruthy();
+      },
+    );
+  });
+
+  describe("status and publishedAt are paired", () => {
+    // Post_published_has_date — every shelf and feed sorts on this column.
+    it("refuses PUBLISHED with no date", async () => {
+      await rejects(
+        () => insertPost({ status: "PUBLISHED", publishedAt: null }),
+        SQLSTATE.check,
+      );
+    });
+
+    it("refuses DRAFT carrying a date", async () => {
+      await rejects(
+        () => insertPost({ status: "DRAFT", publishedAt: new Date("2026-08-05") }),
+        SQLSTATE.check,
+      );
+    });
+  });
+
+  describe("identity", () => {
+    it.each(["Uppercase", "double--hyphen", "-leading", "trailing-", "a/b", "a b", ""])(
+      "refuses the slug %p",
+      async (slug) => {
+        await rejects(() => insertPost({ slug }), SQLSTATE.check);
+      },
+    );
+
+    it("refuses two posts with the same slug", async () => {
+      const slug = `post-${key()}`;
+      await insertPost({ slug });
+      await rejects(() => insertPost({ slug }), SQLSTATE.unique);
+    });
+
+    it("refuses two headlines differing only in case", async () => {
+      // Post_title_lower_key. The admin screen checks for clashes
+      // case-insensitively, so the database has to agree or the check is advice.
+      const title = `The Same Headline ${key()}`;
+      await insertPost({ title });
+      await rejects(() => insertPost({ title: title.toUpperCase() }), SQLSTATE.unique);
+    });
+
+    it("refuses a blank title or body, which NOT NULL would let through", async () => {
+      await rejects(() => insertPost({ title: "   " }), SQLSTATE.check);
+      await rejects(() => insertPost({ content: "\n\n" }), SQLSTATE.check);
+    });
+
+    it("refuses a whitespace-only standfirst", async () => {
+      await rejects(() => insertPost({ dek: "  " }), SQLSTATE.check);
+      await expect(insertPost({ dek: null })).resolves.toBeTruthy();
+    });
+
+    it("refuses a category that is not one of the five", async () => {
+      await rejects(() => insertPost({ category: "GOSSIP" }), SQLSTATE.badEnum);
+    });
+
+    it("refuses a negative view counter", async () => {
+      await rejects(() => insertPost({ viewCount: -1 }), SQLSTATE.check);
+    });
+  });
+
+  describe("the hero image is ours or nothing", () => {
+    it("accepts our own origin and our own bucket", async () => {
+      await expect(insertPost({ image: "/uploads/posts/2026/08/x.webp" })).resolves.toBeTruthy();
+      await expect(insertPost({ image: BUCKET })).resolves.toBeTruthy();
+    });
+
+    it.each([
+      "https://image.tmdb.org/t/p/w500/x.jpg",
+      "https://example.com/press-photo.jpg",
+      "https://pokemon-dive.us-lax-4.linodeobjects.com/elsewhere/x.webp",
+    ])("refuses the hotlink %s", async (image) => {
+      // Post_image_is_ours. This is the constraint that keeps a photograph we
+      // hold no licence for from reaching a page.
+      await rejects(() => insertPost({ image }), SQLSTATE.check);
+    });
+
+    it("refuses a licence with no source page", async () => {
+      await rejects(
+        () => insertPost({ image: BUCKET, imageLicense: "CC BY-SA 4.0" }),
+        SQLSTATE.check,
+      );
+    });
+
+    it("accepts an operator upload that states no licence", async () => {
+      // The billboard case: our own file, no licence claimed, so nothing to cite.
+      await expect(
+        insertPost({ image: BUCKET, imageCredit: "CinePixo" }),
+      ).resolves.toBeTruthy();
+    });
+
+    it("refuses alt text or credit with no file to describe", async () => {
+      await rejects(() => insertPost({ imageAlt: "A face" }), SQLSTATE.check);
+      await rejects(() => insertPost({ imageCredit: "Someone" }), SQLSTATE.check);
+    });
+  });
+
+  describe("subject links", () => {
+    async function newPerson(): Promise<string> {
+      const id = `pe-${key()}`;
+      await db.query(
+        `INSERT INTO "Person" ("id","slug","name","occupations","updatedAt")
+         VALUES ($1,$2,'A Person',ARRAY[]::TEXT[],CURRENT_TIMESTAMP)`,
+        [id, `person-${key()}`],
+      );
+      return id;
+    }
+
+    async function newPost(): Promise<string> {
+      const id = `p-${key()}`;
+      await insertPost({ id });
+      return id;
+    }
+
+    it("refuses a link to a person who does not exist", async () => {
+      const post = await newPost();
+      await rejects(
+        () =>
+          db.query(`INSERT INTO "PostPerson" ("postId","personId") VALUES ($1,'nobody')`, [post]),
+        SQLSTATE.fk,
+      );
+    });
+
+    it("refuses the same person twice on one post", async () => {
+      const [post, person] = await Promise.all([newPost(), newPerson()]);
+      const link = () =>
+        db.query(`INSERT INTO "PostPerson" ("postId","personId") VALUES ($1,$2)`, [post, person]);
+      await expect(link()).resolves.toBeTruthy();
+      await rejects(link, SQLSTATE.unique);
+    });
+
+    it("deletes links with the post, and leaves the person alone", async () => {
+      const [post, person] = await Promise.all([newPost(), newPerson()]);
+      await db.query(`INSERT INTO "PostPerson" ("postId","personId") VALUES ($1,$2)`, [
+        post,
+        person,
+      ]);
+      await db.query(`DELETE FROM "Post" WHERE "id" = $1`, [post]);
+      const { rows: links } = await db.query(`SELECT 1 FROM "PostPerson" WHERE "postId" = $1`, [
+        post,
+      ]);
+      expect(links).toHaveLength(0);
+      const { rows: people } = await db.query(`SELECT 1 FROM "Person" WHERE "id" = $1`, [person]);
+      expect(people).toHaveLength(1);
+    });
+
+    it("deletes links with the person, so a post cannot cite a ghost", async () => {
+      const [post, person] = await Promise.all([newPost(), newPerson()]);
+      await db.query(`INSERT INTO "PostPerson" ("postId","personId") VALUES ($1,$2)`, [
+        post,
+        person,
+      ]);
+      await db.query(`DELETE FROM "Person" WHERE "id" = $1`, [person]);
+      const { rows } = await db.query(`SELECT 1 FROM "PostPerson" WHERE "personId" = $1`, [person]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("deletes a post with its author, as reviews are", async () => {
+      // Post.authorId cascades: an account removal takes its writing with it,
+      // which is the same contract Review has.
+      const { rows } = await db.query<{ confdeltype: string }>(
+        `SELECT confdeltype FROM pg_constraint WHERE conname = 'Post_authorId_fkey'`,
+      );
+      expect(rows[0]?.confdeltype).toBe("c");
+    });
+  });
+});
+
 describe("trigram indexes exist for search", () => {
-  it("indexes Movie.title and Review.title with GIN/trgm", async () => {
+  it("indexes Movie.title, Review.title and Post.title with GIN/trgm", async () => {
     // /search uses `contains`; without these every query is a sequential scan.
     const { rows } = await db.query<{ indexname: string }>(
       `SELECT indexname FROM pg_indexes
-       WHERE indexname IN ('Movie_title_trgm','Review_title_trgm')`,
+       WHERE indexname IN ('Movie_title_trgm','Review_title_trgm','Post_title_trgm')`,
     );
-    expect(rows.map((r) => r.indexname).sort()).toEqual(["Movie_title_trgm", "Review_title_trgm"]);
+    expect(rows.map((r) => r.indexname).sort()).toEqual([
+      "Movie_title_trgm",
+      "Post_title_trgm",
+      "Review_title_trgm",
+    ]);
   });
 });

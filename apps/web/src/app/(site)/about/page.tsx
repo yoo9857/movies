@@ -56,6 +56,14 @@ const FAQ = [
     a: "A theme is what a film is about — a class divide, the cost of ambition. A motif is what recurs on screen — stairs, rising water, a rehearsal room. Both are editorial: the axis, its definition and the sentence explaining how it shows up in a particular film are written by members of this site, and a film joins an axis only with that sentence attached. Imported keyword lists are shown separately and labelled as such.",
   },
   {
+    q: "What is Off Camera, and how is it different from a review?",
+    a: "Off Camera is the CinePixo blog: film writing that is not a review. A review argues about one film and carries a score; a blog post covers what a review has no room for — what the people who make films are doing away from the film, an argument the industry is having, how a picture was made, or what to watch next. Posts carry no rating, by design. They are written by the editorial desk rather than by any member.",
+  },
+  {
+    q: "How does CinePixo source what it writes about real people?",
+    a: "Every blog post filed under Off Camera or The Argument lists the sources its factual claims rest on, and the page prints all of them. This is enforced in the database, not left to good intentions: a post in either of those categories cannot be published with an empty source list. The reading of the sources is ours; the underlying facts belong to whoever we cited, and corrections are welcome at the contact address.",
+  },
+  {
     q: "Who can publish a review on CinePixo?",
     a: "Any member with an account can publish. Reviews are written in Markdown, signed with the author's name, and are not ordered by an algorithmic feed — the index is chronological and the rankings are stated arithmetic.",
   },
@@ -187,6 +195,15 @@ export default async function AboutPage() {
           and film posters are shown for identification and remain © their studios. The
           taxonomy, the criticism and the code grow here — with this community. Reviews and
           ratings are the work of their authors.
+        </p>
+        <p className="mt-3">
+          Writing about real people carries an extra obligation, so{" "}
+          <Link href="/blog" className="text-accent hover:opacity-80">
+            Off Camera
+          </Link>{" "}
+          posts about a person or a live argument list their sources on the page — and cannot be
+          published without at least one. If we have a fact wrong, tell us at the address above
+          and we will correct it and say that we did.
         </p>
       </section>
 
