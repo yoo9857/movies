@@ -34,11 +34,40 @@ export const LOCAL_ROOT =
 const LOCAL_PREFIX = "/uploads";
 
 /**
+ * The path segment the public base carries, if any — "cinepixo" for a base of
+ * `https://bucket.region.linodeobjects.com/cinepixo`.
+ *
+ * This site shares one bucket with another service, so its objects live under
+ * a prefix and the public URL includes it. That prefix is part of the object's
+ * *key*: a reader fetching `…/cinepixo/posts/x.webp` is asking the bucket for
+ * `cinepixo/posts/x.webp`, not `posts/x.webp`.
+ *
+ * Missing that cost every post image on the first piece we published. The PUT
+ * succeeded, the URL was well-formed, the CHECK constraint passed, and all
+ * seven pictures 404'd — the write and the read simply disagreed about where
+ * the object was, and nothing in the pipeline is positioned to notice.
+ */
+export function publicBasePrefix(publicUrl: string): string {
+  if (!publicUrl) return "";
+  try {
+    return new URL(publicUrl).pathname.replace(/^\/+|\/+$/g, "");
+  } catch {
+    return "";
+  }
+}
+
+const S3_PREFIX = publicBasePrefix(S3_PUBLIC);
+
+/** The key an object must be written to so its public URL resolves. */
+export const objectKey = (key: string): string => (S3_PREFIX ? `${S3_PREFIX}/${key}` : key);
+
+/**
  * A storage key: `<kind>/<yyyy>/<mm>/<uuid>.<ext>`.
  *
  * Date-partitioned because a flat bucket with a hundred thousand objects is
  * miserable to inspect, and because it makes "delete everything before X"
- * a prefix operation.
+ * a prefix operation. The bucket prefix is added by `objectKey` at write time
+ * rather than here, so a key stays the same shape on both drivers.
  */
 export function buildKey(kind: string, ext: string): string {
   const now = new Date();
@@ -93,7 +122,7 @@ export async function putPublicObject(
     await client.send(
       new PutObjectCommand({
         Bucket: S3_BUCKET!,
-        Key: key,
+        Key: objectKey(key),
         Body: body,
         ContentType: contentType,
         // Safe because keys are never reused.
@@ -119,8 +148,14 @@ export async function deleteByUrl(url: string | null | undefined): Promise<void>
     if (usingObjectStorage && S3_PUBLIC && url.startsWith(`${S3_PUBLIC}/`)) {
       const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
       const client = await s3();
+      // The key is the whole path the URL asks for, prefix included — the same
+      // string `objectKey` wrote. Taken from the URL rather than rebuilt, so a
+      // delete cannot drift from a put.
       await client.send(
-        new DeleteObjectCommand({ Bucket: S3_BUCKET!, Key: url.slice(S3_PUBLIC.length + 1) }),
+        new DeleteObjectCommand({
+          Bucket: S3_BUCKET!,
+          Key: new URL(url).pathname.replace(/^\/+/, ""),
+        }),
       );
       return;
     }
