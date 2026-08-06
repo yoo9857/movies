@@ -31,7 +31,8 @@
 //       and one of them may be a portrait another page still uses. For redoing
 //       a picture set without rewriting the piece.
 //   --dry     resolve and fetch everything, prove it processes, write nothing
-//   --force   replace an existing hero (the old object is left in place —
+//   --force   replace an existing hero, or add to a body that already carries
+//             pictures (the old object is left in place —
 //             orphans are cheap, GC is not, and a reused portrait must never
 //             be deleted out from under its person)
 //
@@ -799,13 +800,26 @@ async function runBody(jobs: BodyJob[]): Promise<void> {
         }
       }
 
+      // Re-running the same file used to append a second copy of everything,
+      // silently and at full upload cost. A post that already carries pictures
+      // needs the operator to say which they meant.
+      const already = (post.content.match(/!\[/g) ?? []).length;
+      if (already > 0 && !FORCE) {
+        throw new Error(
+          `this post already has ${already} picture(s). Re-run with --force to add more, ` +
+            `or clear them first: --post=${post.slug} --reset-images`,
+        );
+      }
+
       // Grouped by destination, in the order the file gives them: jobs with
-      // the same `at` become one row, jobs with none go to the end.
+      // the same `at` become one row. Grouped by key rather than by adjacency,
+      // so [A, B, A] is two rows at A and one at B — the header promises
+      // "jobs sharing one `at`", not "jobs that happen to be neighbours".
       const groups: { at: string | null; jobs: BodyJob[] }[] = [];
       for (const job of list) {
         const key = job.at ?? null;
-        const last = groups.at(-1);
-        if (last && last.at === key && key !== null) last.jobs.push(job);
+        const existing = key === null ? null : groups.find((g) => g.at === key);
+        if (existing) existing.jobs.push(job);
         else groups.push({ at: key, jobs: [job] });
       }
 
@@ -1009,6 +1023,11 @@ async function main() {
   }
   if (BODY && (IMAGES || POST)) {
     throw new Error("--body is its own run — heroes and body blocks want separate invocations");
+  }
+  if (AUTO && (IMAGES || BODY || POST)) {
+    throw new Error(
+      "--auto picks its own material; it cannot be combined with --images, --body or --post",
+    );
   }
 
   if (AUTO) {

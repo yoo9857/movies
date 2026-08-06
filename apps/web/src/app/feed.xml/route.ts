@@ -38,6 +38,20 @@ function cdata(s: string): string {
   return `<![CDATA[${s.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
 }
 
+/** A post's body with the citations the page prints, appended the same way. */
+function withSources(body: string, sources: string[]): string {
+  if (sources.length === 0) return body;
+  return [
+    body.trimEnd(),
+    "",
+    "## Sources",
+    "",
+    ...sources.map((s) => `- ${s}`),
+    "",
+    "Every factual claim above is drawn from these. The reading of them is ours.",
+  ].join("\n");
+}
+
 export async function GET() {
   // Three kinds of writing feed this feed: signed reviews, blog posts, and the
   // editorial essays that open a topic. All three are published prose with a
@@ -71,6 +85,7 @@ export async function GET() {
         content: true,
         category: true,
         tags: true,
+        sources: true,
         publishedAt: true,
         image: true,
         author: { select: { username: true, displayName: true } },
@@ -138,7 +153,11 @@ export async function GET() {
       `      <link>${xml(url)}</link>`,
       `      <guid isPermaLink="true">${xml(url)}</guid>`,
       `      <description>${xml(summary)}</description>`,
-      `      <content:encoded>${cdata(exportMarkdownBody(p.content))}</content:encoded>`,
+      // The body carries its citations here too. This feed reprints a piece in
+      // full, and a full reprint that drops the sources is the same lie the
+      // blog feed was caught telling — `Post_claims_are_sourced` guards the
+      // row, never the render, so every surface has to be checked by hand.
+      `      <content:encoded>${cdata(withSources(exportMarkdownBody(p.content), p.sources))}</content:encoded>`,
       `      <dc:creator>${xml(author)}</dc:creator>`,
       // The shelf, then the tags the page prints. No rating element: a post has
       // no score, and inventing one here would misreport the piece.

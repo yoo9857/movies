@@ -18,7 +18,11 @@
 //   --brief=<file>       facts an operator vouches for, when the outlets refuse
 //                        an automated read (Naver and the Korean press always do)
 //   --prose=<file.md>    skip generation, use this Markdown (the workstation
-//                        path — `codex` lives on the server)
+//                        path — `codex` lives on the server). A leading `# `
+//                        line becomes the headline.
+//   --dek="…"            the standfirst, with --prose. Twenty characters at
+//                        least, because it is what a search result shows and
+//                        the writer's job to make it worth reading.
 //   --publish            go live now instead of landing a draft
 //   --dry                print the plan, write nothing
 //
@@ -154,12 +158,19 @@ async function main() {
       // Prose written elsewhere still goes through every check write-posts makes.
       const body = readFileSync(PROSE!, "utf8").trim();
       const title = /^#\s+(.+)$/m.exec(body)?.[1] ?? TOPIC;
+      // Refused here rather than let write-posts skip the job and report the
+      // generic "nothing was written": the schema wants 20 characters, and a
+      // short topic makes the default fall under it.
+      const dek = strArg("dek") ?? `${TOPIC}, for CinePixo.`;
+      if (dek.length < 20) {
+        throw new Error(`--dek must be at least 20 characters (the default from --topic is "${dek}")`);
+      }
       writeFileSync(
         jobFile,
         JSON.stringify([
           {
             title,
-            dek: strArg("dek") ?? `${TOPIC}, for CinePixo.`,
+            dek,
             content: body.replace(/^#\s+.+$/m, "").trim(),
             tags: [],
             category: CATEGORY,
