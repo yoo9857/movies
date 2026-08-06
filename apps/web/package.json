@@ -14,6 +14,7 @@
     "post-images": "tsx scripts/fill-post-images.ts",
     "person-photos": "tsx scripts/gather-person-photos.ts",
     "topic": "tsx scripts/gather-topic.ts",
+    "publish": "tsx scripts/publish-topic.ts",
     "save-media": "tsx scripts/save-media.ts"
   },
   "dependencies": {
