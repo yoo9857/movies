@@ -82,6 +82,7 @@ import {
   isInstagramUrl,
   pageLeadImage,
   xStatusId,
+  worthRetrying,
   youtubeThumbnailUrls,
   youtubeVideoId,
   youtubeWatchUrl,
@@ -182,15 +183,14 @@ interface Hero {
   from: string;
 }
 
-/* ── Retry, for the one error worth retrying (as import-portraits) ── */
+/* ── Retry, for the errors that are about timing rather than the file ── */
 
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn();
     } catch (e) {
-      const throttled = /\b429\b|too many requests/i.test((e as Error).message);
-      if (!throttled || attempt >= 3) throw e;
+      if (!worthRetrying((e as Error).message) || attempt >= 3) throw e;
       await new Promise((r) => setTimeout(r, attempt * 8_000));
     }
   }
@@ -420,7 +420,11 @@ async function heroForJob(job: Job): Promise<Hero> {
   // The schemas guarantee alt on every image job; embeds never reach here.
   const alt = job.alt!;
   if (job.url) {
-    const { buf, page } = await imageAtUrl(job.url);
+    // Retried here rather than inside `imageAtUrl`, so the whole resolution —
+    // including the second fetch an og:image page costs — gets the second
+    // chance. Without it a body picture had no retry at all: `withRetry`
+    // guarded only the automatic hero.
+    const { buf, page } = await withRetry(() => imageAtUrl(job.url!));
     return {
       buf,
       reuseUrl: null,

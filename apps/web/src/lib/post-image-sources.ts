@@ -8,6 +8,25 @@
  * suite pins.
  */
 
+/**
+ * Is this failure about the moment rather than the file?
+ *
+ * Commons renders a thumbnail **on the first request for it**, and while it
+ * does, the URL answers 503 or simply hangs past the fetch timeout. A
+ * photograph of Catherine Laga'aia dropped out of a piece exactly that way,
+ * and the same URL served 200 a minute later — nothing was wrong with it.
+ * Both shapes reach the caller as a message, so both are matched as one.
+ *
+ * 4xx stays fatal, and deliberately: for a very large file Commons serves only
+ * the rendition widths it has buckets for and refuses the rest with a 400.
+ * Asking three times does not invent a bucket.
+ */
+export function worthRetrying(message: string): boolean {
+  if (/\b429\b|too many requests/i.test(message)) return true;
+  if (/\banswered 5\d\d\b/.test(message)) return true;
+  return /could not reach\b/i.test(message);
+}
+
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
 
 /** The eleven-character video id, from any of the URL shapes YouTube mints. */

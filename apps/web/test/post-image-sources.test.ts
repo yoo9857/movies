@@ -4,10 +4,36 @@ import {
   instagramEmbedUrl,
   isInstagramUrl,
   pageLeadImage,
+  worthRetrying,
   xStatusId,
   youtubeThumbnailUrls,
   youtubeVideoId,
 } from "@/lib/post-image-sources";
+
+/**
+ * The failure this pins: Commons rendered a thumbnail on demand, the fetch
+ * timed out waiting, and the body picture was dropped from the piece for good.
+ * The same URL answered 200 a minute later.
+ */
+describe("worthRetrying", () => {
+  it("asks again when the host was busy rather than unwilling", () => {
+    expect(worthRetrying("https://upload.wikimedia.org/…jpg answered 503")).toBe(true);
+    expect(worthRetrying("https://upload.wikimedia.org/…jpg answered 500")).toBe(true);
+    expect(worthRetrying("could not reach https://upload.wikimedia.org/…jpg")).toBe(true);
+    expect(worthRetrying("commons answered 429 too many requests")).toBe(true);
+  });
+
+  it("does not ask again for a rendition width Commons has no bucket for", () => {
+    expect(worthRetrying("https://upload.wikimedia.org/…/1600px-x.jpg answered 400")).toBe(false);
+    expect(worthRetrying("https://upload.wikimedia.org/…jpg answered 404")).toBe(false);
+    expect(worthRetrying("https://example.com/x.jpg answered 403")).toBe(false);
+  });
+
+  it("does not read a status out of the URL it is complaining about", () => {
+    // A path segment of digits is not a status code.
+    expect(worthRetrying("https://example.com/503/x.jpg answered 404")).toBe(false);
+  });
+});
 
 describe("youtubeVideoId", () => {
   it("reads every URL shape YouTube mints", () => {
