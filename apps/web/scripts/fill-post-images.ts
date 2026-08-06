@@ -24,6 +24,12 @@
 //       **jobs sharing one `at` become one row**, rendered side by side, so a
 //       piece can run 1 / 2 / 2 / 1 down the page instead of a stack at the
 //       bottom. Jobs with no `at` are appended, under `--heading` if given.
+//   --post=<slug> --reset-images
+//       Take the pictures back out: every `![…](…)` row and its credit line
+//       leave the markdown, and the six hero columns are cleared. The prose is
+//       untouched, and the objects are left in the bucket — orphans are cheap,
+//       and one of them may be a portrait another page still uses. For redoing
+//       a picture set without rewriting the piece.
 //   --dry     resolve and fetch everything, prove it processes, write nothing
 //   --force   replace an existing hero (the old object is left in place —
 //             orphans are cheap, GC is not, and a reused portrait must never
@@ -92,6 +98,7 @@ const IMAGES = strArg("images");
 const BODY = strArg("body");
 const POST = strArg("post");
 const AUTO = process.argv.includes("--auto");
+const RESET = process.argv.includes("--reset-images");
 const DRY = process.argv.includes("--dry");
 const FORCE = process.argv.includes("--force");
 /** Bare `--youtube` (no `=`): let --auto take a cited video's thumbnail. */
@@ -920,6 +927,45 @@ async function runAuto(): Promise<void> {
 }
 
 async function main() {
+  if (RESET) {
+    if (!POST) throw new Error("--reset-images needs --post=<slug>");
+    const post = await prisma.post.findUnique({
+      where: { slug: POST },
+      select: { id: true, slug: true, content: true, image: true },
+    });
+    if (!post) throw new Error("no post with that slug");
+
+    const kept = post.content
+      .split("\n")
+      .filter((l) => !l.startsWith("![") && !l.startsWith("*Photo"))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    const removed = (post.content.match(/!\[/g) ?? []).length;
+
+    if (!DRY) {
+      await prisma.post.update({
+        where: { id: post.id },
+        data: {
+          content: `${kept}\n`,
+          // All six together: Post_imageAlt_needs_image and its twin refuse a
+          // caption with no picture under it.
+          image: null,
+          imageAlt: null,
+          imageCredit: null,
+          imageLicense: null,
+          imageLicenseUrl: null,
+          imageSourceUrl: null,
+        },
+      });
+    }
+    console.log(
+      `/blog/${post.slug}: ${removed} body picture(s) removed, hero ${post.image ? "cleared" : "was already empty"}` +
+        `${DRY ? " (dry)" : ""}\nObjects are left in the bucket on purpose.`,
+    );
+    return;
+  }
+
   if (!AUTO && !IMAGES && !BODY && !POST) {
     throw new Error(
       "nothing to do: pass --auto, --images=<file.json>, --body=<file.json>, or " +
