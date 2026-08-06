@@ -38,6 +38,20 @@ function cdata(s: string): string {
   return `<![CDATA[${s.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
 }
 
+/** The body with the citations the page prints, appended the same way. */
+function withSources(body: string, sources: string[]): string {
+  if (sources.length === 0) return body;
+  return [
+    body.trimEnd(),
+    "",
+    "## Sources",
+    "",
+    ...sources.map((s) => `- ${s}`),
+    "",
+    "Every factual claim above is drawn from these. The reading of them is ours.",
+  ].join("\n");
+}
+
 export async function GET() {
   const posts = await prisma.post.findMany({
     where: { status: "PUBLISHED" },
@@ -50,6 +64,7 @@ export async function GET() {
       content: true,
       category: true,
       tags: true,
+      sources: true,
       image: true,
       publishedAt: true,
       author: { select: { username: true, displayName: true } },
@@ -69,7 +84,12 @@ export async function GET() {
         `      <link>${xml(url)}</link>`,
         `      <guid isPermaLink="true">${xml(url)}</guid>`,
         `      <description>${xml(summary)}</description>`,
-        `      <content:encoded>${cdata(exportMarkdownBody(p.content))}</content:encoded>`,
+        // The body *and its citations*. `Post_claims_are_sourced` refuses to
+        // publish a PEOPLE or ISSUE piece without them, and a surface that
+        // reprints the whole piece while dropping them is the lie that
+        // constraint exists to prevent — this feed hands a reader the full
+        // text, so it owes them the same footnotes the page prints.
+        `      <content:encoded>${cdata(withSources(exportMarkdownBody(p.content), p.sources))}</content:encoded>`,
         `      <dc:creator>${xml(author)}</dc:creator>`,
         `      <category>${xml(POST_CATEGORY_LABELS[p.category])}</category>`,
         ...p.tags.map((t) => `      <category>${xml(t)}</category>`),

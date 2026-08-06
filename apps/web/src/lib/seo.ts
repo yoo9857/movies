@@ -82,6 +82,11 @@ export function plainText(markdown: string): string {
     .replace(/^\s{0,3}:::.*$/gm, " ") // authoring directives (:::spoiler / :::still 2)
     .replace(/`([^`]*)`/g, "$1") // inline code
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
+    // A photo credit whole, before links are flattened. Otherwise the caption
+    // survives into feed summaries as "Photo: Someone · CC BY-SA 4.0 · source"
+    // — an attribution stripped of the URL that makes it checkable, and, for a
+    // post that opens on a picture, the first thing a reader sees of it.
+    .replace(/^\s{0,3}\*Photos?:[\s\S]*?\*\s*$/gm, " ")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links → their text
     .replace(/^\s{0,3}#{1,6}\s+/gm, "") // headings
     .replace(/^\s{0,3}>\s?/gm, "") // blockquotes

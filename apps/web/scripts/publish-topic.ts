@@ -54,9 +54,17 @@ const listArg = (name: string) => (strArg(name) ?? "").split(",").filter(Boolean
 const numArg = (name: string, fallback: number) =>
   Number.isFinite(Number(strArg(name))) && strArg(name) ? Number(strArg(name)) : fallback;
 
+const CATEGORIES = ["PEOPLE", "ISSUE", "INDUSTRY", "CRAFT", "WATCHLIST"] as const;
+
 const TOPIC = strArg("topic");
-const CATEGORY = (strArg("category") ?? "ISSUE") as
-  | "PEOPLE" | "ISSUE" | "INDUSTRY" | "CRAFT" | "WATCHLIST";
+/** Parsed, not cast: a typo used to travel all the way to a generic failure. */
+const CATEGORY = (() => {
+  const raw = strArg("category") ?? "ISSUE";
+  if (!(CATEGORIES as readonly string[]).includes(raw)) {
+    throw new Error(`--category must be one of ${CATEGORIES.join(", ")} (got "${raw}")`);
+  }
+  return raw as (typeof CATEGORIES)[number];
+})();
 const ANGLE = strArg("angle");
 const PEOPLE = listArg("people");
 const FILMS = listArg("films");
@@ -70,14 +78,36 @@ const PUBLISH = process.argv.includes("--publish");
 const DRY = process.argv.includes("--dry");
 
 const SOURCED = ["PEOPLE", "ISSUE"];
+
+/**
+ * Cut a gathered field to what the admin form will accept.
+ *
+ * `postInputSchema` caps alt and credit at 300; the database does not, and a
+ * Commons `Artist` field routinely carries a whole attribution sentence. Left
+ * alone, the pipeline writes a post the editor then cannot save — an error on a
+ * field they never typed into.
+ */
+function clampField(value: string, max: number): string {
+  const text = value.trim();
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
+}
 const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 
-/** Run one of our own scripts and let its output through. */
+/**
+ * Run one of our own scripts and let its output through.
+ *
+ * `shell: false`, which means finding `tsx` ourselves. It is worth the lookup:
+ * under a shell Node joins argv with spaces and quotes nothing, so
+ * `--alt=Anne Hathaway at the premiere` reached the child as `--alt=Anne` and
+ * was stored — silently, because one word still satisfies the schema. An `&`
+ * in a licence URL was worse on Windows, where cmd reads it as a separator.
+ */
+const TSX = path.join(HERE, "..", "..", "..", "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+
 function step(script: string, args: string[]): void {
-  execFileSync("npx", ["tsx", path.join(HERE, script), ...args], {
+  execFileSync(TSX, [path.join(HERE, script), ...args], {
     stdio: "inherit",
     timeout: 900_000,
-    shell: process.platform === "win32",
   });
 }
 
@@ -157,7 +187,14 @@ async function main() {
 
     if (DRY) {
       console.log(`\n(dry) would write from ${useProse ? "--prose" : "the gathered sources"}`);
-      console.log(`(dry) would place ${photos.length} picture(s) as ${JSON.stringify(photoPlan(["a", "b", "c", "d", "e"], photos.length))}`);
+      // One is held back for the hero, and the real headings are not known
+      // until the piece exists — so this is the shape, not the placement.
+      const shape = photoPlan(["a", "b", "c", "d", "e"], Math.max(0, photos.length - 1))
+        .map((r) => r.take)
+        .join(" / ");
+      console.log(
+        `(dry) 1 hero + ${Math.max(0, photos.length - 1)} in the body as ${shape || "nothing to place"}`,
+      );
       return;
     }
 
@@ -190,15 +227,20 @@ async function main() {
       step("fill-post-images.ts", [
         `--post=${created.slug}`,
         `--url=${hero.url}`,
-        `--alt=${hero.title.replace(/_/g, " ")}`,
-        ...(hero.credit ? [`--credit=${hero.credit}`] : []),
+        `--alt=${clampField(hero.title.replace(/_/g, " "), 300)}`,
+        ...(hero.credit ? [`--credit=${clampField(hero.credit, 300)}`] : []),
         `--license=${hero.license}`,
         ...(hero.licenseUrl ? [`--license-url=${hero.licenseUrl}`] : []),
         `--source-url=${hero.sourceUrl}`,
       ]);
 
       const jobs: unknown[] = [];
-      if (video) jobs.push({ post: created.slug, youtube: video.watch, embed: true, at: plan[0]?.at });
+      // The video first and on its own heading, never sharing one with a photo
+      // row: two blocks at the same `at` are spliced at the same index, and the
+      // second one lands above the first — which read as the jobs file inverted.
+      if (video) {
+        jobs.push({ post: created.slug, youtube: video.watch, embed: true, ...(plan[1]?.at ? { at: plan[1].at } : {}) });
+      }
       let i = 0;
       for (const row of plan) {
         for (let n = 0; n < row.take && i < rest.length; n++, i++) {
@@ -207,18 +249,39 @@ async function main() {
             post: created.slug,
             at: row.at,
             url: p.url,
-            alt: p.title.replace(/_/g, " "),
-            ...(p.credit ? { credit: p.credit } : {}),
+            alt: clampField(p.title.replace(/_/g, " "), 300),
+            ...(p.credit ? { credit: clampField(p.credit, 300) } : {}),
             license: p.license,
             ...(p.licenseUrl ? { licenseUrl: p.licenseUrl } : {}),
             sourceUrl: p.sourceUrl,
           });
         }
       }
-      const bodyFile = path.join(dir, "body.json");
-      writeFileSync(bodyFile, JSON.stringify(jobs, null, 2));
-      console.log(`\nPlacing ${jobs.length} block(s) as ${plan.map((r) => r.take).join(" / ")}…`);
-      step("fill-post-images.ts", [`--body=${bodyFile}`]);
+      // Anything the rhythm had no room for still goes in, at the end — the
+      // no-dropping rule, which `photoPlan` cannot honour when a piece has no
+      // `##` headings at all and it returns an empty plan.
+      for (; i < rest.length; i++) {
+        const p = rest[i];
+        jobs.push({
+          post: created.slug,
+          url: p.url,
+          alt: clampField(p.title.replace(/_/g, " "), 300),
+          ...(p.credit ? { credit: clampField(p.credit, 300) } : {}),
+          license: p.license,
+          ...(p.licenseUrl ? { licenseUrl: p.licenseUrl } : {}),
+          sourceUrl: p.sourceUrl,
+        });
+      }
+
+      if (jobs.length === 0) {
+        console.log("\nNo body pictures: the hero took the only one gathered.");
+      } else {
+        const bodyFile = path.join(dir, "body.json");
+        writeFileSync(bodyFile, JSON.stringify(jobs, null, 2));
+        const shape = plan.map((r) => r.take).join(" / ") || "appended";
+        console.log(`\nPlacing ${jobs.length} block(s) as ${shape}…`);
+        step("fill-post-images.ts", [`--body=${bodyFile}`]);
+      }
     }
 
     /* 4 ── publish, or leave it for a person */

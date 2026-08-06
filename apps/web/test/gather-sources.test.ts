@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { eventKey, photoPlan, pickPhotos, unwrapRedirect, type Photo } from "@/lib/gather-sources";
+import { plainText } from "@/lib/seo";
 
 const photo = (title: string, day: string): Photo => ({
   title,
@@ -66,6 +67,35 @@ describe("pickPhotos", () => {
     expect(eventKey("V at a show 03")).toBe(eventKey("V at a show 07"));
     expect(eventKey("V at a show (1)")).toBe(eventKey("V at a show (2)"));
     expect(eventKey("A different show 01")).not.toBe(eventKey("V at a show 01"));
+  });
+});
+
+describe("photo credits never reach a summary", () => {
+  // A credit line survived plainText as "Photo: Someone · CC BY-SA 4.0 ·
+  // source" — the attribution stripped of the URL that makes it checkable, and
+  // the opening sentence of any dek-less post that starts on a picture.
+  it("drops the credit paragraph rather than flattening its links", () => {
+    const md = [
+      "![a](https://x.test/a.webp)",
+      "",
+      "*Photo: PhilipRomano · [CC BY-SA 4.0](https://cc.test) · [source](https://commons.test)*",
+      "",
+      "The piece begins here.",
+    ].join("\n");
+    const text = plainText(md);
+    expect(text).toBe("The piece begins here.");
+    expect(text).not.toContain("source");
+    expect(text).not.toContain("PhilipRomano");
+  });
+
+  it("drops the plural form a two-up row writes", () => {
+    expect(plainText("*Photos: Someone · CC BY 4.0*\n\nBody.")).toBe("Body.");
+  });
+
+  it("leaves the author's own italics alone", () => {
+    expect(plainText("*This is emphasis the writer meant.*")).toBe(
+      "This is emphasis the writer meant.",
+    );
   });
 });
 

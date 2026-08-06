@@ -783,6 +783,22 @@ async function runBody(jobs: BodyJob[]): Promise<void> {
       });
       if (!post) throw new Error("no post with that slug");
 
+      // Every destination is checked before a single byte is fetched. It used
+      // to be checked in `placeBlocks`, which runs after the uploads — so one
+      // mistyped heading put N objects in the bucket and then threw, against
+      // this function's own promise to resolve everything before writing.
+      const headings = new Set(
+        [...post.content.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim()),
+      );
+      for (const at of new Set(list.map((j) => j.at).filter(Boolean) as string[])) {
+        if (!headings.has(at)) {
+          throw new Error(
+            `no "## ${at}" heading in this post — it must match exactly. ` +
+              `Headings here: ${[...headings].map((h) => `"${h}"`).join(", ") || "none"}`,
+          );
+        }
+      }
+
       // Grouped by destination, in the order the file gives them: jobs with
       // the same `at` become one row, jobs with none go to the end.
       const groups: { at: string | null; jobs: BodyJob[] }[] = [];
@@ -935,13 +951,21 @@ async function main() {
     });
     if (!post) throw new Error("no post with that slug");
 
+    // Pictures, their credits, and the embeds a `"embed": true` job wrote —
+    // a reset that left a stray video behind reported itself as clean.
+    const isEmbed = (l: string) =>
+      Boolean(youtubeVideoId(l.trim()) || xStatusId(l.trim()) || instagramEmbedUrl(l.trim()));
     const kept = post.content
       .split("\n")
-      .filter((l) => !l.startsWith("![") && !l.startsWith("*Photo"))
+      .filter((l) => !l.startsWith("![") && !l.startsWith("*Photo") && !isEmbed(l))
       .join("\n")
+      // A `--heading` section with everything under it removed is a promise of
+      // pictures that are no longer there.
+      .replace(/^##[^\n]*\n+(?=##|\s*$)/gm, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
     const removed = (post.content.match(/!\[/g) ?? []).length;
+    const embeds = post.content.split("\n").filter(isEmbed).length;
 
     if (!DRY) {
       await prisma.post.update({
@@ -960,8 +984,9 @@ async function main() {
       });
     }
     console.log(
-      `/blog/${post.slug}: ${removed} body picture(s) removed, hero ${post.image ? "cleared" : "was already empty"}` +
-        `${DRY ? " (dry)" : ""}\nObjects are left in the bucket on purpose.`,
+      `/blog/${post.slug}: ${removed} picture(s) and ${embeds} embed(s) removed, ` +
+        `hero ${post.image ? "cleared" : "was already empty"}${DRY ? " (dry)" : ""}\n` +
+        "Objects are left in the bucket on purpose.",
     );
     return;
   }

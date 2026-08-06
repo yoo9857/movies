@@ -28,7 +28,7 @@
 import "../../../packages/db/prisma/env";
 import { writeFileSync } from "node:fs";
 import { prisma } from "@cinepixo/db";
-import { commonsCaptureDay } from "@/lib/post-image-sources";
+import { commonsCategoryPhotos, pickPhotos } from "@/lib/gather-sources";
 
 function strArg(name: string): string | null {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -49,15 +49,6 @@ const COMMONS = "https://commons.wikimedia.org/w/api.php";
 const MAX_DEPTH = 2;
 /** Enough files to sort; more is just more API calls. */
 const MAX_FILES = 400;
-/** Two frames of one event, at most. */
-const PER_EVENT = 2;
-/**
- * Ask Commons for a bounded rendition rather than the file itself — the same
- * rule the video importers follow (take the transcode, not the archival
- * master). Originals run to tens of megabytes, the ingest pipeline refuses
- * anything over 20 MB, and every image is re-encoded to 1600px anyway.
- */
-const RENDITION_WIDTH = 2000;
 
 async function json<T>(url: string): Promise<T | null> {
   try {
@@ -69,12 +60,6 @@ async function json<T>(url: string): Promise<T | null> {
   } catch {
     return null;
   }
-}
-
-function plain(value: string | undefined): string | null {
-  if (!value) return null;
-  const text = value.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
-  return text || null;
 }
 
 interface WdEntities {
@@ -118,99 +103,19 @@ async function resolveCategory(): Promise<string> {
   return category;
 }
 
-async function membersOf(cat: string, type: "file" | "subcat"): Promise<string[]> {
-  const data = await json<{ query?: { categorymembers?: { title: string }[] } }>(
-    `${COMMONS}?action=query&list=categorymembers&cmtitle=${encodeURIComponent(cat)}` +
-      `&cmtype=${type}&cmlimit=200&format=json&origin=*`,
-  );
-  return (data?.query?.categorymembers ?? []).map((m) => m.title);
-}
-
-interface Candidate {
-  title: string;
-  url: string;
-  day: string;
-  credit: string | null;
-  license: string;
-  licenseUrl: string | null;
-  sourceUrl: string;
-}
-
-/** "V at Festival 2025 03" and "…02" are one event; the key drops the frame number. */
-const eventKey = (title: string) => title.replace(/[\s_]*\d+$/, "").toLowerCase();
-
 async function main() {
   const category = await resolveCategory();
   console.log(`Commons category: ${category}`);
 
-  const titles: string[] = [];
-  const queue: { cat: string; depth: number }[] = [{ cat: `Category:${category}`, depth: 0 }];
-  while (queue.length > 0 && titles.length < MAX_FILES) {
-    const { cat, depth } = queue.shift()!;
-    for (const t of await membersOf(cat, "file")) {
-      if (/\.(jpe?g|png)$/i.test(t)) titles.push(t);
-    }
-    if (depth < MAX_DEPTH) {
-      for (const sub of await membersOf(cat, "subcat")) queue.push({ cat: sub, depth: depth + 1 });
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  console.log(`${titles.length} image files in the category tree`);
+  // The shared walk, not a second copy of it. This file used to hand-roll the
+  // category tree and the metadata batching, and the two drifted: its own
+  // `eventKey` never learned the "(1)"/"(2)" frame form that the shared one
+  // handles and the test suite pins, and it left the query string on every
+  // rendition URL.
+  const candidates = await commonsCategoryPhotos(category, MAX_DEPTH, MAX_FILES);
+  console.log(`${candidates.length} licensed candidates in the category tree`);
 
-  interface Info {
-    url?: string;
-    /** The `iiurlwidth` rendition — see RENDITION_WIDTH. */
-    thumburl?: string;
-    descriptionurl?: string;
-    width?: number;
-    timestamp?: string;
-    extmetadata?: Record<string, { value?: string }>;
-  }
-  const candidates: Candidate[] = [];
-  for (let i = 0; i < titles.length; i += 50) {
-    const batch = titles.slice(i, i + 50);
-    const data = await json<{
-      query?: { pages?: Record<string, { title?: string; imageinfo?: Info[] }> };
-    }>(
-      `${COMMONS}?action=query&titles=${encodeURIComponent(batch.join("|"))}` +
-        `&prop=imageinfo&iiprop=url|extmetadata|size|timestamp&iiurlwidth=${RENDITION_WIDTH}` +
-        `&format=json&origin=*`,
-    );
-    for (const page of Object.values(data?.query?.pages ?? {})) {
-      const info = page.imageinfo?.[0];
-      const meta = info?.extmetadata ?? {};
-      const license = plain(meta.LicenseShortName?.value);
-      const title = (page.title ?? "").replace(/^File:/, "").replace(/\.[a-z]+$/i, "");
-      if (!info?.url || !info.descriptionurl || !license) continue;
-      if ((info.width ?? 0) < 700) continue;
-      if (/logo|signature|autograph|poster|album|cover/i.test(title)) continue;
-      candidates.push({
-        title,
-        // The rendition, never the archival master — see RENDITION_WIDTH.
-        url: info.thumburl ?? info.url,
-        day:
-          commonsCaptureDay(meta.DateTimeOriginal?.value) ??
-          (info.timestamp ?? "1970-01-01").slice(0, 10),
-        credit: plain(meta.Artist?.value) ?? plain(meta.Credit?.value),
-        license,
-        licenseUrl: plain(meta.LicenseUrl?.value),
-        sourceUrl: info.descriptionurl,
-      });
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  console.log(`${candidates.length} licensed candidates`);
-
-  const perEvent = new Map<string, number>();
-  const picked: Candidate[] = [];
-  for (const c of candidates.sort((a, b) => b.day.localeCompare(a.day))) {
-    const key = eventKey(c.title);
-    const seen = perEvent.get(key) ?? 0;
-    if (seen >= PER_EVENT) continue;
-    perEvent.set(key, seen + 1);
-    picked.push(c);
-    if (picked.length >= COUNT) break;
-  }
+  const picked = pickPhotos(candidates, COUNT);
 
   console.log(`\npicked ${picked.length}, newest first:`);
   for (const c of picked) console.log(`  ${c.day}  ${c.title} — ${c.license} — ${c.credit ?? "no credit"}`);
