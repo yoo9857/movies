@@ -154,9 +154,28 @@ export interface Photo {
  */
 export const DEFAULT_MIN_WIDTH = 1200;
 
-/** "V at Festival 2025 03" and "…02" are one event; the key drops the frame number. */
-export const eventKey = (title: string): string =>
-  title.replace(/[\s_]*(\(\d+\)|\d+)$/, "").toLowerCase();
+/**
+ * "V at Festival 2025 03" and "…02" are one event; the key drops the frame
+ * number — and the crop qualifier, because a re-framing is not a second
+ * occasion. Commons names them "X-1764", "X-1764 (cropped)" and "X-1764
+ * (cropped over the top)", and only the first of those ended in a digit, so
+ * two crops of one photograph counted as two more events and walked straight
+ * past `PER_EVENT`: a Moana gather offered the same picture of Dwayne Johnson
+ * three times out of six.
+ *
+ * Applied until it stops changing, since a crop of a numbered frame carries
+ * both suffixes and one pass would leave the number behind.
+ */
+export const eventKey = (title: string): string => {
+  let key = title;
+  for (;;) {
+    const next = key
+      .replace(/[\s_]*\(crop(?:ped)?\b[^()]*\)$/i, "")
+      .replace(/[\s_]*(\(\d+\)|\d+)$/, "");
+    if (next === key) return key.toLowerCase();
+    key = next;
+  }
+};
 
 /**
  * Newest first, at most PER_EVENT frames of any one occasion.

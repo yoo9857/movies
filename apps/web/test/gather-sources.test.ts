@@ -78,6 +78,27 @@ describe("pickPhotos", () => {
     expect(eventKey("V at a show (1)")).toBe(eventKey("V at a show (2)"));
     expect(eventKey("A different show 01")).not.toBe(eventKey("V at a show 01"));
   });
+
+  it("folds a Commons crop into the photograph it was cropped from", () => {
+    expect(eventKey("Dwayne Johnson-1764 (cropped)")).toBe(eventKey("Dwayne Johnson-1764"));
+    expect(eventKey("Dwayne Johnson-1764 (cropped over the top)")).toBe(
+      eventKey("Dwayne Johnson-1690"),
+    );
+    // A parenthetical that is not a crop still names its own occasion.
+    expect(eventKey("V at a show (Berlin)")).not.toBe(eventKey("V at a show (Cannes)"));
+  });
+
+  it("does not offer one photograph three times because two of them are crops", () => {
+    const shoot = [
+      "Dwayne Johnson-1690",
+      "Dwayne Johnson-1764",
+      "Dwayne Johnson-1764 (cropped)",
+      "Dwayne Johnson-1764 (cropped over the top)",
+    ].map((t) => photo(t, "2025-09-01"));
+    const picked = pickPhotos([...shoot, photo("Dwayne johnson (53544402096)", "2024-02-21")], 6);
+    expect(picked.filter((p) => p.title.startsWith("Dwayne Johnson-"))).toHaveLength(2);
+    expect(picked.map((p) => p.title)).toContain("Dwayne johnson (53544402096)");
+  });
 });
 
 describe("photo credits never reach a summary", () => {
