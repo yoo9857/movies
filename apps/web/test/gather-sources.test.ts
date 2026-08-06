@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   eventKey,
   licenceAllows,
+  looksArchival,
   nameMatches,
   photoAlt,
   photoPlan,
@@ -88,6 +89,48 @@ describe("photoAlt", () => {
     expect(photoAlt("   ", "Dwayne Johnson-1690")).toBe("Dwayne Johnson-1690");
     // A description that is *only* an instruction leaves nothing behind.
     expect(photoAlt("Please attribute to X if used elsewhere.", "A title")).toBe("A title");
+  });
+});
+
+/**
+ * The near-miss: a gather for the director Martin McDonagh ranked first on a
+ * scanned naturalisation index card for a different man of a similar name.
+ * Public domain, high resolution, newest by capture date — and one step from
+ * being the hero photograph of a piece about a living film-maker.
+ */
+describe("archival paper is not a photograph of anyone", () => {
+  const NAME = "Martin McDonagh";
+  const CARD = "McDonagh, Michael Martin - Born- (BLANK), Naturalized- (BLANK)";
+
+  it("still reads the name off the card, which is why the title filter has to catch it", () => {
+    expect(nameMatches(NAME, CARD)).toBe(true);
+    expect(looksArchival(CARD)).toBe(true);
+  });
+
+  it("refuses the other genealogical series that carry people's names", () => {
+    for (const title of [
+      "Petition for Naturalization of Jan Novak",
+      "1911 census return, Dublin",
+      "Passenger list of the SS Baltic",
+      "World War II draft card - Smith, John",
+      "Headstone of Someone Famous",
+    ]) {
+      expect(looksArchival(title)).toBe(true);
+    }
+  });
+
+  it("keeps real photographs, including ones whose words merely sound archival", () => {
+    for (const title of [
+      "Martin McDonagh at 2012 Toronto International Film Festival",
+      "Martin McDonagh 2012",
+      "Martin McDonagh at the Banshees premiere",
+      // "record" alone would refuse this, which is why the pattern names series.
+      "A record shop in Galway",
+      "Actor holding a birth announcement",
+    ]) {
+      expect(looksArchival(title)).toBe(false);
+    }
+    expect(nameMatches(NAME, "Martin McDonagh at the Banshees premiere")).toBe(true);
   });
 });
 

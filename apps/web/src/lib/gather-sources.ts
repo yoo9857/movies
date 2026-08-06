@@ -254,9 +254,29 @@ export function pickPhotos(photos: Photo[], want: number, of?: string): Photo[] 
  * The rest — posters, album art, broadcast screencaps — are things a fan
  * uploaded and tagged CC that the uploader had no right to license. A tag is
  * not a licence, and these are the shapes where the tag is most often wrong.
+ *
+ * The archive clause is newer and was earned. A gather for Martin McDonagh
+ * ranked first on "McDonagh, Michael Martin - Born- (BLANK), Naturalized-
+ * (BLANK)" — a scanned naturalisation index card for a different man of a
+ * similar name, public domain, high resolution, and one step from becoming the
+ * hero photograph of a piece about a living director. It passed `nameMatches`
+ * because both of his names appear in it, which is what a name index is.
  */
 const JUNK =
   /logo|signature|autograph|poster|keyart|album|cover art|dvd|blu-?ray|map|diagram|screenshot|screen ?cap|tussauds|wax figure|waxwork|statue|mural|graffiti|fan ?art/i;
+
+/**
+ * Scanned paper, not a photograph of anybody: the genealogical and archival
+ * series that fill Commons with high-resolution documents bearing people's
+ * names. Matched separately from `JUNK` so the reason a file was refused stays
+ * legible, and kept to series names and form language rather than bare words
+ * like "record", which would refuse a photograph of a record shop.
+ */
+const ARCHIVAL =
+  /naturaliz|petition for|declaration of intention|passenger list|census|draft card|index card|birth certificate|death certificate|marriage record|headstone|gravestone|find a grave|born-\s*\(|passport application/i;
+
+/** Exported so the filter itself is pinned, not merely the behaviour around it. */
+export const looksArchival = (title: string): boolean => ARCHIVAL.test(title);
 
 /**
  * Pictures worth reaching for first: a performer at work or in front of press.
@@ -347,7 +367,7 @@ function commonsCandidate(
   if (!info?.url || !info.descriptionurl || !license) return null;
   if (!licenceAllows(license)) return null;
   if ((info.width ?? 0) < minWidth) return null;
-  if (JUNK.test(title)) return null;
+  if (JUNK.test(title) || ARCHIVAL.test(title)) return null;
   if (looksLikeMontage(info.width ?? 0, info.height ?? 0)) return null;
   return {
     title,
@@ -476,7 +496,7 @@ export async function openversePhotos(
     if ((r.width ?? 0) < minWidth) continue;
     if (!/^https:\/\//.test(r.url)) continue;
     const title = (r.title ?? "untitled").slice(0, 200);
-    if (JUNK.test(title)) continue;
+    if (JUNK.test(title) || ARCHIVAL.test(title)) continue;
     if (looksLikeMontage(r.width ?? 0, r.height ?? 0)) continue;
     out.push({
       title,
