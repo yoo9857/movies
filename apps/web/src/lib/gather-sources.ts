@@ -143,6 +143,12 @@ export interface Photo {
    * filename.
    */
   description: string | null;
+  /**
+   * Who this was gathered as being of, when the gather was subject-led. Only
+   * `photoAlt` uses it, and only to decide whether the description identifies
+   * anybody.
+   */
+  subject?: string;
 }
 
 /**
@@ -160,14 +166,33 @@ export interface Photo {
  * photograph, and it goes in the credit line anyway. Those sentences are
  * dropped; the title stays as the fallback for a file that describes nothing.
  */
-export function photoAlt(description: string | null, title: string): string {
+export function photoAlt(
+  description: string | null,
+  title: string,
+  /**
+   * Who the picture was gathered as being of. Given it, a description that
+   * never names them loses to a title that does — see below.
+   */
+  subject?: string,
+): string {
   const kept = (description ?? "")
     .split(/(?<=[.!?])\s+/)
     .filter((s) => s.trim() && !/please attribute|if used elsewhere|do not (?:use|reuse)|all rights reserved|©/i.test(s))
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
-  return kept || title.replace(/_/g, " ");
+  const fallback = title.replace(/_/g, " ");
+  if (!kept) return fallback;
+  if (!subject) return kept;
+
+  // A description is only better than the filename when it says who is in the
+  // picture. Commons routinely fails that: a photograph of Steve Buscemi is
+  // described as `Premiere of "The Only Living Pickpocket in New York"`, and
+  // one of John Malkovich simply as "the actor". Both left the reader who
+  // needs alt text with a caption naming nobody, while the file title named
+  // them plainly. So the title wins whenever it alone identifies the subject.
+  if (nameMatches(subject, kept)) return kept;
+  return nameMatches(subject, fallback) ? fallback : kept;
 }
 
 /**
@@ -529,12 +554,15 @@ export async function gatherPhotos(
   minWidth = DEFAULT_MIN_WIDTH,
   subject?: string,
 ): Promise<Photo[]> {
+  const stamp = (photos: Photo[]) =>
+    subject ? photos.map((p) => ({ ...p, subject })) : photos;
+
   const commons = pickPhotos(await commonsPhotos(query, minWidth), want, subject);
-  if (commons.length >= want) return commons;
+  if (commons.length >= want) return stamp(commons);
   const extra = (await openversePhotos(query, want * 2, minWidth)).filter(
     (p) => !subject || nameMatches(subject, p.title),
   );
-  return [...commons, ...extra].slice(0, want);
+  return stamp([...commons, ...extra].slice(0, want));
 }
 
 /**

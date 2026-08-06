@@ -84,6 +84,36 @@ describe("photoAlt", () => {
     expect(alt.endsWith("Nevada.")).toBe(true);
   });
 
+  it("prefers the title when the description names nobody", () => {
+    // Both shipped in a draft: a photograph of Steve Buscemi described only by
+    // the premiere he was at, and one of John Malkovich described as "the
+    // actor". Alt text that names no one is the failure the constraint exists
+    // to prevent, and here the filename was the thing that named them.
+    expect(
+      photoAlt(
+        'Premiere of "The Only Living Pickpocket in New York"',
+        "Steve Buscemi at the Sundance Film Festival",
+        "Steve Buscemi",
+      ),
+    ).toBe("Steve Buscemi at the Sundance Film Festival");
+    expect(photoAlt("the actor", "John malkovich en el teatro colon", "John Malkovich")).toBe(
+      "John malkovich en el teatro colon",
+    );
+  });
+
+  it("keeps the description when it does name the subject", () => {
+    expect(
+      photoAlt("Steve Buscemi at the Off-Broadway opening night.", "SteveBuscemi-byPhilipRomano", "Steve Buscemi"),
+    ).toBe("Steve Buscemi at the Off-Broadway opening night.");
+  });
+
+  it("keeps the description when neither it nor the title names anyone", () => {
+    // Losing the more informative of two anonymous captions helps no one.
+    expect(photoAlt("Two people on a red carpet.", "DSC_0431", "Steve Buscemi")).toBe(
+      "Two people on a red carpet.",
+    );
+  });
+
   it("falls back to the title when the file describes nothing", () => {
     expect(photoAlt(null, "Dwayne_Johnson-1690")).toBe("Dwayne Johnson-1690");
     expect(photoAlt("   ", "Dwayne Johnson-1690")).toBe("Dwayne Johnson-1690");
