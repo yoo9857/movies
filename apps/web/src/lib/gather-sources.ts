@@ -535,12 +535,20 @@ export async function gatherForSubjects(
   subjects: string[],
   want: number,
   minWidth = DEFAULT_MIN_WIDTH,
+  /**
+   * Told what each subject contributed, because a subject that contributes
+   * nothing is invisible otherwise: a name misspelled by one character returns
+   * zero, the round-robin quietly fills from everyone else, and the piece runs
+   * without a single picture of the person it is about.
+   */
+  report?: (subject: string, found: number) => void,
 ): Promise<Photo[]> {
   if (subjects.length === 0 || want <= 0) return [];
   const perSubject = Math.max(2, Math.ceil(want / subjects.length) + 1);
   const pools = await Promise.all(
     subjects.map((s) => gatherPhotos(s, perSubject, minWidth, s)),
   );
+  pools.forEach((pool, i) => report?.(subjects[i], pool.length));
 
   const out: Photo[] = [];
   const seen = new Set<string>();

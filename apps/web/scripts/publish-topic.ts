@@ -158,7 +158,12 @@ async function main() {
   const [news, photos]: [Article[], Photo[]] = await Promise.all([
     latestNews(TOPIC, NEWS),
     subjects.length
-      ? gatherForSubjects(subjects, IMAGES)
+      ? gatherForSubjects(subjects, IMAGES, undefined, (subject, found) => {
+          console.log(
+            `    ${subject}: ${found} picture(s)` +
+              (found === 0 ? "  ← nothing matched this name; check its spelling" : ""),
+          );
+        })
       : gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES),
   ]);
   const sources = [...news.map((a) => a.url), ...(video ? [video.watch] : [])];
