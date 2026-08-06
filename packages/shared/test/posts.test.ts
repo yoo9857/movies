@@ -33,6 +33,14 @@ const post = {
 const parse = (extra: Record<string, unknown> = {}) =>
   postInputSchema.safeParse({ ...post, ...extra });
 
+/**
+ * A hero always carries alt text (`Post_image_needs_alt`), so tests about some
+ * *other* image rule supply it rather than restating that one. The tests that
+ * are about alt pass it — or withhold it — explicitly.
+ */
+const withHero = (extra: Record<string, unknown> = {}) =>
+  parse({ imageAlt: "What the picture shows", ...extra });
+
 describe("the sources rule", () => {
   it("names exactly the categories the CHECK constraint names", () => {
     // If this list and `Post_claims_are_sourced` ever disagree, one of them is
@@ -93,10 +101,11 @@ describe("reserved slugs", () => {
 
 describe("the hero image", () => {
   it("takes one of ours — a path or an https URL", () => {
-    expect(parse({ image: "/uploads/posts/2026/08/x.webp" }).success).toBe(true);
-    expect(parse({ image: "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/x.webp" }).success).toBe(
-      true,
-    );
+    expect(withHero({ image: "/uploads/posts/2026/08/x.webp" }).success).toBe(true);
+    expect(
+      withHero({ image: "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/x.webp" })
+        .success,
+    ).toBe(true);
   });
 
   it("rejects the shapes that can never be ours", () => {
@@ -122,7 +131,7 @@ describe("the hero image", () => {
 
   it("accepts a licence once its source is named", () => {
     expect(
-      parse({
+      withHero({
         image: "/uploads/posts/x.webp",
         imageLicense: "CC BY-SA 4.0",
         imageSourceUrl: "https://commons.wikimedia.org/wiki/File:X.jpg",
@@ -133,6 +142,25 @@ describe("the hero image", () => {
   it("refuses alt text or credit with no image to describe", () => {
     expect(parse({ imageAlt: "A face" }).success).toBe(false);
     expect(parse({ imageCredit: "Photograph by Someone" }).success).toBe(false);
+  });
+
+  /**
+   * The other direction. `alt=""` reads to a screen reader as "decorative,
+   * skip this" — over a photograph of the person the piece is about, that
+   * deletes the subject of the article for the reader who most needs it named.
+   */
+  it("refuses a hero with no alt text, and says which field is wrong", () => {
+    const res = parse({ image: "/uploads/posts/x.webp" });
+    expect(res.success).toBe(false);
+    expect(res.error?.issues.some((i) => i.path[0] === "imageAlt")).toBe(true);
+  });
+
+  it("counts blank alt text as none, the way the constraint does", () => {
+    expect(parse({ image: "/uploads/posts/x.webp", imageAlt: "   " }).success).toBe(false);
+  });
+
+  it("has nothing to say about a post with no picture", () => {
+    expect(parse({}).success).toBe(true);
   });
 });
 

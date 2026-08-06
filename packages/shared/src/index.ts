@@ -369,6 +369,14 @@ export const postInputSchema = z
     path: ["image"],
     message: "Alt text and credit describe a hero image — add one, or clear them",
   })
+  // And the other direction (`Post_image_needs_alt`). `alt=""` is not "no
+  // description" to a screen reader, it is "decorative, skip this" — which
+  // over a photograph of the person the piece is about deletes the subject of
+  // the article for the reader who most needs it named.
+  .refine((p) => !p.image || Boolean(p.imageAlt), {
+    path: ["imageAlt"],
+    message: "Say what the picture shows — a hero without alt text is skipped by screen readers",
+  })
   // The application half of `Post_claims_are_sourced`. The database refuses the
   // row either way; this is what turns a 500 into a sentence the editor can act
   // on, attached to the field that is wrong.

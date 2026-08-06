@@ -525,6 +525,12 @@ describe("Post", () => {
       authorId: USER,
       ...over,
     };
+    // A hero always carries alt text — `Post_image_needs_alt`. Supplied here so
+    // that every test about *some other* image rule can set an image without
+    // restating this one; the tests that are about alt pass it explicitly.
+    if (row.image && !("imageAlt" in over)) {
+      (row as Record<string, unknown>).imageAlt = "What the picture shows";
+    }
     const cols = Object.keys(row);
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
     return db.query(
@@ -655,6 +661,37 @@ describe("Post", () => {
     it("refuses alt text or credit with no file to describe", async () => {
       await rejects(() => insertPost({ imageAlt: "A face" }), SQLSTATE.check);
       await rejects(() => insertPost({ imageCredit: "Someone" }), SQLSTATE.check);
+    });
+  });
+
+  /**
+   * The other direction, which went unenforced for the blog's whole life.
+   *
+   * `alt=""` does not mean "no description available" — it means "this picture
+   * is decorative, skip it". Rendering that over a photograph of the person the
+   * piece is about removes the subject of the article from the page for the
+   * reader who most needs it named.
+   */
+  describe("a hero carries alt text", () => {
+    it("refuses a picture with no description", async () => {
+      // Post_image_needs_alt
+      await rejects(() => insertPost({ image: BUCKET, imageAlt: null }), SQLSTATE.check);
+    });
+
+    it.each(["", "   ", "\n\t "])("refuses blank alt text %j", async (imageAlt) => {
+      // Blank is not absent. The same lesson as Post_content_meaningful, which
+      // passed a body of newlines until a constraint test caught it.
+      await rejects(() => insertPost({ image: BUCKET, imageAlt }), SQLSTATE.check);
+    });
+
+    it("accepts a picture that says what it shows", async () => {
+      await expect(
+        insertPost({ image: BUCKET, imageAlt: "Anne Hathaway at a premiere" }),
+      ).resolves.toBeTruthy();
+    });
+
+    it("has nothing to say about a post with no picture", async () => {
+      await expect(insertPost({ image: null, imageAlt: null })).resolves.toBeTruthy();
     });
   });
 

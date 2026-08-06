@@ -489,7 +489,9 @@ model Post {
   imageLicense    String?
   imageLicenseUrl String?
   imageSourceUrl  String?
-  /// Alt text for `image`. A hero with no alt text is a hero we cannot ship.
+  /// Alt text for `image`. A hero with no alt text is a hero we cannot ship —
+  /// `Post_image_needs_alt` enforces it, blank included. Nullable only because
+  /// a post without a picture has nothing to describe.
   imageAlt        String?
   viewCount Int    @default(0)
   authorId  String
