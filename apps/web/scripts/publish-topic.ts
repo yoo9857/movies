@@ -118,8 +118,21 @@ function step(script: string, args: string[]): void {
   });
 }
 
+/** What `postJobSchema` will accept, checked before anything is spent. */
+const ANGLE_MAX = 300;
+
 async function main() {
   if (!TOPIC) throw new Error('pass --topic="…" (see the header of this file)');
+  // Refused here for the same reason --dek is: write-posts validates the job
+  // file only after this script has fetched the news and gathered pictures for
+  // every subject, so an angle one sentence too long threw away a full gather
+  // and told the operator about it in a ZodError with a path of [0, "angle"].
+  if (ANGLE && ANGLE.length > ANGLE_MAX) {
+    throw new Error(
+      `--angle is ${ANGLE.length} characters and the writer takes at most ${ANGLE_MAX}. ` +
+        "Cut it to the steer itself — the sources carry the detail.",
+    );
+  }
   if (PUBLISH && SOURCED.includes(CATEGORY) && !DRY) {
     console.log(
       `NOTE: ${CATEGORY} is a factual claim about people. --publish means you are\n` +
