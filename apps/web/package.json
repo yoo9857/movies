@@ -17,6 +17,7 @@
     "publish": "tsx scripts/publish-topic.ts",
     "publish-post": "tsx scripts/publish-post.ts",
     "blog-doctor": "tsx scripts/blog-doctor.ts",
+    "deploy-check": "tsx scripts/deploy-check.ts",
     "save-media": "tsx scripts/save-media.ts"
   },
   "dependencies": {
