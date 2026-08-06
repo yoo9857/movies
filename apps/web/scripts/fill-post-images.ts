@@ -75,6 +75,7 @@ import { prisma } from "@cinepixo/db";
 import { z } from "zod";
 import { fetchRemoteImage, processImage } from "@/lib/media/image";
 import { buildKey, putPublicObject, resolveLocalKey } from "@/lib/media/storage";
+import { dropEmptySections } from "@/lib/post-body";
 import { type CommonsImage, commonsImage, enrich, facts } from "@/lib/wikimedia";
 import {
   instagramEmbedUrl,
@@ -969,13 +970,12 @@ async function main() {
     // a reset that left a stray video behind reported itself as clean.
     const isEmbed = (l: string) =>
       Boolean(youtubeVideoId(l.trim()) || xStatusId(l.trim()) || instagramEmbedUrl(l.trim()));
-    const kept = post.content
-      .split("\n")
-      .filter((l) => !l.startsWith("![") && !l.startsWith("*Photo") && !isEmbed(l))
-      .join("\n")
-      // A `--heading` section with everything under it removed is a promise of
-      // pictures that are no longer there.
-      .replace(/^##[^\n]*\n+(?=##|\s*$)/gm, "")
+    const kept = dropEmptySections(
+      post.content
+        .split("\n")
+        .filter((l) => !l.startsWith("![") && !l.startsWith("*Photo") && !isEmbed(l))
+        .join("\n"),
+    )
       .replace(/\n{3,}/g, "\n\n")
       .trim();
     const removed = (post.content.match(/!\[/g) ?? []).length;
