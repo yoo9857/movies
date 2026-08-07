@@ -220,3 +220,63 @@ describe("imageObjectNode", () => {
     expect(n.creditText).toBe("The desk");
   });
 });
+
+/**
+ * A credit column holds two different claims, and 97% of this library holds the
+ * one that is not a byline: "© the film's rights holders", licensed "Poster
+ * shown for identification". Published as `creator` and `acquireLicensePage` —
+ * which is what happened on 2026-08-07 until a live page was read back — that
+ * is a sentence pretending to be a person and a licence that does not exist.
+ */
+describe("a rights notice is not an author", () => {
+  const identification = () =>
+    imageObjectNode({
+      url: "/uploads/films/x.webp",
+      credit: "© the film's rights holders",
+      license: "Poster shown for identification",
+      sourceUrl: "https://en.wikipedia.org/wiki/Parasite_(2019_film)",
+    })!;
+
+  it("keeps the notice as a notice and names no creator", () => {
+    const n = identification();
+    expect(n.copyrightNotice).toBe("© the film's rights holders");
+    expect(n.creditText).toBe("© the film's rights holders");
+    expect("creator" in n).toBe(false);
+  });
+
+  it("offers no licence page for a use we claim rather than terms we hold", () => {
+    const n = identification();
+    expect("license" in n).toBe(false);
+    expect("acquireLicensePage" in n).toBe(false);
+  });
+
+  it("does not double the © it was given", () => {
+    const n = imageObjectNode({ url: "/x.webp", credit: "Copyright 1954 Toho" })!;
+    expect(n.copyrightNotice).toBe("Copyright 1954 Toho");
+  });
+
+  it("still reads a named author as an author, deed or no deed", () => {
+    const n = imageObjectNode({
+      url: "/uploads/films/y.webp",
+      credit: "Reynold Brown",
+      license: "Public domain",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Poster.jpg",
+    })!;
+    expect(n.creator).toEqual({ "@type": "Person", name: "Reynold Brown" });
+    // Public domain: no © to claim, and no deed to link either.
+    expect("copyrightNotice" in n).toBe(false);
+    expect("acquireLicensePage" in n).toBe(false);
+  });
+
+  it("acquires only against a real deed", () => {
+    const n = imageObjectNode({
+      url: "/uploads/films/z.webp",
+      credit: "K-Films Amérique",
+      license: "CC BY-SA 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Sheet.jpg",
+    })!;
+    expect(n.license).toBe("https://creativecommons.org/licenses/by-sa/4.0/");
+    expect(n.acquireLicensePage).toBe("https://commons.wikimedia.org/wiki/File:Sheet.jpg");
+  });
+});

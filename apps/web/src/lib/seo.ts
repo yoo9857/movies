@@ -264,8 +264,8 @@ export function imageObjectNode(input: ImageInput): JsonLdNode | undefined {
   const url = hosted(input.url);
   if (!url) return undefined;
   const credit = input.credit?.trim() || undefined;
-  const holder = creditedName(credit);
-  const licensed = Boolean(input.license || input.licenseUrl);
+  const notice = creditIsNotice(credit);
+  const holder = notice ? undefined : creditedName(credit);
 
   return compact({
     "@type": "ImageObject",
@@ -276,17 +276,23 @@ export function imageObjectNode(input: ImageInput): JsonLdNode | undefined {
     width: input.width ?? undefined,
     height: input.height ?? undefined,
     creditText: credit,
+    // A credit written as "© …" names a rights holder, and a rights holder is
+    // not an author: 80,000 posters here are credited to "the film's rights
+    // holders", which as a `creator.name` would be a sentence pretending to be
+    // a person. It is a copyright notice and nothing else.
     creator: input.creatorId
       ? ref(input.creatorId)
       : holder
         ? { "@type": ORGANISATION_CREDIT.test(holder) ? "Organization" : "Person", name: holder }
         : undefined,
-    copyrightNotice: copyrightNotice(holder, input.license, input.licenseUrl),
+    copyrightNotice: notice ? credit : copyrightNotice(holder, input.license, input.licenseUrl),
     license: input.licenseUrl ?? undefined,
-    // A licence and the page it is acquired from are one obligation; the source
-    // stands as `acquireLicensePage` only where there is a licence to acquire.
-    // `Post_image_license_has_source` and its siblings guarantee the pair.
-    acquireLicensePage: licensed ? (input.sourceUrl ?? undefined) : undefined,
+    // A licence and the page it is acquired from are one obligation, and the
+    // test is the deed, not the licence *column*: "Poster shown for
+    // identification" is a use we claim, not terms anyone can take up, and
+    // pointing `acquireLicensePage` at a Wikipedia article would offer a licence
+    // that does not exist. No deed, no acquisition.
+    acquireLicensePage: input.licenseUrl ? (input.sourceUrl ?? undefined) : undefined,
   });
 }
 
@@ -304,6 +310,17 @@ const CREDIT_PREFIX = /^(photo(graph)?s?|image|picture|still)s?\s*(by\s+|[:—-]
  */
 const ORGANISATION_CREDIT =
   /\b(inc|llc|ltd|plc|gmbh|corp|corporation|company|studios?|pictures|films?|productions?|entertainment|photography|media|press|news|agency|agence|archives?|librar(y|ies)|museums?|foundations?|institutes?|universit(y|ies)|ministry|department|bureau|councils?|festivals?|networks?|broadcasting|television|records|associated|reuters|getty|shutterstock|nasa|wikimedia|commons|youtube)\b/i;
+
+/**
+ * Is this credit a copyright notice rather than a byline?
+ *
+ * "© the film's rights holders" and "Gage Skidmore" are both credits and are
+ * not the same claim: the first says who owns the picture, the second says who
+ * made it. Callers need the distinction too — a page that writes "Poster by ©
+ * the film's rights holders" has not read its own data.
+ */
+export const creditIsNotice = (credit: Nullable<string>): boolean =>
+  Boolean(credit && /^\s*(©|\(c\)|copyright\b)/i.test(credit));
 
 /** The name inside a credit line: who took it, stripped of the grammar. */
 function creditedName(credit: string | undefined): string | undefined {

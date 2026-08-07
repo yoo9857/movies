@@ -23,6 +23,7 @@ import {
   absUrl,
   backdropUrl,
   breadcrumbNode,
+  creditIsNotice,
   type Crumb,
   graph,
   imageObjectNode,
@@ -282,18 +283,28 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         }
       : null;
 
-  // The artwork, with everything the credit line under the synopsis prints.
-  // Described here rather than left as a bare URL because the page now names
-  // the author and links the licence — the markup may say what the page says.
-  const artwork = imageObjectNode({
-    id: primaryImageId(path),
-    url: movie.image,
-    caption: year ? `${movie.title} (${year})` : movie.title,
-    credit: movie.imageCredit,
-    license: movie.imageLicense,
-    licenseUrl: movie.imageLicenseUrl,
-    sourceUrl: movie.imageSourceUrl,
-  });
+  // Nearly every poster here is publisher artwork shown for identification,
+  // credited to "© the film's rights holders" — a notice, not a byline. A few
+  // thousand are the other thing: a public-domain sheet or a Commons file with
+  // a named author and a deed.
+  const posterHasAuthor = Boolean(movie.imageCredit) && !creditIsNotice(movie.imageCredit);
+
+  // Described in the graph only when there is something to describe. For an
+  // identification poster the honest node would be a credit line and three
+  // absences, on eighty thousand pages — an ImageObject whose whole content is
+  // what it cannot say is worth less than the bare URL it would replace.
+  const artwork =
+    posterHasAuthor || movie.imageLicenseUrl
+      ? imageObjectNode({
+          id: primaryImageId(path),
+          url: movie.image,
+          caption: year ? `${movie.title} (${year})` : movie.title,
+          credit: movie.imageCredit,
+          license: movie.imageLicense,
+          licenseUrl: movie.imageLicenseUrl,
+          sourceUrl: movie.imageSourceUrl,
+        })
+      : undefined;
 
   const jsonLd = graph(
     webPageNode({
@@ -306,10 +317,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         (movie.image ? absUrl(movie.image) : null) ??
         backdropUrl(movie.backdropPath, "w1280") ??
         posterUrl(movie.posterPath, "w780"),
-      // Only when the credit is on the page. An uncredited poster stays a bare
-      // URL: a licence the markup claims and the page hides is the drift this
-      // whole file exists to prevent.
-      imageId: artwork && movie.imageCredit ? primaryImageId(path) : undefined,
+      imageId: artwork ? primaryImageId(path) : undefined,
       dateModified: modified,
       hasBreadcrumb: true,
       aboutId: movieEntityId(movie.slug),
@@ -318,7 +326,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       markdownUrl: `${path}.md`,
     }),
     breadcrumbNode(path, trail),
-    movie.imageCredit ? artwork : undefined,
+    artwork,
     movieNode(movie, {
       // personSlug points each credit at that person's page, so the graph
       // resolves one human across the site rather than one per film.
@@ -469,7 +477,9 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
               synopsis still owes the credit. */}
           {movie.image && movie.imageCredit && (
             <p className="mt-2 max-w-[65ch] text-xs text-muted">
-              Poster by{" "}
+              {/* "Poster by © the film's rights holders" is what happens when a
+                  page writes one sentence for two different claims. */}
+              {posterHasAuthor ? "Poster by " : "Poster "}
               {movie.imageSourceUrl ? (
                 <a
                   href={movie.imageSourceUrl}
@@ -482,7 +492,12 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
               ) : (
                 movie.imageCredit
               )}
-              {movie.imageLicense && (
+              {/* The licence, only where one exists. On an identification
+                  poster that column holds "Poster shown for identification" —
+                  a use we claim, not terms a reader can take up, and the terms
+                  page states it once for the whole library rather than eighty
+                  thousand times. */}
+              {posterHasAuthor && movie.imageLicense && (
                 <>
                   {" ("}
                   {movie.imageLicenseUrl ? (
