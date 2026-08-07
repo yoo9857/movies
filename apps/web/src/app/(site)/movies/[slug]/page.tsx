@@ -25,11 +25,13 @@ import {
   breadcrumbNode,
   type Crumb,
   graph,
+  imageObjectNode,
   itemListNode,
   movieEntityId,
   movieNode,
   pageMetadata,
   posterUrl,
+  primaryImageId,
   reviewEntityId,
   reviewNode,
   topicEntityId,
@@ -280,6 +282,19 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         }
       : null;
 
+  // The artwork, with everything the credit line under the synopsis prints.
+  // Described here rather than left as a bare URL because the page now names
+  // the author and links the licence — the markup may say what the page says.
+  const artwork = imageObjectNode({
+    id: primaryImageId(path),
+    url: movie.image,
+    caption: year ? `${movie.title} (${year})` : movie.title,
+    credit: movie.imageCredit,
+    license: movie.imageLicense,
+    licenseUrl: movie.imageLicenseUrl,
+    sourceUrl: movie.imageSourceUrl,
+  });
+
   const jsonLd = graph(
     webPageNode({
       path,
@@ -291,6 +306,10 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
         (movie.image ? absUrl(movie.image) : null) ??
         backdropUrl(movie.backdropPath, "w1280") ??
         posterUrl(movie.posterPath, "w780"),
+      // Only when the credit is on the page. An uncredited poster stays a bare
+      // URL: a licence the markup claims and the page hides is the drift this
+      // whole file exists to prevent.
+      imageId: artwork && movie.imageCredit ? primaryImageId(path) : undefined,
       dateModified: modified,
       hasBreadcrumb: true,
       aboutId: movieEntityId(movie.slug),
@@ -299,6 +318,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       markdownUrl: `${path}.md`,
     }),
     breadcrumbNode(path, trail),
+    movie.imageCredit ? artwork : undefined,
     movieNode(movie, {
       // personSlug points each credit at that person's page, so the graph
       // resolves one human across the site rather than one per film.
@@ -440,6 +460,48 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
                 </p>
               )}
             </>
+          )}
+          {/* The same obligation as the line above, for the picture rather than
+              the prose. The artwork in `movie.image` is a freely licensed file,
+              and it is on this page twice — the poster beside the score band and
+              the blurred backdrop behind the title, which is the copy a phone
+              gets. Outside the synopsis block on purpose: a film with no
+              synopsis still owes the credit. */}
+          {movie.image && movie.imageCredit && (
+            <p className="mt-2 max-w-[65ch] text-xs text-muted">
+              Poster by{" "}
+              {movie.imageSourceUrl ? (
+                <a
+                  href={movie.imageSourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:opacity-80"
+                >
+                  {movie.imageCredit}
+                </a>
+              ) : (
+                movie.imageCredit
+              )}
+              {movie.imageLicense && (
+                <>
+                  {" ("}
+                  {movie.imageLicenseUrl ? (
+                    <a
+                      href={movie.imageLicenseUrl}
+                      target="_blank"
+                      rel="license noopener noreferrer"
+                      className="text-accent hover:opacity-80"
+                    >
+                      {movie.imageLicense}
+                    </a>
+                  ) : (
+                    movie.imageLicense
+                  )}
+                  {")"}
+                </>
+              )}
+              .
+            </p>
           )}
           {/* Ours before the imported: the axes this film sits on, each with
               the sentence that put it there. A film page that showed only TMDB
