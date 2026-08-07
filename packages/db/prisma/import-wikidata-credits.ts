@@ -3,6 +3,7 @@
 //   npm run db:import-wikidata-credits                  # 500 films, most documented first
 //   npm run db:import-wikidata-credits -- --limit=5000
 //   npm run db:import-wikidata-credits -- --limit=50 --dry
+//   npm run db:import-wikidata-credits -- --qids=Q133397105,Q136773033
 //
 // The bulk film import deliberately fetched one row per film: adding twenty cast
 // members to each query multiplies the result set by twenty and pushes the whole
@@ -19,6 +20,7 @@
 // the admin's "Enrich all" already does.
 import "./env";
 import { prisma } from "../src/index";
+import { Prisma } from "../src/generated/client";
 import { linkCreditsToPeople } from "../src/people-link";
 
 const ENDPOINT = "https://query.wikidata.org/sparql";
@@ -33,6 +35,12 @@ function arg(name: string, fallback: number): number {
 const LIMIT = arg("limit", 500);
 const BATCH = Math.min(arg("batch", 40), 100);
 const DRY = process.argv.includes("--dry");
+const TARGET_QIDS = (
+  process.argv.find((a) => a.startsWith("--qids="))?.slice("--qids=".length) ?? ""
+)
+  .split(",")
+  .map((qid) => qid.trim())
+  .filter((qid) => /^Q[1-9][0-9]*$/.test(qid));
 /**
  * Cast only, for films that already have crew.
  *
@@ -186,7 +194,16 @@ async function main() {
   // Films worth filling in first: the ones carrying our own writing, then the
   // most widely documented. `sitelinks` is null for anything imported before that
   // column existed, and NULLS LAST puts those at the back rather than the front.
-  const films = MISSING_CAST
+  const films = TARGET_QIDS.length > 0
+    ? await prisma.$queryRaw<{ id: string; wikidataId: string; title: string }[]>`
+        SELECT m.id, m."wikidataId", m.title
+        FROM "Movie" m
+        WHERE m."wikidataId" IN (${Prisma.join(TARGET_QIDS)})
+          AND NOT EXISTS (SELECT 1 FROM "MovieCast" c WHERE c."movieId" = m.id)
+          AND NOT EXISTS (SELECT 1 FROM "MovieCrew" w WHERE w."movieId" = m.id)
+        ORDER BY m."wikidataSitelinks" DESC NULLS LAST, m."releaseDate" DESC NULLS LAST
+      `
+    : MISSING_CAST
     ? await prisma.$queryRaw<{ id: string; wikidataId: string; title: string }[]>`
         SELECT m.id, m."wikidataId", m.title
         FROM "Movie" m
