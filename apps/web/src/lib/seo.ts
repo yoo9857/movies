@@ -303,7 +303,7 @@ const CREDIT_PREFIX = /^(photo(graph)?s?|image|picture|still)s?\s*(by\s+|[:—-]
  * institution word makes unambiguous.
  */
 const ORGANISATION_CREDIT =
-  /\b(inc|llc|ltd|plc|gmbh|corp|corporation|company|studios?|pictures|productions?|entertainment|media|press|news|agency|agence|archives?|library|museum|foundation|institute|university|ministry|department|bureau|council|festival|network|broadcasting|television|associated|reuters|getty|shutterstock|nasa|wikimedia|commons|youtube)\b/i;
+  /\b(inc|llc|ltd|plc|gmbh|corp|corporation|company|studios?|pictures|films?|productions?|entertainment|photography|media|press|news|agency|agence|archives?|librar(y|ies)|museums?|foundations?|institutes?|universit(y|ies)|ministry|department|bureau|councils?|festivals?|networks?|broadcasting|television|records|associated|reuters|getty|shutterstock|nasa|wikimedia|commons|youtube)\b/i;
 
 /** The name inside a credit line: who took it, stripped of the grammar. */
 function creditedName(credit: string | undefined): string | undefined {

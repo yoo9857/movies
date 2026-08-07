@@ -201,11 +201,24 @@ describe("the hero carries its terms", () => {
   });
 
   it("names a credited body an Organization rather than a person", () => {
-    const image = node({ ...LICENSED, imageCredit: "Getty Images" }).image as Record<
-      string,
-      unknown
-    >;
-    expect(image.creator).toEqual({ "@type": "Organization", name: "Getty Images" });
+    // Commons credits an outfit as readily as a photographer, and plurals are
+    // the common case: "Super Festivals", "National Archives", "Ghibli Films".
+    for (const credit of [
+      "Getty Images",
+      "Super Festivals from Ft. Lauderdale, USA",
+      "National Archives",
+      "Paramount Pictures",
+    ]) {
+      const image = node({ ...LICENSED, imageCredit: credit }).image as Record<string, unknown>;
+      expect((image.creator as { "@type": string })["@type"]).toBe("Organization");
+    }
+  });
+
+  it("still reads a photographer's name as a person", () => {
+    for (const credit of ["Gage Skidmore", "Georges Biard", "Photograph by Sun Ye-jin"]) {
+      const image = node({ ...LICENSED, imageCredit: credit }).image as Record<string, unknown>;
+      expect((image.creator as { "@type": string })["@type"]).toBe("Person");
+    }
   });
 
   it("credits the channel, not the platform, for a rehosted video frame", () => {
