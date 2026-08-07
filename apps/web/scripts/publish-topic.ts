@@ -14,7 +14,12 @@
 //                        phrasing is not a photograph's (default: the topic)
 //   --images=N           pictures to place (default 6)
 //   --news=N             articles to cite (default 6)
-//   --youtube=<url>      a video: cited as a source and embedded in the piece
+//   --youtube=<url>      repeatable; cited and used as a credited thumbnail
+//                        when licensed photographs do not fill the page
+//   --social=<url>       repeatable X status / Instagram post; embedded from
+//                        the platform (the photograph is never copied)
+//   --min-pictures=N     publication floor, hero included (default 4)
+//   --allow-few-pictures publish below that floor as a deliberate exception
 //   --brief=<file>       facts an operator vouches for, when the outlets refuse
 //                        an automated read (Naver and the Korean press always do)
 //   --prose=<file.md>    skip generation, use this Markdown (the workstation
@@ -51,11 +56,23 @@ import {
   photoPlan,
   rhythmCapacity,
 } from "@/lib/gather-sources";
-import { youtubeVideoId, youtubeWatchUrl } from "@/lib/post-image-sources";
+import {
+  instagramEmbedUrl,
+  xStatusId,
+  youtubeVideoId,
+  youtubeWatchUrl,
+} from "@/lib/post-image-sources";
+import { DEFAULT_MIN_POST_PICTURES, minimumPictureMessage } from "@/lib/post-visuals";
 
 function strArg(name: string): string | null {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
   return hit ? hit.split("=").slice(1).join("=") : null;
+}
+function strArgs(name: string): string[] {
+  return process.argv
+    .filter((a) => a.startsWith(`--${name}=`))
+    .map((a) => a.split("=").slice(1).join("=").trim())
+    .filter(Boolean);
 }
 const listArg = (name: string) => (strArg(name) ?? "").split(",").filter(Boolean);
 const numArg = (name: string, fallback: number) =>
@@ -78,11 +95,14 @@ const FILMS = listArg("films");
 const IMAGE_QUERY = strArg("image-query");
 const IMAGES = numArg("images", 6);
 const NEWS = numArg("news", 6);
-const YOUTUBE = strArg("youtube");
+const YOUTUBES = [...new Set(strArgs("youtube"))];
+const SOCIALS = [...new Set(strArgs("social"))];
 const BRIEF = strArg("brief");
 const PROSE = strArg("prose");
 const PUBLISH = process.argv.includes("--publish");
 const DRY = process.argv.includes("--dry");
+const ALLOW_FEW_PICTURES = process.argv.includes("--allow-few-pictures");
+const MIN_PICTURES = numArg("min-pictures", DEFAULT_MIN_POST_PICTURES);
 
 const SOURCED = ["PEOPLE", "ISSUE"];
 
@@ -142,11 +162,27 @@ async function main() {
 
   /* 1 ── gather */
   console.log(`Gathering "${TOPIC}"…`);
-  let video: { watch: string; title: string | null } | null = null;
-  if (YOUTUBE) {
-    const id = youtubeVideoId(YOUTUBE);
-    if (!id) throw new Error(`not a YouTube video URL: ${YOUTUBE}`);
-    video = { watch: youtubeWatchUrl(id), title: null };
+  if (!Number.isInteger(MIN_PICTURES) || MIN_PICTURES < 0) {
+    throw new Error("--min-pictures must be a non-negative integer");
+  }
+  const videos = await Promise.all(
+    YOUTUBES.map(async (url) => {
+      const id = youtubeVideoId(url);
+      if (!id) throw new Error(`not a YouTube video URL: ${url}`);
+      const watch = youtubeWatchUrl(id);
+      const res = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(watch)}&format=json`,
+        { headers: { "User-Agent": "CinePixo/1.0 (+https://cinepixo.com)" } },
+      ).catch(() => null);
+      if (!res?.ok) throw new Error(`YouTube does not answer for ${id}`);
+      const meta = (await res.json()) as { title?: string };
+      return { watch, title: meta.title?.trim() || TOPIC! };
+    }),
+  );
+  for (const url of SOCIALS) {
+    if (!xStatusId(url) && !instagramEmbedUrl(url)) {
+      throw new Error(`not an X status or Instagram post URL: ${url}`);
+    }
   }
   /**
    * Who the pictures should be of: the operator's steer first, then everyone
@@ -179,7 +215,7 @@ async function main() {
         })
       : gatherPhotos(IMAGE_QUERY ?? TOPIC, IMAGES),
   ]);
-  const sources = [...news.map((a) => a.url), ...(video ? [video.watch] : [])];
+  const sources = [...news.map((a) => a.url), ...videos.map((v) => v.watch), ...SOCIALS];
 
   console.log(`  ${news.length} article(s), newest first:`);
   for (const a of news) console.log(`    ${a.date}  ${a.host}  ${a.title.slice(0, 80)}`);
@@ -190,6 +226,19 @@ async function main() {
       `    none matched ${subjects.length ? subjects.join(" / ") : `"${IMAGE_QUERY ?? TOPIC}"`}` +
         " — try --image-query with a plain name",
     );
+  }
+  if (videos.length > 0) console.log(`  ${videos.length} operator-approved YouTube thumbnail(s)`);
+  if (SOCIALS.length > 0) console.log(`  ${SOCIALS.length} X/Instagram post embed(s)`);
+  const availablePictures = photos.length + videos.length;
+  if (availablePictures < MIN_PICTURES) {
+    const message = minimumPictureMessage(availablePictures, MIN_PICTURES);
+    if (PUBLISH && !ALLOW_FEW_PICTURES) {
+      throw new Error(
+        `${message}. Supply repeatable --youtube=<url> fallbacks, tune --image-query, ` +
+          "or pass --allow-few-pictures for a deliberate exception.",
+      );
+    }
+    console.warn(`  WARNING: ${message}`);
   }
   if (SOURCED.includes(CATEGORY) && sources.length === 0) {
     throw new Error(`${CATEGORY} needs at least one source and the gather found none`);
@@ -248,7 +297,10 @@ async function main() {
       // until the piece exists — so this is the shape against a typical five,
       // trimmed the same way the real run trims it.
       const typical = ["a", "b", "c", "d", "e"];
-      const body = Math.min(Math.max(0, photos.length - 1), rhythmCapacity(typical));
+      const body = Math.min(
+        Math.max(0, photos.length + videos.length - 1),
+        rhythmCapacity(typical),
+      );
       const shape = photoPlan(typical, body)
         .map((r) => r.take)
         .join(" / ");
@@ -278,69 +330,97 @@ async function main() {
     console.log(`\nDrafted /blog/${created.slug}`);
 
     /* 3 ── illustrate */
-    if (photos.length > 0) {
+    if (photos.length + videos.length > 0) {
       const headings = [...created.content.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+      type Picture =
+        | { kind: "photo"; value: Photo }
+        | { kind: "youtube"; value: (typeof videos)[number] };
+      const candidates: Picture[] = [
+        ...photos.map((value): Picture => ({ kind: "photo", value })),
+        ...videos.map((value): Picture => ({ kind: "youtube", value })),
+      ];
       // Exactly what the rhythm holds, and no more. `photoPlan` never drops a
       // picture, so a generous gather used to end 1 / 2 / 2 / 7 — the overflow
       // stacked under the last heading, which is the layout the rhythm exists
       // to avoid. The extras are left ungathered rather than dumped.
-      const [hero, ...rest] = photos.slice(0, 1 + rhythmCapacity(headings));
+      const capacity = Math.max(rhythmCapacity(headings), MIN_PICTURES - 1);
+      const [hero, ...rest] = candidates.slice(0, 1 + capacity);
       const plan = photoPlan(headings, rest.length);
-      if (photos.length > 1 + rest.length) {
+      if (candidates.length > 1 + rest.length) {
         console.log(
-          `  ${photos.length - 1 - rest.length} picture(s) held back: ` +
+          `  ${candidates.length - 1 - rest.length} picture(s) held back: ` +
             `${headings.length} heading(s) hold ${rest.length} in the body`,
         );
       }
 
-      console.log(`\nHero: ${hero.title.slice(0, 70)}`);
-      step("fill-post-images.ts", [
-        `--post=${created.slug}`,
-        `--url=${hero.url}`,
-        `--alt=${clampField(photoAlt(hero.description, hero.title, hero.subject), 300)}`,
-        ...(hero.credit ? [`--credit=${clampField(hero.credit, 300)}`] : []),
-        `--license=${hero.license}`,
-        ...(hero.licenseUrl ? [`--license-url=${hero.licenseUrl}`] : []),
-        `--source-url=${hero.sourceUrl}`,
-      ]);
+      if (hero.kind === "photo") {
+        const p = hero.value;
+        console.log(`\nHero: ${p.title.slice(0, 70)}`);
+        step("fill-post-images.ts", [
+          `--post=${created.slug}`,
+          `--url=${p.url}`,
+          `--alt=${clampField(photoAlt(p.description, p.title, p.subject), 300)}`,
+          ...(p.credit ? [`--credit=${clampField(p.credit, 300)}`] : []),
+          `--license=${p.license}`,
+          ...(p.licenseUrl ? [`--license-url=${p.licenseUrl}`] : []),
+          `--source-url=${p.sourceUrl}`,
+        ]);
+      } else {
+        console.log(`\nHero: ${hero.value.title.slice(0, 70)} (YouTube thumbnail)`);
+        step("fill-post-images.ts", [
+          `--post=${created.slug}`,
+          `--youtube=${hero.value.watch}`,
+          `--alt=${clampField(hero.value.title, 300)}`,
+        ]);
+      }
 
       const jobs: unknown[] = [];
       // The video first and on its own heading, never sharing one with a photo
       // row: two blocks at the same `at` are spliced at the same index, and the
       // second one lands above the first — which read as the jobs file inverted.
-      if (video) {
-        jobs.push({ post: created.slug, youtube: video.watch, embed: true, ...(plan[1]?.at ? { at: plan[1].at } : {}) });
-      }
+      const pictureJob = (picture: Picture, at?: string) => {
+        if (picture.kind === "youtube") {
+          return {
+            post: created.slug,
+            ...(at ? { at } : {}),
+            youtube: picture.value.watch,
+            alt: clampField(picture.value.title, 300),
+          };
+        }
+        const p = picture.value;
+        return {
+          post: created.slug,
+          ...(at ? { at } : {}),
+          url: p.url,
+          alt: clampField(photoAlt(p.description, p.title, p.subject), 300),
+          ...(p.credit ? { credit: clampField(p.credit, 300) } : {}),
+          license: p.license,
+          ...(p.licenseUrl ? { licenseUrl: p.licenseUrl } : {}),
+          sourceUrl: p.sourceUrl,
+        };
+      };
       let i = 0;
       for (const row of plan) {
         for (let n = 0; n < row.take && i < rest.length; n++, i++) {
-          const p = rest[i];
-          jobs.push({
-            post: created.slug,
-            at: row.at,
-            url: p.url,
-            alt: clampField(photoAlt(p.description, p.title, p.subject), 300),
-            ...(p.credit ? { credit: clampField(p.credit, 300) } : {}),
-            license: p.license,
-            ...(p.licenseUrl ? { licenseUrl: p.licenseUrl } : {}),
-            sourceUrl: p.sourceUrl,
-          });
+          jobs.push(pictureJob(rest[i], row.at));
         }
       }
       // Anything the rhythm had no room for still goes in, at the end — the
       // no-dropping rule, which `photoPlan` cannot honour when a piece has no
       // `##` headings at all and it returns an empty plan.
       for (; i < rest.length; i++) {
-        const p = rest[i];
-        jobs.push({
-          post: created.slug,
-          url: p.url,
-          alt: clampField(p.title.replace(/_/g, " "), 300),
-          ...(p.credit ? { credit: clampField(p.credit, 300) } : {}),
-          license: p.license,
-          ...(p.licenseUrl ? { licenseUrl: p.licenseUrl } : {}),
-          sourceUrl: p.sourceUrl,
-        });
+        jobs.push(pictureJob(rest[i]));
+      }
+      for (let n = 0; n < SOCIALS.length; n++) {
+        const at = headings.length
+          ? headings[
+              Math.min(
+                headings.length - 1,
+                Math.floor(((n + 1) * headings.length) / (SOCIALS.length + 1)),
+              )
+            ]
+          : undefined;
+        jobs.push({ post: created.slug, url: SOCIALS[n], embed: true, ...(at ? { at } : {}) });
       }
 
       if (jobs.length === 0) {
@@ -355,12 +435,30 @@ async function main() {
     }
 
     /* 4 ── publish, or leave it for a person */
-    if (PUBLISH) {
-      await prisma.post.update({
-        where: { slug: created.slug },
-        data: { status: "PUBLISHED", publishedAt: new Date() },
+    if (photos.length + videos.length === 0 && SOCIALS.length > 0) {
+      const headings = [...created.content.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+      const jobs = SOCIALS.map((url, n) => {
+        const at = headings.length
+          ? headings[
+              Math.min(
+                headings.length - 1,
+                Math.floor(((n + 1) * headings.length) / (SOCIALS.length + 1)),
+              )
+            ]
+          : undefined;
+        return { post: created.slug, url, embed: true, ...(at ? { at } : {}) };
       });
-      console.log(`\nPUBLISHED /blog/${created.slug}`);
+      const bodyFile = path.join(dir, "body-social.json");
+      writeFileSync(bodyFile, JSON.stringify(jobs, null, 2));
+      step("fill-post-images.ts", [`--body=${bodyFile}`]);
+    }
+
+    if (PUBLISH) {
+      step("publish-post.ts", [
+        created.slug,
+        `--min-pictures=${MIN_PICTURES}`,
+        ...(ALLOW_FEW_PICTURES ? ["--allow-few-pictures"] : []),
+      ]);
     } else {
       console.log(
         `\nLeft as a draft: /blog/${created.slug}\n` +

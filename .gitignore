@@ -34,6 +34,13 @@ packages/db/src/generated/
 # locally-stored uploads (object storage takes over when configured)
 var/uploads/
 
+# local editorial research and thumbnail candidates inspected before publishing
+/nate*.html
+/var/*.html
+/var/*-thumbs/
+/var/tmp-blog-thumbs/
+/var/*-commit-message.txt
+
 # persona portrait sources (registered to server storage; not repo assets)
 /Amara.png
 /Dorothy.png

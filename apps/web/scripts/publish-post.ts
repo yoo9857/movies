@@ -3,6 +3,7 @@
 //   cd apps/web && npx tsx scripts/publish-post.ts <slug>
 //   npx tsx scripts/publish-post.ts <slug> --unpublish
 //   npx tsx scripts/publish-post.ts <slug> --ping        # resubmit, no status change
+//   npx tsx scripts/publish-post.ts <slug> --allow-few-pictures
 //
 // Separate from everything that writes, because `Post_claims_are_sourced` can
 // prove a citation exists and nothing in a database can prove the prose is
@@ -16,11 +17,27 @@ import "../../../packages/db/prisma/env";
 import { prisma } from "@cinepixo/db";
 import { type PostCategory, postCategorySlug } from "@cinepixo/shared";
 import { submitUrls } from "@/lib/indexnow";
+import {
+  DEFAULT_MIN_POST_PICTURES,
+  minimumPictureMessage,
+  postPictureCount,
+} from "@/lib/post-visuals";
 
 const SLUG = process.argv[2];
 const UNPUBLISH = process.argv.includes("--unpublish");
 /** Resubmit an already-published piece — after an edit, or a first key. */
 const PING = process.argv.includes("--ping");
+const ALLOW_FEW_PICTURES = process.argv.includes("--allow-few-pictures");
+
+function numArg(name: string, fallback: number): number {
+  const raw = process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
+  if (raw == null) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) throw new Error(`--${name} must be a non-negative integer`);
+  return value;
+}
+
+const MIN_PICTURES = numArg("min-pictures", DEFAULT_MIN_POST_PICTURES);
 
 /**
  * The piece is live at its own URL immediately; the listings that link to it
@@ -96,7 +113,9 @@ async function main() {
   console.log(`  subjects   ${[...post.people.map((p) => p.person.slug), ...post.movies.map((m) => m.movie.slug)].join(", ") || "none"}`);
   console.log(`  sources    ${post.sources.length}`);
   for (const s of post.sources) console.log(`             ${s}`);
-  console.log(`  pictures   ${(post.content.match(/!\[/g) ?? []).length} in the body, hero ${post.image ? "set" : "MISSING"}`);
+  const bodyPictures = (post.content.match(/!\[/g) ?? []).length;
+  const pictures = postPictureCount(post.content, post.image);
+  console.log(`  pictures   ${bodyPictures} in the body, hero ${post.image ? "set" : "MISSING"} (${pictures} total)`);
   if (post.image && !post.imageCredit) console.log("             hero has no credit line");
   if (post.image && !post.imageLicense) console.log("             hero states no licence (fine for our own file)");
 
@@ -109,6 +128,19 @@ async function main() {
     }
     console.log("\nalready published — nothing to do (--ping to resubmit it)");
     return;
+  }
+
+  const pictureLayoutIsShort =
+    pictures < MIN_PICTURES ||
+    (MIN_PICTURES > 0 && !post.image) ||
+    bodyPictures < Math.max(0, MIN_PICTURES - 1);
+  if (pictureLayoutIsShort && !ALLOW_FEW_PICTURES) {
+    throw new Error(
+      minimumPictureMessage(pictures, MIN_PICTURES) +
+        `; found ${post.image ? "one hero" : "no hero"} and ${bodyPictures} in the body` +
+        ". Add licensed photographs or operator-approved YouTube thumbnails with post-images; " +
+        "X and Instagram posts must be embedded. Use --allow-few-pictures only for a deliberate exception.",
+    );
   }
 
   const updated = await prisma.post.update({
