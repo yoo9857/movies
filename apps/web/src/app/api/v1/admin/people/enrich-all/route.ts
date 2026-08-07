@@ -185,6 +185,7 @@ export const POST = handle(async (request: Request) => {
           birthDate: day(found.facts?.birthDate ?? null),
           deathDate: day(found.facts?.deathDate ?? null),
           birthPlace: found.facts?.birthPlace ?? null,
+          deathPlace: found.facts?.deathPlace ?? null,
           occupations: found.facts?.occupations ?? [],
           ...(image !== person.image ? { image, ...credit } : {}),
         },

@@ -14,6 +14,7 @@ export interface PersonDraft {
   bio: string;
   notes: string;
   birthPlace: string;
+  deathPlace: string;
   birthDate: string;
   deathDate: string;
   links: { label: string; url: string }[];
@@ -151,6 +152,15 @@ export function PersonForm({
             maxLength={160}
             value={v.birthPlace}
             onChange={(e) => set("birthPlace", e.target.value)}
+            className={input}
+          />
+        </label>
+        <label className={label}>
+          <span className="text-muted">Place of death</span>
+          <input
+            maxLength={160}
+            value={v.deathPlace}
+            onChange={(e) => set("deathPlace", e.target.value)}
             className={input}
           />
         </label>

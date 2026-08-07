@@ -392,6 +392,7 @@ export interface PersonExport {
   birthDate: Nullable<Date>;
   deathDate: Nullable<Date>;
   birthPlace: Nullable<string>;
+  deathPlace: Nullable<string>;
   occupations: readonly string[];
   wikipediaUrl: Nullable<string>;
   wikidataId: Nullable<string>;
@@ -442,6 +443,7 @@ export function personToMarkdown(person: PersonExport): string {
     ["born", isoDay(person.birthDate)],
     ["died", isoDay(person.deathDate)],
     ["birthplace", person.birthPlace],
+    ["deathplace", person.deathPlace],
     ["films_in_library", person.films.length],
     ["reviews_of_their_work", totalReviews],
     [

@@ -171,6 +171,7 @@ export interface WikiFacts {
   birthDate: string | null;
   deathDate: string | null;
   birthPlace: string | null;
+  deathPlace: string | null;
   occupations: string[];
   imdbId: string | null;
   /** Commons file name for the portrait, e.g. "Damien Chazelle (cropped).jpg". */
@@ -187,12 +188,13 @@ export async function facts(wikidataId: string): Promise<WikiFacts | null> {
   if (!claims) return null;
 
   const placeId = qid(claimValue(claims, "P19"));
+  const deathPlaceId = qid(claimValue(claims, "P20"));
   const occupationIds = (claims.P106 ?? [])
     .map((c) => qid(c.mainsnak?.datavalue?.value))
     .filter((id): id is string => Boolean(id))
     .slice(0, 6);
 
-  const labels = await labelsFor([placeId, ...occupationIds].filter((v): v is string => Boolean(v)));
+  const labels = await labelsFor([placeId, deathPlaceId, ...occupationIds].filter((v): v is string => Boolean(v)));
 
   const imdb = claimValue(claims, "P345");
 
@@ -201,6 +203,7 @@ export async function facts(wikidataId: string): Promise<WikiFacts | null> {
     birthDate: wikidataDay(claimValue(claims, "P569")),
     deathDate: wikidataDay(claimValue(claims, "P570")),
     birthPlace: placeId ? (labels.get(placeId) ?? null) : null,
+    deathPlace: deathPlaceId ? (labels.get(deathPlaceId) ?? null) : null,
     occupations: occupationIds
       .map((id) => labels.get(id))
       .filter((l): l is string => Boolean(l)),

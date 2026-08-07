@@ -45,6 +45,7 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
       bio: input.bio ?? null,
       notes: input.notes ?? null,
       birthPlace: input.birthPlace ?? null,
+      deathPlace: input.deathPlace ?? null,
       birthDate: input.birthDate ? new Date(input.birthDate) : null,
       deathDate: input.deathDate ? new Date(input.deathDate) : null,
       // An empty list means "remove every link" — undefined would mean "keep

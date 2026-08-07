@@ -85,6 +85,7 @@ export async function GET(
       birthDate: person.birthDate,
       deathDate: person.deathDate,
       birthPlace: person.birthPlace,
+      deathPlace: person.deathPlace,
       occupations: person.occupations,
       wikipediaUrl: person.wikipediaUrl,
       wikidataId: person.wikidataId,

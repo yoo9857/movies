@@ -64,6 +64,7 @@ export const POST = handle(async (request: Request, ctx: { params: Promise<{ id:
       birthDate: true,
       deathDate: true,
       birthPlace: true,
+      deathPlace: true,
       occupations: true,
       imdbId: true,
     },
@@ -124,6 +125,7 @@ export const POST = handle(async (request: Request, ctx: { params: Promise<{ id:
       birthDate: person.birthDate ?? day(found.facts?.birthDate ?? null),
       deathDate: person.deathDate ?? day(found.facts?.deathDate ?? null),
       birthPlace: person.birthPlace ?? found.facts?.birthPlace ?? null,
+      deathPlace: person.deathPlace ?? found.facts?.deathPlace ?? null,
       occupations:
         person.occupations.length > 0 ? person.occupations : (found.facts?.occupations ?? []),
       ...(image !== person.image
@@ -139,6 +141,7 @@ export const POST = handle(async (request: Request, ctx: { params: Promise<{ id:
       birthDate: true,
       deathDate: true,
       birthPlace: true,
+      deathPlace: true,
       occupations: true,
       wikidataId: true,
       wikipediaUrl: true,

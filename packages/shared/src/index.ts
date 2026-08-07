@@ -187,6 +187,7 @@ export const personInputSchema = z.object({
   /** Career notes: collaborators, what to watch first — our editorial voice. */
   notes: optionalText(4000),
   birthPlace: optionalText(160),
+  deathPlace: optionalText(160),
   birthDate: optionalDay,
   deathDate: optionalDay,
   links: z.array(criticLinkSchema).max(10).default([]),

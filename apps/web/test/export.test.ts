@@ -90,6 +90,7 @@ describe("personToMarkdown", () => {
     birthDate: new Date("1985-01-19"),
     deathDate: null,
     birthPlace: "Providence",
+    deathPlace: null,
     occupations: ["film director", "screenwriter"],
     wikipediaUrl: "https://en.wikipedia.org/wiki/Damien_Chazelle",
     wikidataId: "Q18350026",
@@ -132,6 +133,16 @@ describe("personToMarkdown", () => {
     expect(md).toContain("wikidata: 'Q18350026'");
     expect(md).toContain("imdb: 'https://www.imdb.com/name/nm3227090/'");
     expect(md).toContain("canonical: 'http://localhost:3000/people/damien-chazelle'");
+  });
+
+  it("exports a sourced place of death when known", () => {
+    const md = personToMarkdown({
+      ...person,
+      deathDate: new Date("2020-01-01"),
+      deathPlace: "Rancho Santa Fe, San Diego County",
+    });
+    expect(md).toContain("died: '2020-01-01'");
+    expect(md).toContain("deathplace: 'Rancho Santa Fe, San Diego County'");
   });
 
   it("carries this site's numbers and links the entities", () => {

@@ -243,6 +243,7 @@ model Person {
   birthDate DateTime? @db.Date
   deathDate DateTime? @db.Date
   birthPlace String?
+  deathPlace String?
   /// Occupations as labels ("film director", "screenwriter"), from Wikidata.
   occupations String[]
   /// Off-site profiles for schema.org sameAs — identity claims, so real ones only.

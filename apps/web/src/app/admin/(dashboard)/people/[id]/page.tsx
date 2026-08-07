@@ -108,6 +108,7 @@ export default async function AdminPersonPage(props: { params: Promise<{ id: str
           bio: person.bio ?? "",
           notes: person.notes ?? "",
           birthPlace: person.birthPlace ?? "",
+          deathPlace: person.deathPlace ?? "",
           birthDate: day(person.birthDate),
           deathDate: day(person.deathDate),
           links,
