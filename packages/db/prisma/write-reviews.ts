@@ -30,6 +30,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import "./env";
+import { jobFile } from "./job-file";
 import { prisma } from "../src/index";
 
 function arg(name: string, fallback: number): number {
@@ -143,7 +144,7 @@ const handwrittenSchema = draftSchema.extend({
 });
 
 function loadDrafts(file: string): z.infer<typeof handwrittenSchema>[] {
-  return z.array(handwrittenSchema).min(1).parse(JSON.parse(readFileSync(file, "utf8")));
+  return z.array(handwrittenSchema).min(1).parse(JSON.parse(readFileSync(jobFile(file), "utf8")));
 }
 
 function reviewSlug(title: string, movieSlug: string): string {

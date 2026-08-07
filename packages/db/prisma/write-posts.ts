@@ -36,6 +36,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import "./env";
+import { jobFile } from "./job-file";
 import { prisma } from "../src/index";
 
 function strArg(name: string): string | null {
@@ -284,12 +285,12 @@ async function main() {
     ? z
         .array(sourceJobSchema)
         .min(1)
-        .parse(JSON.parse(readFileSync(SOURCES, "utf8")))
+        .parse(JSON.parse(readFileSync(jobFile(SOURCES), "utf8")))
         .map((job) => ({ job, ready: null as z.infer<typeof handwrittenSchema> | null }))
     : z
         .array(handwrittenSchema)
         .min(1)
-        .parse(JSON.parse(readFileSync(DRAFTS!, "utf8")))
+        .parse(JSON.parse(readFileSync(jobFile(DRAFTS!), "utf8")))
         .map((ready) => ({
           job: {
             sources: ready.sources,
