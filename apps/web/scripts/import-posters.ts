@@ -1,6 +1,7 @@
 // Every film's poster, from its own Wikipedia article — onto our storage.
 //
 //   npm run posters -w web -- --limit=500
+//   npm run posters -w web -- --offset=500 --limit=500
 //   npm run posters -w web -- --film=spider-man-brand-new-day-2026
 //   npm run posters -w web -- --sources=../../deploy-jobs/movie-artwork-sources.json
 //
@@ -36,6 +37,7 @@ function strArg(name: string): string | null {
 }
 
 const LIMIT = arg("limit", 500);
+const OFFSET = arg("offset", 0);
 /** upload.wikimedia.org throttles image fetches; 1200ms held for the portraits. */
 const PACE = arg("pace", 1200);
 const FILM = strArg("film");
@@ -250,6 +252,7 @@ async function main() {
         ? { image: null, wikipediaUrl: null, wikidataId: { not: null } }
         : { image: null, wikipediaUrl: { not: null } },
     orderBy: [{ wikidataSitelinks: "desc" }, { releaseDate: "desc" }],
+    skip: FILM ? 0 : OFFSET,
     take: FILM ? 1 : LIMIT,
     select: { id: true, slug: true, title: true, wikipediaUrl: true, wikidataId: true },
   });
