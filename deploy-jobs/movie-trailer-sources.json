@@ -16,5 +16,6 @@
   { "slug": "inside-out-2-2024", "wikidataId": "Q113877606", "imdbId": "tt22022452", "youtubeKey": "LEjhY15eCx0", "channel": "Pixar" },
   { "slug": "emilia-perez-2024", "wikidataId": "Q123928072", "imdbId": "tt20221436", "youtubeKey": "lwH9f1jmkBc", "channel": "Pathe" },
   { "slug": "conclave-2024", "wikidataId": "Q116701124", "imdbId": "tt20215234", "youtubeKey": "JX9jasdi3ic", "channel": "Focus Features" },
-  { "slug": "la-la-land-2016", "wikidataId": "Q20856802", "imdbId": "tt3783958", "youtubeKey": "0pdqf4P9MB8", "channel": "Lionsgate Movies" }
+  { "slug": "la-la-land-2016", "wikidataId": "Q20856802", "imdbId": "tt3783958", "youtubeKey": "0pdqf4P9MB8", "channel": "Lionsgate Movies" },
+  { "slug": "wolfy-the-incredible-secret-2013", "wikidataId": "Q16661378", "imdbId": "tt3400214", "youtubeKey": "iMM43YSP2kU", "channel": "Pathé Cinémas" }
 ]
