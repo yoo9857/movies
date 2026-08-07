@@ -1,9 +1,15 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   definedTermNode,
   definedTermSetNode,
   graph,
+  IMAGE_TERMS_PATH,
+  imageObjectNode,
+  LOGO_ID,
   movieNode,
+  ORG_ID,
+  organizationNode,
   topicEntityId,
   TOPIC_SET_ID,
 } from "@/lib/seo";
@@ -159,5 +165,58 @@ describe("movieNode image", () => {
       unknown
     >;
     expect(node.image).toBe(bucket);
+  });
+});
+
+/**
+ * Google's image-metadata report reads five properties off an `ImageObject`
+ * and reports the missing ones per URL. The site logo carries `contentUrl` and
+ * appears on every page, which is why a gap there was reported as three issues
+ * across the whole site on 2026-08-07 — and why it is pinned here.
+ */
+describe("the logo is a fully described image", () => {
+  const logo = () =>
+    (organizationNode() as unknown as Record<string, unknown>).logo as Record<string, unknown>;
+
+  it("keeps its identity, its file and its dimensions", () => {
+    expect(logo()["@id"]).toBe(LOGO_ID);
+    expect(logo().url).toBe("http://localhost:3000/logo.png");
+    expect(logo().contentUrl).toBe("http://localhost:3000/logo.png");
+    expect(logo().width).toBe(256);
+  });
+
+  it("names the five properties the image metadata feature reads", () => {
+    expect(logo().creditText).toBe("CinePixo");
+    // Our own mark: the Organization in this same graph made it.
+    expect(logo().creator).toEqual({ "@id": ORG_ID });
+    expect(logo().copyrightNotice).toBe("© CinePixo");
+    expect(logo().license).toBe(`http://localhost:3000${IMAGE_TERMS_PATH}`);
+    expect(logo().acquireLicensePage).toBe("http://localhost:3000/contact");
+  });
+
+  it("points `license` at a section the terms page actually anchors", () => {
+    // `/terms#artwork` is a promise to a crawler; the page has to keep it.
+    const terms = readFileSync(
+      new URL("../src/app/(site)/terms/page.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(IMAGE_TERMS_PATH).toBe("/terms#artwork");
+    expect(terms).toContain('id="artwork"');
+  });
+});
+
+describe("imageObjectNode", () => {
+  it("says nothing at all about a file that isn't there", () => {
+    expect(imageObjectNode({ url: null })).toBeUndefined();
+  });
+
+  it("offers no licence page when there is no licence to acquire", () => {
+    const n = imageObjectNode({
+      url: "/uploads/x.webp",
+      credit: "The desk",
+      sourceUrl: "https://example.com/where-it-came-from",
+    })!;
+    expect("acquireLicensePage" in n).toBe(false);
+    expect(n.creditText).toBe("The desk");
   });
 });

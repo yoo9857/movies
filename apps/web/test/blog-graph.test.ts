@@ -149,6 +149,16 @@ describe("the body is included only where the page renders it", () => {
   });
 });
 
+/** A hero as the Commons importer stores one: file, alt, credit, terms, source. */
+const LICENSED: Partial<PostInput> = {
+  image: "/uploads/posts/2026/08/x.webp",
+  imageAlt: "Song Kang-ho at a press call",
+  imageCredit: "Photograph by Someone",
+  imageLicense: "CC BY-SA 4.0",
+  imageLicenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+  imageSourceUrl: "https://commons.wikimedia.org/wiki/File:X.jpg",
+};
+
 describe("the hero carries its terms", () => {
   it("absolutises our path and passes a bucket URL through untouched", () => {
     const local = node({ image: "/uploads/posts/2026/08/x.webp" }).image as Record<string, unknown>;
@@ -159,16 +169,78 @@ describe("the hero carries its terms", () => {
   });
 
   it("keeps credit and licence with the file, as the page renders them", () => {
-    const image = node({
-      image: "/uploads/posts/2026/08/x.webp",
-      imageAlt: "Song Kang-ho at a press call",
-      imageCredit: "Photograph by Someone",
-      imageLicenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
-    }).image as Record<string, unknown>;
+    const image = node(LICENSED).image as Record<string, unknown>;
 
     expect(image.caption).toBe("Song Kang-ho at a press call");
     expect(image.creditText).toBe("Photograph by Someone");
     expect(image.license).toBe("https://creativecommons.org/licenses/by-sa/4.0/");
+  });
+
+  /**
+   * Search Console reported these three as missing on 2026-08-07. Each is
+   * derived from a column the page already prints, so each of them drifting
+   * back out is a regression this file should catch rather than Google.
+   */
+  it("carries all five properties Google's image metadata reads", () => {
+    const image = node(LICENSED).image as Record<string, unknown>;
+
+    expect(image.creditText).toBe("Photograph by Someone");
+    expect(image.creator).toEqual({ "@type": "Person", name: "Someone" });
+    // The holder, not the caption's grammar: "© Photograph by Someone" is not
+    // a copyright notice anyone would print.
+    expect(image.copyrightNotice).toBe("© Someone");
+    expect(image.license).toBe("https://creativecommons.org/licenses/by-sa/4.0/");
+    expect(image.acquireLicensePage).toBe("https://commons.wikimedia.org/wiki/File:X.jpg");
+  });
+
+  it("identifies the hero so the page can point at it instead of copying it", () => {
+    const image = node(LICENSED).image as Record<string, unknown>;
+    expect(image["@id"]).toBe(
+      "http://localhost:3000/blog/song-kang-ho-off-camera#primaryimage",
+    );
+  });
+
+  it("names a credited body an Organization rather than a person", () => {
+    const image = node({ ...LICENSED, imageCredit: "Getty Images" }).image as Record<
+      string,
+      unknown
+    >;
+    expect(image.creator).toEqual({ "@type": "Organization", name: "Getty Images" });
+  });
+
+  it("credits the channel, not the platform, for a rehosted video frame", () => {
+    const image = node({ ...LICENSED, imageCredit: "A24 / YouTube" }).image as Record<
+      string,
+      unknown
+    >;
+    expect((image.creator as { name: string }).name).toBe("A24");
+    expect(image.creditText).toBe("A24 / YouTube");
+  });
+
+  // A © over a work nobody owns is worse than the missing field.
+  it("claims no copyright over a public-domain file", () => {
+    for (const licence of [
+      { imageLicense: "Public domain", imageLicenseUrl: null },
+      { imageLicense: "CC0", imageLicenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/" },
+    ]) {
+      const image = node({ ...LICENSED, ...licence }).image as Record<string, unknown>;
+      expect("copyrightNotice" in image).toBe(false);
+      expect(image.creditText).toBe("Photograph by Someone");
+    }
+  });
+
+  // An operator's own upload states no licence, so it offers none to acquire.
+  it("offers no licence page for a file with no licence", () => {
+    const image = node({
+      image: "/uploads/posts/2026/08/x.webp",
+      imageAlt: "The desk's own photograph",
+      imageCredit: "CinePixo",
+      imageSourceUrl: "https://cinepixo.com/blog/song-kang-ho-off-camera",
+    }).image as Record<string, unknown>;
+
+    expect("license" in image).toBe(false);
+    expect("acquireLicensePage" in image).toBe(false);
+    expect(image.creditText).toBe("CinePixo");
   });
 
   it("omits `image` entirely with no hero", () => {

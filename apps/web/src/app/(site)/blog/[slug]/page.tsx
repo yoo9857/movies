@@ -38,6 +38,7 @@ import {
   peopleEntityId,
   postEntityId,
   postNode,
+  primaryImageId,
   webPageNode,
 } from "@/lib/seo";
 
@@ -334,6 +335,11 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
       description: post.dek,
       kind: "ItemPage",
       image: hosted(post.image),
+      // The hero is described in full on the BlogPosting below — credit,
+      // licence, the page it came from — so this points at that node instead of
+      // repeating the file as a second, thinner ImageObject. A draft emits no
+      // BlogPosting, so on a draft there is nothing to point at.
+      imageId: !draft && post.image ? primaryImageId(path) : undefined,
       datePublished: post.publishedAt,
       dateModified: post.updatedAt,
       hasBreadcrumb: true,
@@ -453,7 +459,17 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
                 <figcaption className="cx-credit mt-2 block">
                   {post.imageAlt}
                   {post.imageAlt && post.imageCredit ? " · " : ""}
-                  {post.imageCredit}
+                  {/* The credit links to the file's own page, as it does under a
+                      portrait. That link is what the markup publishes as
+                      `acquireLicensePage`, and a licence whose terms a reader
+                      cannot reach is an attribution, not a licence. */}
+                  {post.imageCredit && post.imageSourceUrl ? (
+                    <a href={post.imageSourceUrl} target="_blank" rel="noopener noreferrer nofollow">
+                      {post.imageCredit}
+                    </a>
+                  ) : (
+                    post.imageCredit
+                  )}
                   {post.imageLicense && (
                     <>
                       {" ("}

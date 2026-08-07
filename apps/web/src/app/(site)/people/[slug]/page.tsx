@@ -19,12 +19,15 @@ import {
   breadcrumbNode,
   type Crumb,
   graph,
+  hosted,
+  imageObjectNode,
   isoDay,
   itemListNode,
   movieEntityId,
   pageMetadata,
   peopleEntityId,
   postEntityId,
+  primaryImageId,
   webPageNode,
 } from "@/lib/seo";
 
@@ -256,6 +259,10 @@ export async function generateMetadata(props: {
   });
   const role = roles[0] ?? "film worker";
   const years = lifeYears(person.birthDate, person.deathDate);
+  // Put a living person's age in the search snippet as well as the facts
+  // panel. An age at death is already stated next to the death date.
+  const age = ageFrom(person.birthDate, person.deathDate);
+  const ageAnswer = age != null && !person.deathDate ? `Age ${age}.` : null;
   // Only the films actually written about here, so the sentence below can stop
   // promising reviews on the 207,876 pages that have none.
   const reviewedFilms = new Set(
@@ -293,11 +300,12 @@ export async function generateMetadata(props: {
     // false on all but 272 of 208,148 pages, made in the one sentence Google
     // shows. `clamp` cuts this at 158 characters, so the load-bearing half comes
     // first: who they are, when they lived, where they were from.
-    description:
-      person.bio ??
-      [
+    description: [
         `${person.name} — ${roles.slice(0, 2).join(", ") || role}${years ? ` (${years})` : ""}.`,
-        person.birthPlace ? `Born in ${person.birthPlace}.` : null,
+        ageAnswer,
+      person.birthPlace ? `Born in ${person.birthPlace}.` : null,
+      person.deathPlace ? `Died in ${person.deathPlace}.` : null,
+        person.bio,
         `${films} film${films === 1 ? "" : "s"} in the CinePixo library.`,
         reviewedFilms > 0
           ? `${reviewedFilms} reviewed here.`
@@ -305,7 +313,13 @@ export async function generateMetadata(props: {
       ]
         .filter(Boolean)
         .join(" "),
-    keywords: [person.name, `${person.name} films`, `${person.name} reviews`, role],
+    keywords: [
+      person.name,
+      `${person.name} films`,
+      `${person.name} reviews`,
+      ...(ageAnswer ? [`${person.name} age`] : []),
+      role,
+    ],
     noIndex: !ours,
     // A person page is a profile, and it has a clean-markdown sibling.
     ogType: "profile",
@@ -404,6 +418,20 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
   const path = `/people/${person.slug}`;
   const trail: Crumb[] = [{ name: "People", path: "/people" }, { name: person.name }];
 
+  // The photograph, described once with everything the caption under it prints.
+  // A Commons portrait is licensed rather than free, and the properties Google's
+  // image metadata reads are the same three facts the credit line renders: who
+  // took it, who holds the copyright, and where the terms live.
+  const portrait = imageObjectNode({
+    id: primaryImageId(path),
+    url: person.image,
+    caption: person.name,
+    credit: person.imageCredit,
+    license: person.imageLicense,
+    licenseUrl: person.imageLicenseUrl,
+    sourceUrl: person.imageSourceUrl,
+  });
+
   const jsonLd = graph(
     webPageNode({
       path,
@@ -413,18 +441,24 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
       hasBreadcrumb: true,
       aboutId: peopleEntityId(person.slug),
       mainEntityId: peopleEntityId(person.slug),
+      image: hosted(person.image),
+      imageId: portrait ? primaryImageId(path) : undefined,
     }),
     breadcrumbNode(path, trail),
+    portrait,
     {
       "@type": "Person",
       "@id": peopleEntityId(person.slug),
       url: absUrl(path),
       name: person.name,
       ...(person.bio ? { description: person.bio } : {}),
-      ...(person.image ? { image: absUrl(person.image) } : {}),
+      // By `@id`: the described node above is the same photograph, and one file
+      // described twice is how a complete description reads as an incomplete one.
+      ...(portrait ? { image: { "@id": primaryImageId(path) } } : {}),
       ...(person.birthDate ? { birthDate: isoDay(person.birthDate) } : {}),
       ...(person.deathDate ? { deathDate: isoDay(person.deathDate) } : {}),
       ...(person.birthPlace ? { birthPlace: { "@type": "Place", name: person.birthPlace } } : {}),
+      ...(person.deathPlace ? { deathPlace: { "@type": "Place", name: person.deathPlace } } : {}),
       ...(roleLine.length > 0 ? { jobTitle: roleLine } : {}),
       ...(sources.length > 0 ? { sameAs: sources.map((s) => s.url) } : {}),
       // Our own writing about them, by `@id`. `subjectOf` is the property that
@@ -458,6 +492,7 @@ export default async function PersonPage(props: { params: Promise<{ slug: string
       ? ["Born", `${longDate(person.birthDate)}${age != null && !person.deathDate ? ` (age ${age})` : ""}`]
       : null,
     person.deathDate ? ["Died", `${longDate(person.deathDate)}${age != null ? ` (aged ${age})` : ""}`] : null,
+    person.deathPlace ? ["Place of death", person.deathPlace] : null,
     person.birthPlace ? ["From", person.birthPlace] : null,
     roleLine.length > 0 ? ["Known for", roleLine.slice(0, 4).join(", ")] : null,
     activeYears.length > 0

@@ -25,9 +25,18 @@ const TRAIL: Crumb[] = [{ name: "Terms of Use" }];
 
 const UPDATED = "2026-08-02";
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  /** Anchored sections are ones something else points at — see `#artwork`. */
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mt-9">
+    <section id={id} className="mt-9 scroll-mt-24">
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       <div className="mt-3 space-y-3 text-[0.97rem] leading-relaxed text-foreground/90">
         {children}
@@ -96,7 +105,7 @@ export default function TermsPage() {
         </p>
       </Section>
 
-      <Section title="Film data and artwork">
+      <Section title="Film data and artwork" id="artwork">
         <p>
           Facts about films and the people who made them come from Wikidata and Wikipedia and
           carry their sources on the page. Posters and stills are shown for identification of
@@ -104,6 +113,15 @@ export default function TermsPage() {
           line on each names them. Freely licensed material — public-domain films, Commons
           photographs — is labelled with its licence and a link to its source. If you hold
           rights in something shown here and want it removed, write to us and it will be.
+        </p>
+        <p>
+          Our own artwork is the other half of that: the {SITE_NAME} logo and wordmark, the
+          share cards each page generates, and anything else made here are ours, and reusing
+          them needs permission. Ask on the{" "}
+          <Link href="/contact" className="text-accent hover:opacity-80">
+            contact page
+          </Link>{" "}
+          and say what it is for — for writing about the site, the answer is usually yes.
         </p>
       </Section>
 

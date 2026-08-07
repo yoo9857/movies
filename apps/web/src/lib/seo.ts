@@ -177,6 +177,8 @@ export const LOGO_ID = `${SITE_URL}/#logo`;
 
 export const pageId = (path: string) => `${absUrl(path)}#webpage`;
 export const breadcrumbId = (path: string) => `${absUrl(path)}#breadcrumb`;
+/** The one image a page leads with, described once and pointed at from both. */
+export const primaryImageId = (path: string) => `${absUrl(path)}#primaryimage`;
 export const movieEntityId = (slug: string) => `${SITE_URL}/movies/${slug}#movie`;
 export const reviewEntityId = (slug: string) => `${SITE_URL}/reviews/${slug}#review`;
 export const criticEntityId = (slug: string) => `${SITE_URL}/critics/${slug}#person`;
@@ -211,6 +213,127 @@ export const BLOG_ID = `${SITE_URL}/blog#blog`;
 /** A blog post. Its page owns it, exactly as a review's page owns the review. */
 export const postEntityId = (slug: string) => `${SITE_URL}/blog/${slug}#post`;
 
+/* ──────────────────────────────── images ──────────────────────────────── */
+//
+// Google's image-metadata feature reads five properties off an `ImageObject` —
+// `creator`, `creditText`, `copyrightNotice`, `license` and
+// `acquireLicensePage` — and Search Console reports the missing ones as
+// non-critical issues. This site published two of the five and was reported for
+// the other three on 2026-08-07.
+//
+// All five come off the four `image*` columns a licensed file already carries,
+// so they are derived in one place rather than at each call site. Two of them
+// are a pair and are treated as one: `license` is the deed (what the terms
+// *are*) and `acquireLicensePage` is the file's own page (where a reader goes
+// to reuse it). An operator's own upload states no licence and so gets neither
+// — which is the honest answer, not a gap to be filled.
+
+/**
+ * Where the terms for a picture on this site are written down: the artwork
+ * section of the terms of use, which names the rights holder for each kind of
+ * file we show. `acquireLicensePage` for our own work is `/contact`, because
+ * asking is how you acquire it.
+ */
+export const IMAGE_TERMS_PATH = "/terms#artwork";
+
+export interface ImageInput {
+  /** Stored form — a site path or a bucket URL. `hosted()` is applied here. */
+  url: Nullable<string>;
+  /** Graph identity, so one page describes one file exactly once. */
+  id?: string;
+  /** What the picture shows. The page prints it as alt text and a caption. */
+  caption?: Nullable<string>;
+  /** The attribution line, as rendered. */
+  credit?: Nullable<string>;
+  /**
+   * `@id` of the creator's node, for a file we made ourselves. Wins over the
+   * name parsed out of `credit`: our own artwork has an Organization in this
+   * graph already, and a reference beats a second copy of its name.
+   */
+  creatorId?: string;
+  /** Licence short name as the page prints it, e.g. "CC BY-SA 4.0". */
+  license?: Nullable<string>;
+  licenseUrl?: Nullable<string>;
+  /** Where the file lives: the Commons page, the archive's record. */
+  sourceUrl?: Nullable<string>;
+  width?: Nullable<number>;
+  height?: Nullable<number>;
+}
+
+export function imageObjectNode(input: ImageInput): JsonLdNode | undefined {
+  const url = hosted(input.url);
+  if (!url) return undefined;
+  const credit = input.credit?.trim() || undefined;
+  const holder = creditedName(credit);
+  const licensed = Boolean(input.license || input.licenseUrl);
+
+  return compact({
+    "@type": "ImageObject",
+    "@id": input.id,
+    url,
+    contentUrl: url,
+    caption: input.caption ?? undefined,
+    width: input.width ?? undefined,
+    height: input.height ?? undefined,
+    creditText: credit,
+    creator: input.creatorId
+      ? ref(input.creatorId)
+      : holder
+        ? { "@type": ORGANISATION_CREDIT.test(holder) ? "Organization" : "Person", name: holder }
+        : undefined,
+    copyrightNotice: copyrightNotice(holder, input.license, input.licenseUrl),
+    license: input.licenseUrl ?? undefined,
+    // A licence and the page it is acquired from are one obligation; the source
+    // stands as `acquireLicensePage` only where there is a licence to acquire.
+    // `Post_image_license_has_source` and its siblings guarantee the pair.
+    acquireLicensePage: licensed ? (input.sourceUrl ?? undefined) : undefined,
+  });
+}
+
+/**
+ * A credit line is a caption's grammar wrapped around a name: "Photograph by
+ * Someone", "Someone / YouTube". The name is what `creator` wants.
+ */
+const CREDIT_PREFIX = /^(photo(graph)?s?|image|picture|still)s?\s*(by\s+|[:—-]\s*)/i;
+
+/**
+ * Choosing `Person` or `Organization` for a free-text credit is a guess, so it
+ * is made the way the data leans: a photo credit names a photographer far more
+ * often than a body, and the exceptions are the ones a legal suffix or an
+ * institution word makes unambiguous.
+ */
+const ORGANISATION_CREDIT =
+  /\b(inc|llc|ltd|plc|gmbh|corp|corporation|company|studios?|pictures|productions?|entertainment|media|press|news|agency|agence|archives?|library|museum|foundation|institute|university|ministry|department|bureau|council|festival|network|broadcasting|television|associated|reuters|getty|shutterstock|nasa|wikimedia|commons|youtube)\b/i;
+
+/** The name inside a credit line: who took it, stripped of the grammar. */
+function creditedName(credit: string | undefined): string | undefined {
+  if (!credit) return undefined;
+  // Our own credit builders join the author to the platform with " / "; the
+  // author is the half that is a creator. A spaced slash, so "AC/DC" survives.
+  return credit.split(" / ")[0].replace(CREDIT_PREFIX, "").replace(/^©\s*/, "").trim() || undefined;
+}
+
+/**
+ * The credit, in the form the property asks for: "© <holder>". Not a new claim
+ * — under a CC licence the copyright holder *is* the credited author, and the
+ * page prints that name already.
+ *
+ * A public-domain file gets none. A © over a work nobody owns would be worse
+ * than the missing field Search Console reported.
+ */
+const PUBLIC_DOMAIN = /(public\s*domain|\bpdm\b|\bcc0\b|no known copyright)/i;
+
+function copyrightNotice(
+  holder: string | undefined,
+  license: Nullable<string>,
+  licenseUrl: Nullable<string>,
+): string | undefined {
+  if (!holder) return undefined;
+  if (license && PUBLIC_DOMAIN.test(license)) return undefined;
+  if (licenseUrl && /creativecommons\.org\/publicdomain\//i.test(licenseUrl)) return undefined;
+  return /©|\(c\)|copyright/i.test(holder) ? holder : `© ${holder}`;
+}
+
 /* ───────────────────────────── site-wide nodes ───────────────────────────── */
 
 export function organizationNode(): JsonLdNode {
@@ -224,15 +347,23 @@ export function organizationNode(): JsonLdNode {
     slogan: SITE_TAGLINE,
     foundingDate: SITE_FOUNDED,
     email: CONTACT_EMAIL,
-    logo: {
-      "@type": "ImageObject",
-      "@id": LOGO_ID,
-      url: absUrl("/logo.png"),
-      contentUrl: absUrl("/logo.png"),
+    // The one image on every page of the site, and so the one Google's image
+    // metadata report counts once per URL: it was reported on 2026-08-07 for
+    // the three properties below that were missing. Our own mark, made here,
+    // owned here, licensed on request — which is a thing the terms page says
+    // and this now points at.
+    logo: imageObjectNode({
+      id: LOGO_ID,
+      url: "/logo.png",
+      caption: SITE_NAME,
       width: 256,
       height: 256,
-      caption: SITE_NAME,
-    },
+      credit: SITE_NAME,
+      creatorId: ORG_ID,
+      license: "All rights reserved",
+      licenseUrl: absUrl(IMAGE_TERMS_PATH),
+      sourceUrl: absUrl("/contact"),
+    }),
     image: ref(LOGO_ID),
     sameAs: SOCIAL_PROFILES,
     knowsAbout: SITE_KEYWORDS,
@@ -288,6 +419,13 @@ export interface WebPageInput {
   description?: Nullable<string>;
   kind?: PageKind;
   image?: Nullable<string>;
+  /**
+   * `@id` of an `imageObjectNode` for that same file, when the graph carries
+   * one. Preferred over `image`: two nodes describing one picture is how a
+   * complete description gets read as an incomplete one, and only the fully
+   * described node has the credit and the licence on it.
+   */
+  imageId?: string;
   datePublished?: Nullable<Date | string>;
   dateModified?: Nullable<Date | string>;
   /** Set when a `breadcrumbNode` for the same path is in the graph. */
@@ -315,7 +453,11 @@ export function webPageNode(input: WebPageInput): JsonLdNode {
     inLanguage: SITE_LANG,
     datePublished: isoStamp(input.datePublished),
     dateModified: isoStamp(input.dateModified),
-    primaryImageOfPage: input.image ? { "@type": "ImageObject", url: input.image } : undefined,
+    primaryImageOfPage: input.imageId
+      ? ref(input.imageId)
+      : input.image
+        ? { "@type": "ImageObject", url: input.image }
+        : undefined,
     breadcrumb: input.hasBreadcrumb ? ref(breadcrumbId(input.path)) : undefined,
     about: input.aboutId ? ref(input.aboutId) : undefined,
     mainEntity: input.mainEntityId ? ref(input.mainEntityId) : undefined,
@@ -825,7 +967,10 @@ export interface PostInput {
   image?: Nullable<string>;
   imageAlt?: Nullable<string>;
   imageCredit?: Nullable<string>;
+  imageLicense?: Nullable<string>;
   imageLicenseUrl?: Nullable<string>;
+  /** The file's own page — printed under the hero, linked from the credit. */
+  imageSourceUrl?: Nullable<string>;
 }
 
 export interface PostNodeOptions {
@@ -879,18 +1024,17 @@ export function postNode(post: PostInput, opts: PostNodeOptions): JsonLdNode {
     citation: post.sources?.length
       ? post.sources.map((url) => ({ "@type": "CreativeWork", url }))
       : undefined,
-    image: post.image
-      ? {
-          "@type": "ImageObject",
-          url: hosted(post.image),
-          contentUrl: hosted(post.image),
-          caption: post.imageAlt ?? undefined,
-          // Credit and licence travel with a free file wherever it is described,
-          // markup included — the page renders the same two strings.
-          creditText: post.imageCredit ?? undefined,
-          license: post.imageLicenseUrl ?? undefined,
-        }
-      : undefined,
+    // Credit and licence travel with a free file wherever it is described,
+    // markup included — the page renders the same strings under the picture.
+    image: imageObjectNode({
+      id: primaryImageId(path),
+      url: post.image,
+      caption: post.imageAlt,
+      credit: post.imageCredit,
+      license: post.imageLicense,
+      licenseUrl: post.imageLicenseUrl,
+      sourceUrl: post.imageSourceUrl,
+    }),
     interactionStatistic:
       post.viewCount != null && post.viewCount > 0
         ? {
