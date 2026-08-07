@@ -3,6 +3,7 @@
 //
 //   npm run db:import-trailers -- --limit=20000
 //   npm run db:import-trailers -- --dry
+//   npm run db:import-trailers -- --sources=../../deploy-jobs/movie-trailer-sources.json
 //
 // The details pass already reads `wdt:P1651` (a YouTube video id), but only for
 // the films it happens to be filling a synopsis for, and only `SAMPLE()` — one
@@ -30,6 +31,7 @@
 // trailer but "usually" is not something to print on the page. Rows land
 // unofficial; promoting one is a human's call.
 import "./env";
+import { readFile } from "node:fs/promises";
 import { prisma } from "../src/index";
 
 const SPARQL = "https://query.wikidata.org/sparql";
@@ -42,12 +44,24 @@ function arg(name: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function strArg(name: string): string | null {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.split("=").slice(1).join("=") : null;
+}
+
 const LIMIT = arg("limit", 20_000);
 /** Milliseconds between oEmbed checks. No key, no published quota — stay polite. */
 const PACE = arg("pace", 150);
 /** Rows per SPARQL page. 5,000 answers in ~9s; larger pages start timing out. */
 const PAGE = Math.min(arg("page", 5000), 10_000);
 const DRY = process.argv.includes("--dry");
+const SOURCES = strArg("sources");
+const TARGET_QIDS = (
+  process.argv.find((value) => value.startsWith("--qids="))?.slice("--qids=".length) ?? ""
+)
+  .split(",")
+  .map((qid) => qid.trim())
+  .filter((qid) => /^Q[1-9][0-9]*$/.test(qid));
 
 /** YouTube ids are 11 characters of a known alphabet; anything else is not one. */
 const youtubeKey = (v: string | undefined) => (v && /^[A-Za-z0-9_-]{11}$/.test(v) ? v : null);
@@ -110,10 +124,32 @@ LIMIT ${PAGE} OFFSET ${offset}
   return byQid;
 }
 
+/** Trailer ids for an exact editorial batch, without scanning all of Wikidata. */
+async function selectedTrailerIds(qids: string[]): Promise<Map<string, string[]>> {
+  const rows = await ask(`
+SELECT ?film ?v WHERE {
+  VALUES ?film { ${qids.map((qid) => `wd:${qid}`).join(" ")} }
+  ?film wdt:P1651 ?v .
+}
+ORDER BY ?film
+`);
+  const byQid = new Map<string, string[]>();
+  for (const row of rows) {
+    const qid = row.film?.value.split("/").pop();
+    const key = youtubeKey(row.v?.value);
+    if (!qid || !key) continue;
+    const keys = byQid.get(qid) ?? [];
+    if (!keys.includes(key)) keys.push(key);
+    byQid.set(qid, keys);
+  }
+  return byQid;
+}
+
 interface Video {
   key: string;
   name: string;
   type: string;
+  channel: string;
 }
 
 /**
@@ -140,10 +176,15 @@ async function describe(key: string, attempt = 1): Promise<Video | null> {
   }
   if (!res.ok) return null;
 
-  const json = (await res.json()) as { title?: string };
+  const json = (await res.json()) as { title?: string; author_name?: string };
   const title = json.title?.trim();
-  if (!title) return null;
-  return { key, name: title.slice(0, 200), type: kind(title) };
+  const channel = json.author_name?.trim();
+  if (!title || !channel) return null;
+  // P1651 is a generic YouTube-id property. A few film items also carry long
+  // previews or deleted-scene compilations; those are not trailers and should
+  // not be promoted into the film page's primary player.
+  if (/deleted scenes?|extended preview/i.test(title)) return null;
+  return { key, name: title.slice(0, 200), type: kind(title), channel };
 }
 
 /**
@@ -158,11 +199,105 @@ function kind(title: string): string {
   return "Trailer";
 }
 
+interface SourceJob {
+  slug: string;
+  wikidataId?: string;
+  imdbId?: string;
+  youtubeKey: string;
+  channel: string;
+}
+
+/** Human-researched official trailers, still guarded by our film identities. */
+async function importSourcedTrailers(path: string): Promise<void> {
+  const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
+  if (!Array.isArray(raw)) throw new Error("Trailer sources file must contain a JSON array.");
+  const jobs = raw as SourceJob[];
+  let filled = 0;
+  let skipped = 0;
+
+  for (const job of jobs) {
+    const key = youtubeKey(job.youtubeKey);
+    if (!job?.slug || !key || !job.channel || (!job.wikidataId && !job.imdbId)) {
+      throw new Error(`Invalid trailer source job: ${job?.slug ?? "unknown"}`);
+    }
+    const movie = await prisma.movie.findUnique({
+      where: { slug: job.slug },
+      select: {
+        id: true,
+        title: true,
+        wikidataId: true,
+        imdbId: true,
+        trailerKey: true,
+        trailerFile: true,
+      },
+    });
+    if (!movie) throw new Error(`Movie not found: ${job.slug}`);
+    if (movie.wikidataId && job.wikidataId && movie.wikidataId !== job.wikidataId) {
+      throw new Error(`Wikidata identity mismatch for ${job.slug}`);
+    }
+    if (movie.imdbId && job.imdbId && movie.imdbId !== job.imdbId) {
+      throw new Error(`IMDb identity mismatch for ${job.slug}`);
+    }
+    if (movie.trailerKey || movie.trailerFile) {
+      console.log(`skip: ${movie.title} already has a trailer`);
+      skipped += 1;
+      continue;
+    }
+
+    const video = await describe(key);
+    if (!video) throw new Error(`Trailer is not playable: ${job.slug} / ${key}`);
+    if (video.channel !== job.channel) {
+      throw new Error(`Channel mismatch for ${job.slug}: expected ${job.channel}, got ${video.channel}`);
+    }
+    if (video.type !== "Trailer" && video.type !== "Teaser") {
+      throw new Error(`Sourced video is not a trailer: ${job.slug} / ${video.name}`);
+    }
+    if (DRY) {
+      console.log(`would fill ${movie.title}: ${video.name} — ${video.channel}`);
+      filled += 1;
+      continue;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.movie.update({
+        where: { id: movie.id },
+        data: {
+          trailerKey: video.key,
+          wikidataId: movie.wikidataId ?? job.wikidataId,
+          imdbId: movie.imdbId ?? job.imdbId,
+        },
+      });
+      await tx.movieVideo.upsert({
+        where: { movieId_youtubeKey: { movieId: movie.id, youtubeKey: video.key } },
+        update: { name: video.name, type: video.type, official: true },
+        create: {
+          movieId: movie.id,
+          youtubeKey: video.key,
+          name: video.name,
+          type: video.type,
+          official: true,
+          sort: 0,
+        },
+      });
+    });
+    console.log(`filled ${movie.title}: ${video.name} — ${video.channel}`);
+    filled += 1;
+    await new Promise((resolve) => setTimeout(resolve, PACE));
+  }
+  console.log(`Filled ${filled} sourced trailer(s); skipped ${skipped}.`);
+}
+
 async function main() {
+  if (SOURCES) {
+    await importSourcedTrailers(SOURCES);
+    return;
+  }
   console.log(`Wikidata → trailers: up to ${LIMIT} films${DRY ? " (dry run)" : ""}`);
 
-  console.log("Reading every film with a trailer id…");
-  const byQid = await allTrailerIds();
+  console.log(TARGET_QIDS.length > 0 ? "Reading the selected films' trailer ids…" : "Reading every film with a trailer id…");
+  const byQid = TARGET_QIDS.length > 0
+    ? await selectedTrailerIds(TARGET_QIDS)
+    : await allTrailerIds();
   console.log(`${byQid.size.toLocaleString("en-US")} films on Wikidata carry a trailer id.\n`);
 
   // Only films we hold, and only those still without a key — fill-only, like

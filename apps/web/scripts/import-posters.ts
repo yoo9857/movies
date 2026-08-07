@@ -2,6 +2,7 @@
 //
 //   npm run posters -w web -- --limit=500
 //   npm run posters -w web -- --film=spider-man-brand-new-day-2026
+//   npm run posters -w web -- --sources=../../deploy-jobs/movie-artwork-sources.json
 //
 // Owner's decision (2026-07-31): posters are displayed site-wide for
 // identification, the way film databases and review sites do. The source that
@@ -17,6 +18,7 @@
 // something we claim. Films that already carry artwork (the freely licensed
 // Commons imports, or an operator upload) are never touched: fill-only.
 import "../../../packages/db/prisma/env";
+import { readFile } from "node:fs/promises";
 import { prisma } from "@cinepixo/db";
 import { fetchRemoteImage, processImage } from "@/lib/media/image";
 import { buildKey, putPublicObject } from "@/lib/media/storage";
@@ -37,7 +39,83 @@ const LIMIT = arg("limit", 500);
 /** upload.wikimedia.org throttles image fetches; 1200ms held for the portraits. */
 const PACE = arg("pace", 1200);
 const FILM = strArg("film");
+const SOURCES = strArg("sources");
 const DRY = process.argv.includes("--dry");
+
+interface SourceJob {
+  slug: string;
+  wikidataId?: string;
+  imdbId?: string;
+  url: string;
+  sourceUrl: string;
+  credit: string;
+  license: string;
+  licenseUrl?: string;
+}
+
+/** Operator-researched artwork from an authoritative archive or rights holder. */
+async function importSourcedArtwork(path: string): Promise<void> {
+  const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
+  if (!Array.isArray(raw)) throw new Error("Artwork sources file must contain a JSON array.");
+  const jobs = raw as SourceJob[];
+  let stored = 0;
+  let skipped = 0;
+
+  for (const job of jobs) {
+    if (!job?.slug || !job.url || !job.sourceUrl || !job.credit || !job.license) {
+      throw new Error("Every artwork source needs slug, url, sourceUrl, credit, and license.");
+    }
+    if (!job.wikidataId && !job.imdbId) {
+      throw new Error(`Artwork source needs a Wikidata or IMDb identity: ${job.slug}`);
+    }
+    for (const value of [job.url, job.sourceUrl, ...(job.licenseUrl ? [job.licenseUrl] : [])]) {
+      const url = new URL(value);
+      if (url.protocol !== "https:") throw new Error(`Only HTTPS sources are accepted: ${value}`);
+    }
+    const movie = await prisma.movie.findUnique({
+      where: { slug: job.slug },
+      select: { id: true, title: true, image: true, wikidataId: true, imdbId: true },
+    });
+    if (!movie) throw new Error(`Movie not found: ${job.slug}`);
+    if (job.wikidataId && movie.wikidataId !== job.wikidataId) {
+      throw new Error(`Wikidata identity mismatch for ${job.slug}`);
+    }
+    if (job.imdbId && movie.imdbId !== job.imdbId) {
+      throw new Error(`IMDb identity mismatch for ${job.slug}`);
+    }
+    if (movie.image) {
+      console.log(`skip: ${movie.title} already has sourced artwork`);
+      skipped += 1;
+      continue;
+    }
+    if (DRY) {
+      console.log(`would store: ${movie.title} <- ${job.sourceUrl}`);
+      stored += 1;
+      continue;
+    }
+
+    const buf = await fetchRemoteImage(job.url);
+    const processed = await processImage(buf, { fullWidth: 780 });
+    const url = await putPublicObject(
+      buildKey("films", processed.ext),
+      processed.full.data,
+      processed.contentType,
+    );
+    await prisma.movie.update({
+      where: { id: movie.id },
+      data: {
+        image: url,
+        imageCredit: job.credit,
+        imageLicense: job.license,
+        imageLicenseUrl: job.licenseUrl ?? null,
+        imageSourceUrl: job.sourceUrl,
+      },
+    });
+    console.log(`stored: ${movie.title} <- ${job.sourceUrl}`);
+    stored += 1;
+  }
+  console.log(`Stored ${stored} sourced poster(s); skipped ${skipped}.`);
+}
 /**
  * The films with no English article at all — 11,842 of them, and invisible to
  * the default pass because it selects on `wikipediaUrl`.
@@ -159,6 +237,10 @@ SELECT ?film ?wiki WHERE {
 }
 
 async function main() {
+  if (SOURCES) {
+    await importSourcedArtwork(SOURCES);
+    return;
+  }
   console.log(`Wikipedia → posters: up to ${FILM ?? LIMIT}${DRY ? " (dry run)" : ""}`);
 
   const films = await prisma.movie.findMany({

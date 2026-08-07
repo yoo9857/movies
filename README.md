@@ -45,6 +45,18 @@ deliberately leave out — every actor's photo, key crew portraits, and artwork
 for films that have none. Cast and crew are replaced; curated media is only
 ever added to, never overwritten.
 
+The keyless CinePixo media lanes use the film's own identities and sources:
+`npm run posters` reads its Wikipedia article, `npm run db:import-trailers`
+reads Wikidata trailer claims, and `npm run db:import-site-trailers` checks the
+film's official site. Archive or rights-holder artwork researched by an
+operator goes through `npm run posters -- --sources=../../deploy-jobs/movie-artwork-sources.json`.
+Each sourced job must name a matching Wikidata or IMDb identity and carries its
+credit, rights statement, and source page into the movie row.
+Official trailers researched directly from a distributor or studio channel go
+through `npm run db:import-trailers -- --sources=../../deploy-jobs/movie-trailer-sources.json`.
+That lane rechecks the live YouTube title and channel through oEmbed, rejects
+clips and identity mismatches, and only then marks the video official.
+
 Admin lives at `/admin` (login with the seeded credentials). `db:seed` is
 idempotent: re-running it leaves an existing admin's password untouched and
 prints no banner, so the credential from the first run stays the valid one. Set

@@ -3,6 +3,7 @@
 //
 //   cd apps/web && npx tsx scripts/import-portraits.ts --limit=500
 //   npm run portraits -w web -- --limit=500        # from the repo root
+//   npm run portraits -w web -- --offset=20 --limit=50  # skip known no-photo rows
 //
 // This is the admin portrait desk's "enrich" button, run over a queue instead of
 // one row at a time. It deliberately reuses the same three modules the route
@@ -31,6 +32,7 @@ function arg(name: string, fallback: number): number {
 }
 
 const LIMIT = arg("limit", 200);
+const OFFSET = arg("offset", 0);
 /**
  * Milliseconds between people. Wikimedia is free and shared; serial and slow.
  *
@@ -72,7 +74,9 @@ function articleTitle(url: string): string | null {
 }
 
 async function main() {
-  console.log(`Wikimedia → portraits: up to ${LIMIT} people${DRY ? " (dry run)" : ""}`);
+  console.log(
+    `Wikimedia → portraits: up to ${LIMIT} people${OFFSET ? ` after offset ${OFFSET}` : ""}${DRY ? " (dry run)" : ""}`,
+  );
 
   // Most-credited first, and only people who already have an article to read: the
   // facts pass stored `wikipediaUrl`, so this needs no search step and cannot
@@ -86,7 +90,8 @@ async function main() {
     FROM "Person" p
     WHERE p."wikipediaUrl" IS NOT NULL
       AND p.image IS NULL
-    ORDER BY credits DESC
+    ORDER BY credits DESC, p.id
+    OFFSET ${OFFSET}
     LIMIT ${LIMIT}
   `;
 
