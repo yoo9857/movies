@@ -2,8 +2,14 @@
 export const DEFAULT_MIN_POST_PICTURES = 4;
 
 /** Markdown image rows written by `fill-post-images --body`. */
+export function bodyPictureUrls(content: string): string[] {
+  return [...content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
+    (match) => match[1],
+  );
+}
+
 export function bodyPictureCount(content: string): number {
-  return (content.match(/!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\)/g) ?? []).length;
+  return bodyPictureUrls(content).length;
 }
 
 export function postPictureCount(content: string, hero: string | null | undefined): number {

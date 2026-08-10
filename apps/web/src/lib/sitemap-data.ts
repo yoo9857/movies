@@ -19,6 +19,7 @@
  */
 import { prisma } from "@cinepixo/db";
 import { postCategorySlug } from "@cinepixo/shared";
+import { bodyPictureUrls } from "@/lib/post-visuals";
 import { absUrl, backdropUrl, posterUrl } from "@/lib/seo";
 
 export interface SitemapUrl {
@@ -85,7 +86,7 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       const posts = await prisma.post.findMany({
         where: { status: "PUBLISHED" },
         orderBy: { updatedAt: "desc" },
-        select: { slug: true, updatedAt: true, image: true },
+        select: { slug: true, updatedAt: true, image: true, content: true },
       });
       return posts.map((p) => ({
         url: absUrl(`/blog/${p.slug}`),
@@ -96,9 +97,16 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
         // Level with a review: both are writing of ours that exists nowhere
         // else, and both are what the site is here to be read for.
         priority: 0.9,
-        // Only our own object — the hero is uploaded through lib/media, and a
-        // CHECK constraint refuses anything else into that column.
-        images: p.image ? [absUrl(p.image)] : [],
+        // The hero and every photograph in the article. The page exposes body
+        // images through ordinary <img> elements too; listing them here gives
+        // image crawlers one complete inventory and an explicit landing page.
+        images: [
+          ...new Set(
+            [p.image, ...bodyPictureUrls(p.content)].filter(
+              (image): image is string => Boolean(image),
+            ),
+          ),
+        ].map(absUrl),
       }));
     }
     case "movies": {

@@ -10,6 +10,7 @@ import {
   movieNode,
   ORG_ID,
   organizationNode,
+  reviewNode,
   topicEntityId,
   TOPIC_SET_ID,
 } from "@/lib/seo";
@@ -165,6 +166,26 @@ describe("movieNode image", () => {
       unknown
     >;
     expect(node.image).toBe(bucket);
+  });
+});
+
+describe("reviewNode image", () => {
+  it("leads with the same hosted artwork as the reviewed movie", () => {
+    const image = "/uploads/films/2026/08/parasite.webp";
+    const node = reviewNode(
+      {
+        slug: "parasite-review",
+        title: "Parasite review",
+        content: "A review.",
+        rating: 9,
+      },
+      {
+        author: { username: "critic" },
+        movie: { ...FILM, image },
+      },
+    ) as unknown as Record<string, unknown>;
+
+    expect(node.image).toEqual([`http://localhost:3000${image}`]);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   minimumPictureMessage,
   postPictureCount,
 } from "@/lib/post-visuals";
+import { autoAttachPostHero } from "@/lib/auto-post-hero";
 
 const SLUG = process.argv[2];
 const UNPUBLISH = process.argv.includes("--unpublish");
@@ -106,6 +107,19 @@ async function main() {
     });
     console.log(`back to draft: /blog/${post.slug}`);
     return;
+  }
+
+  if (!post.image) {
+    const imported = await autoAttachPostHero(post.id);
+    if (imported) {
+      post.image = imported.image;
+      console.log(
+        `  auto hero   ${imported.sourceType} / ${imported.foundFor} / ${imported.photoTitle} / ` +
+          `${imported.captureDay} / ${imported.candidateWidth}x${imported.candidateHeight}`,
+      );
+    } else {
+      console.log("  auto hero   no licensed candidate found; leaving hero empty");
+    }
   }
 
   console.log(`${post.title}\n${post.dek ?? ""}\n`);

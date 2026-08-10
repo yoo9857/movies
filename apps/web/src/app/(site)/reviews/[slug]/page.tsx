@@ -87,17 +87,19 @@ export async function generateMetadata(props: {
     review.verdict ??
     review.excerpt ??
     `${author} reviews ${movie.title}${year ? ` (${year})` : ""} for CinePixo.`;
+  const hero = hosted(movie.image);
 
   return pageMetadata({
     path: `/reviews/${review.slug}`,
     title: review.title,
     description,
     ogType: "article",
-    // No `images` on purpose: `opengraph-image.tsx` in this segment draws the
-    // house share card — title, verdict, score, author, wordmark — and an
-    // explicit list here would win over it. A TMDB still is the same picture
-    // every other site shares; the card is ours and says more.
-
+    // Prefer the artwork the review actually renders. A representative image
+    // gives image search a clearer signal than a text-heavy share card and
+    // keeps Open Graph aligned with the sitemap and structured data.
+    images: hero
+      ? [{ url: hero, alt: `${movie.title} artwork` }]
+      : [{ url: absUrl("/opengraph-image.png"), alt: "CinePixo" }],
     publishedTime: review.publishedAt,
     modifiedTime: review.updatedAt,
     authors: [author],

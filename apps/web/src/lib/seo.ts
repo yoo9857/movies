@@ -894,6 +894,7 @@ export function reviewNode(review: ReviewInput, opts: ReviewNodeOptions): JsonLd
           : undefined,
     thumbnailUrl: posterUrl(opts.movie.posterPath, "w342"),
     image: [
+      hosted(opts.movie.image),
       backdropUrl(opts.movie.backdropPath, "w780"),
       posterUrl(opts.movie.posterPath, "w500"),
     ].filter(Boolean),

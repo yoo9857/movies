@@ -28,7 +28,8 @@ export const usingObjectStorage = Boolean(
 /** Where the local driver writes. Outside `public/` so nothing is served
  *  except through the route handler that validates the path. */
 export const LOCAL_ROOT =
-  process.env.UPLOAD_DIR ?? path.join(process.cwd(), "..", "..", "var", "uploads");
+  process.env.UPLOAD_DIR ??
+  path.join(/*turbopackIgnore: true*/ process.cwd(), "..", "..", "var", "uploads");
 
 /** Public prefix the local driver serves from. */
 const LOCAL_PREFIX = "/uploads";
@@ -132,7 +133,7 @@ export async function putPublicObject(
     return `${S3_PUBLIC}/${key}`;
   }
 
-  const dest = path.join(LOCAL_ROOT, key);
+  const dest = path.join(/*turbopackIgnore: true*/ LOCAL_ROOT, key);
   await mkdir(path.dirname(dest), { recursive: true });
   await writeFile(dest, body);
   return `${LOCAL_PREFIX}/${key}`;
@@ -177,8 +178,8 @@ export async function deleteByUrl(url: string | null | undefined): Promise<void>
  * it.
  */
 export function resolveLocalKey(key: string): string | null {
-  const root = path.resolve(LOCAL_ROOT);
-  const target = path.resolve(root, key);
+  const root = path.resolve(/*turbopackIgnore: true*/ LOCAL_ROOT);
+  const target = path.resolve(/*turbopackIgnore: true*/ root, key);
   if (target !== root && !target.startsWith(root + path.sep)) return null;
   return target;
 }

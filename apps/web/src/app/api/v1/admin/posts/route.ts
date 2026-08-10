@@ -4,6 +4,7 @@ import { revalidateTag } from "next/cache";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { assertHeroIsOurs, postWriteData, syncPostSubjects } from "@/lib/post-write";
+import { autoAttachPostHero } from "@/lib/auto-post-hero";
 
 /**
  * The blog is editorial: only an admin writes here, and the list is small enough
@@ -53,6 +54,7 @@ export const POST = handle(async (request: Request) => {
     select: { id: true, slug: true },
   });
   await syncPostSubjects(post.id, input);
+  if (input.status === "PUBLISHED" && !input.image) await autoAttachPostHero(post.id);
   // The listings hold their rows for a minute; a new piece should not. Expire
   // rather than mark stale — the editor is about to go looking for it.
   revalidateTag("posts", { expire: 0 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MIN_POST_PICTURES,
   bodyPictureCount,
+  bodyPictureUrls,
   minimumPictureMessage,
   postPictureCount,
 } from "@/lib/post-visuals";
@@ -18,6 +19,17 @@ describe("post picture policy", () => {
     expect(bodyPictureCount(body)).toBe(2);
     expect(postPictureCount(body, "https://cdn.example.com/hero.webp")).toBe(3);
     expect(postPictureCount(body, null)).toBe(2);
+  });
+
+  it("returns every body image URL for the image sitemap", () => {
+    const markdown = [
+      "![A still](/uploads/posts/a.webp)",
+      '![A portrait](https://cdn.example.com/b.webp "Optional title")',
+    ].join("\n\n");
+    expect(bodyPictureUrls(markdown)).toEqual([
+      "/uploads/posts/a.webp",
+      "https://cdn.example.com/b.webp",
+    ]);
   });
 
   it("sets the editorial floor at one hero plus three body pictures", () => {

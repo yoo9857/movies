@@ -18,7 +18,10 @@
     "publish-post": "tsx scripts/publish-post.ts",
     "blog-doctor": "tsx scripts/blog-doctor.ts",
     "deploy-check": "tsx scripts/deploy-check.ts",
-    "save-media": "tsx scripts/save-media.ts"
+    "save-media": "tsx scripts/save-media.ts",
+    "capture-social": "tsx scripts/capture-social.ts",
+    "capture-social-original": "tsx scripts/capture-social.ts --original",
+    "capture-latest-social": "tsx scripts/capture-latest-social.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1098.0",
@@ -36,6 +39,7 @@
     "@tiptap/suggestion": "^3.29.2",
     "jose": "^6.2.5",
     "next": "16.2.12",
+    "playwright": "^1.62.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",

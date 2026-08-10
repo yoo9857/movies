@@ -259,6 +259,7 @@ export async function generateMetadata(props: {
 
   const author = post.author.displayName ?? post.author.username;
   const draft = post.status !== "PUBLISHED";
+  const hero = hosted(post.image);
 
   return pageMetadata({
     path: `/blog/${post.slug}`,
@@ -270,8 +271,14 @@ export async function generateMetadata(props: {
     description:
       post.dek ?? `${author} on ${POST_CATEGORY_LABELS[post.category].toLowerCase()}, for CinePixo.`,
     ogType: "article",
-    // No `images`: this segment's opengraph-image.tsx draws the house card, and
-    // an explicit list here would win over the convention entirely.
+    // The photograph the article actually leads with is the clearest primary-
+    // image signal for image search. It also keeps Open Graph, the image
+    // sitemap and the BlogPosting node pointed at the same object. A post with
+    // no hero gets the site card explicitly: file-based metadata does not
+    // inherit into a dynamic child segment in Next.js.
+    images: hero
+      ? [{ url: hero, alt: post.imageAlt ?? post.title }]
+      : [{ url: absUrl("/opengraph-image.png"), alt: "CinePixo" }],
     publishedTime: post.publishedAt,
     modifiedTime: post.updatedAt,
     authors: [author],
