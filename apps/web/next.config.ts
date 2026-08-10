@@ -54,6 +54,10 @@ const nextConfig: NextConfig = {
   htmlLimitedBots:
     /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|Googlebot|GoogleOther|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|PerplexityBot|Amazonbot|Bytespider|meta-externalagent|CCBot|cohere-ai|Diffbot|SemrushBot|AhrefsBot|MJ12bot|DotBot/i,
   images: {
+    // Uploaded artwork is already normalized to immutable WebP objects by the
+    // ingest pipeline. Serving those objects directly also prevents an
+    // unbounded `_next/image` disk cache from stalling image delivery.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
@@ -64,15 +68,6 @@ const nextConfig: NextConfig = {
         ? [{ protocol: "https" as const, hostname: uploadHost }]
         : []),
     ],
-    // AVIF first, WebP behind it. Every source here is already WebP out of the
-    // ingest pipeline, so this buys roughly a further 20% on the hero — the one
-    // image on a post that is fetched before anything else — and costs a slower
-    // first encode per size, which the cache below then holds.
-    formats: ["image/avif", "image/webp"],
-    // Our objects are immutable: a changed picture is a new key, never a new
-    // version of an old one. The default 60s cache made the optimiser re-encode
-    // files that cannot change. A month is still far short of the truth.
-    minimumCacheTTL: 2_592_000,
   },
   async headers() {
     return [
