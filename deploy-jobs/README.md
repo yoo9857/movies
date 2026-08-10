@@ -1,48 +1,40 @@
-# Publishing the Hathaway piece to production
+# Blog jobs: start here
 
-Two job files, rebuilt on the server rather than copied: the pictures in the
-local database point at this machine's `var/uploads`, and production stores
-its objects in the bucket. `--body` refetches from Commons and uploads there.
+`deploy-jobs/` is the reproducible source for a CinePixo blog post. The site
+does not publish a standalone Markdown file from Git. Markdown lives in the
+`content` field of a JSON draft job and is written to PostgreSQL on production.
 
-- `odyssey-draft.json` — the reviewed prose, as a `db:write-posts --drafts` job
-- `odyssey-body.json` — six licensed photographs with their `at` placements
-  (1 / 2 / 2 / 1 down the piece)
+Use one basename for the complete set:
 
-The order matters: the draft mints the slug the body jobs aim at.
+- `<topic>-draft.json` — title, dek, Markdown body, tags, sources and subjects
+- `<topic>-hero.json` — exactly one representative-image job
+- `<topic>-body.json` — at least three body-image jobs, placed by `##` heading
 
-```sh
-# on the server, after the deploy
-cd ~/cinepixo
-export PATH=$HOME/.nvm/versions/node/v22.19.0/bin:$PATH
+The authoritative procedure is [BLOG-PUBLISHING-CHECKLIST.md](./BLOG-PUBLISHING-CHECKLIST.md).
 
-# 1. the piece, as a DRAFT (readable at its URL by an admin, noindex)
-npm run db:write-posts -- --drafts=deploy-jobs/odyssey-draft.json
+## The order, in one screen
 
-# 2. the hero: the premiere photograph, with its terms
-cd apps/web && npx tsx scripts/fill-post-images.ts \
-  --post=anne-hathaway-plays-the-one-who-waits-and-the-oscar-race-cant-decide-what-to-call-it \
-  --url=https://upload.wikimedia.org/wikipedia/commons/f/fe/AnneHathaway-byPhilipRomano4.jpg \
-  --alt="Anne Hathaway at the New York premiere of The Odyssey, 14 July 2026" \
-  --credit=PhilipRomano \
-  --license="CC BY-SA 4.0" \
-  --license-url=https://creativecommons.org/licenses/by-sa/4.0 \
-  --source-url=https://commons.wikimedia.org/wiki/File:AnneHathaway-byPhilipRomano4.jpg
+1. Prepare and review all three JSON files locally.
+2. Commit and push them so production can reconstruct the post.
+3. On production, dry-run the draft job.
+4. Confirm the title or slug does not already exist.
+5. Create it as `DRAFT` — never add `--publish` here.
+6. Apply the hero job, then the body job.
+7. Run `blog-doctor --fetch` and preview while signed in as admin.
+8. Publish with `publish-post.ts`; verify the public page, search and feed.
 
-# 3. the six body photographs, placed
-npx tsx scripts/fill-post-images.ts --body=../../deploy-jobs/odyssey-body.json
-cd ~/cinepixo
-```
+Registration and publication are deliberately different operations. Registering
+creates an unpublished row. Publishing is the final editorial decision after
+the prose, citations and four-image layout have been checked.
 
-Read it at `/blog/<slug>` signed in as an admin. Publishing is the last step,
-and it is deliberately separate — nothing in a database can prove the prose is
-faithful to its sources, so it waits for a person:
+## Important safety rules
 
-```sh
-cd apps/web
-npx tsx scripts/publish-post.ts anne-hathaway-plays-the-one-who-waits-and-the-oscar-race-cant-decide-what-to-call-it
-# and if it should come back down: … <slug> --unpublish
-```
-
-If a subject slug does not exist on production the script warns and skips that
-link rather than failing; the piece still publishes. Expected subjects:
-`anne-hathaway`, `christopher-nolan`, `matt-damon`, `interstellar-2014`.
+- `db:write-posts --drafts` is **not idempotent**. If the title already exists,
+  running it again can mint a suffixed duplicate slug. Check `/admin/blog`
+  before every non-dry run.
+- Never commit `.env.local`, passwords, session cookies, downloaded news HTML,
+  or temporary files under `var/`.
+- YouTube thumbnails require an editorial decision. X and Instagram material
+  must be embedded, not copied into storage.
+- Do not publish below one hero plus three body images unless an editor has
+  explicitly approved the documented exception.
