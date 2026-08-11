@@ -13,6 +13,7 @@ import {
   reviewNode,
   topicEntityId,
   TOPIC_SET_ID,
+  webPageNode,
 } from "@/lib/seo";
 
 /**
@@ -138,6 +139,17 @@ describe("VideoObject uploadDate", () => {
     expect(trailer.contentUrl).toContain("/uploads/trailers/");
     expect(trailer.embedUrl).toBeUndefined();
   });
+
+  it("omits VideoObject markup when no valid upload instant is known", () => {
+    for (const movie of [
+      { ...FILM, trailerKey: "abcdefghijk" },
+      { ...FILM, trailerFile: "/uploads/trailers/2026/07/x.webm" },
+      { ...FILM, releaseDate: "not-a-date", trailerKey: "abcdefghijk" },
+    ]) {
+      const node = movieNode(movie as never, {}) as unknown as Record<string, unknown>;
+      expect("trailer" in node).toBe(false);
+    }
+  });
 });
 
 /**
@@ -231,14 +243,42 @@ describe("imageObjectNode", () => {
     expect(imageObjectNode({ url: null })).toBeUndefined();
   });
 
-  it("offers no licence page when there is no licence to acquire", () => {
-    const n = imageObjectNode({
+  it("does not publish a partial ImageObject without both licence URLs", () => {
+    expect(imageObjectNode({
       url: "/uploads/x.webp",
       credit: "The desk",
       sourceUrl: "https://example.com/where-it-came-from",
-    })!;
-    expect("acquireLicensePage" in n).toBe(false);
-    expect(n.creditText).toBe("The desk");
+    })).toBeUndefined();
+    expect(imageObjectNode({
+      url: "/uploads/x.webp",
+      credit: "The desk",
+      licenseUrl: "https://example.com/licence",
+    })).toBeUndefined();
+  });
+});
+
+describe("webPageNode images", () => {
+  it("keeps an undescribed image as a URL instead of a partial ImageObject", () => {
+    const page = webPageNode({
+      path: "/example",
+      name: "Example",
+      image: "https://example.com/image.jpg",
+    });
+    expect(page.image).toBe("https://example.com/image.jpg");
+    expect("primaryImageOfPage" in page).toBe(false);
+  });
+
+  it("points at a fully described image when the graph has its id", () => {
+    const page = webPageNode({
+      path: "/example",
+      name: "Example",
+      image: "https://example.com/image.jpg",
+      imageId: "https://example.com/example#primaryimage",
+    });
+    expect(page.primaryImageOfPage).toEqual({
+      "@id": "https://example.com/example#primaryimage",
+    });
+    expect("image" in page).toBe(false);
   });
 });
 
@@ -256,37 +296,29 @@ describe("a rights notice is not an author", () => {
       credit: "© the film's rights holders",
       license: "Poster shown for identification",
       sourceUrl: "https://en.wikipedia.org/wiki/Parasite_(2019_film)",
-    })!;
+    });
 
-  it("keeps the notice as a notice and names no creator", () => {
-    const n = identification();
-    expect(n.copyrightNotice).toBe("© the film's rights holders");
-    expect(n.creditText).toBe("© the film's rights holders");
-    expect("creator" in n).toBe(false);
-  });
-
-  it("offers no licence page for a use we claim rather than terms we hold", () => {
-    const n = identification();
-    expect("license" in n).toBe(false);
-    expect("acquireLicensePage" in n).toBe(false);
+  it("does not turn identification use into licensable image metadata", () => {
+    expect(identification()).toBeUndefined();
   });
 
   it("does not double the © it was given", () => {
-    const n = imageObjectNode({ url: "/x.webp", credit: "Copyright 1954 Toho" })!;
+    const n = imageObjectNode({
+      url: "/x.webp",
+      credit: "Copyright 1954 Toho",
+      licenseUrl: "https://example.com/licence",
+      sourceUrl: "https://example.com/image",
+    })!;
     expect(n.copyrightNotice).toBe("Copyright 1954 Toho");
   });
 
-  it("still reads a named author as an author, deed or no deed", () => {
-    const n = imageObjectNode({
+  it("omits even a named author when there is no published deed", () => {
+    expect(imageObjectNode({
       url: "/uploads/films/y.webp",
       credit: "Reynold Brown",
       license: "Public domain",
       sourceUrl: "https://commons.wikimedia.org/wiki/File:Poster.jpg",
-    })!;
-    expect(n.creator).toEqual({ "@type": "Person", name: "Reynold Brown" });
-    // Public domain: no © to claim, and no deed to link either.
-    expect("copyrightNotice" in n).toBe(false);
-    expect("acquireLicensePage" in n).toBe(false);
+    })).toBeUndefined();
   });
 
   it("acquires only against a real deed", () => {

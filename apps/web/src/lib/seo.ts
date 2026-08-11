@@ -225,8 +225,9 @@ export const postEntityId = (slug: string) => `${SITE_URL}/blog/${slug}#post`;
 // so they are derived in one place rather than at each call site. Two of them
 // are a pair and are treated as one: `license` is the deed (what the terms
 // *are*) and `acquireLicensePage` is the file's own page (where a reader goes
-// to reuse it). An operator's own upload states no licence and so gets neither
-// — which is the honest answer, not a gap to be filled.
+// to reuse it). An operator's own upload states no licence, so it stays a plain
+// image URL instead of becoming a partial ImageObject. That is the honest
+// answer and keeps an unlicensable file out of the image-metadata report.
 
 /**
  * Where the terms for a picture on this site are written down: the artwork
@@ -260,9 +261,24 @@ export interface ImageInput {
   height?: Nullable<number>;
 }
 
+export function hasCompleteImageMetadata(
+  input: Pick<ImageInput, "url" | "licenseUrl" | "sourceUrl">,
+): boolean {
+  return Boolean(input.url?.trim() && input.licenseUrl?.trim() && input.sourceUrl?.trim());
+}
+
 export function imageObjectNode(input: ImageInput): JsonLdNode | undefined {
   const url = hosted(input.url);
-  if (!url) return undefined;
+  const license = input.licenseUrl?.trim() || undefined;
+  const acquireLicensePage = input.sourceUrl?.trim() || undefined;
+
+  // Google's image-metadata enhancement treats every ImageObject as a
+  // licensable image and reports these two URL properties independently. They
+  // are also a semantic pair: a deed without the file page cannot tell a
+  // reader how the terms apply to this particular copy. Keep unlicensed or
+  // incomplete records as plain image URLs at the call site instead of
+  // emitting an ImageObject that is guaranteed to be incomplete.
+  if (!hasCompleteImageMetadata(input) || !url || !license || !acquireLicensePage) return undefined;
   const credit = input.credit?.trim() || undefined;
   const notice = creditIsNotice(credit);
   const holder = notice ? undefined : creditedName(credit);
@@ -286,13 +302,13 @@ export function imageObjectNode(input: ImageInput): JsonLdNode | undefined {
         ? { "@type": ORGANISATION_CREDIT.test(holder) ? "Organization" : "Person", name: holder }
         : undefined,
     copyrightNotice: notice ? credit : copyrightNotice(holder, input.license, input.licenseUrl),
-    license: input.licenseUrl ?? undefined,
+    license,
     // A licence and the page it is acquired from are one obligation, and the
     // test is the deed, not the licence *column*: "Poster shown for
     // identification" is a use we claim, not terms anyone can take up, and
     // pointing `acquireLicensePage` at a Wikipedia article would offer a licence
     // that does not exist. No deed, no acquisition.
-    acquireLicensePage: input.licenseUrl ? (input.sourceUrl ?? undefined) : undefined,
+    acquireLicensePage,
   });
 }
 
@@ -470,11 +486,11 @@ export function webPageNode(input: WebPageInput): JsonLdNode {
     inLanguage: SITE_LANG,
     datePublished: isoStamp(input.datePublished),
     dateModified: isoStamp(input.dateModified),
-    primaryImageOfPage: input.imageId
-      ? ref(input.imageId)
-      : input.image
-        ? { "@type": "ImageObject", url: input.image }
-        : undefined,
+    // `primaryImageOfPage` only points at a fully described ImageObject in the
+    // same graph. A bare image remains useful through `image`, whose URL form
+    // does not claim the licensing metadata an ImageObject promises.
+    primaryImageOfPage: input.imageId ? ref(input.imageId) : undefined,
+    image: !input.imageId && input.image ? input.image : undefined,
     breadcrumb: input.hasBreadcrumb ? ref(breadcrumbId(input.path)) : undefined,
     about: input.aboutId ? ref(input.aboutId) : undefined,
     mainEntity: input.mainEntityId ? ref(input.mainEntityId) : undefined,
@@ -750,6 +766,11 @@ function pickTrailer(movie: MovieInput, videos: MovieNodeOptions["videos"]): Jso
   // at an embed the page no longer renders is precisely the drift this file
   // exists to prevent.
   if (movie.trailerFile) {
+    const uploadDate = isoStamp(movie.releaseDate);
+    // An unknown date cannot be represented as a valid DateTime. Keep the
+    // playable trailer on the page, but omit its VideoObject until provenance
+    // supplies a date rather than emitting a rich-result error.
+    if (!uploadDate) return undefined;
     return compact({
       "@type": "VideoObject",
       name: `${movie.title} — trailer`,
@@ -760,7 +781,7 @@ function pickTrailer(movie: MovieInput, videos: MovieNodeOptions["videos"]): Jso
       duration: movie.trailerFileDuration
         ? isoDuration(Math.round(movie.trailerFileDuration / 60))
         : undefined,
-      uploadDate: isoStamp(movie.releaseDate),
+      uploadDate,
       inLanguage: SITE_LANG,
     });
   }
@@ -771,6 +792,8 @@ function pickTrailer(movie: MovieInput, videos: MovieNodeOptions["videos"]): Jso
     videos?.[0]?.youtubeKey;
   if (!key) return undefined;
   const meta = videos?.find((v) => v.youtubeKey === key);
+  const uploadDate = isoStamp(meta?.publishedAt) ?? isoStamp(movie.releaseDate);
+  if (!uploadDate) return undefined;
   return compact({
     "@type": "VideoObject",
     name: meta?.name ?? `${movie.title} — trailer`,
@@ -778,7 +801,7 @@ function pickTrailer(movie: MovieInput, videos: MovieNodeOptions["videos"]): Jso
     thumbnailUrl: youtubeThumb(key),
     embedUrl: youtubeEmbed(key),
     url: youtubeWatch(key),
-    uploadDate: isoStamp(meta?.publishedAt) ?? isoStamp(movie.releaseDate),
+    uploadDate,
     inLanguage: SITE_LANG,
   });
 }
@@ -1009,6 +1032,15 @@ export function postNode(post: PostInput, opts: PostNodeOptions): JsonLdNode {
   const prose = opts.includeBody ? plainText(post.content) : undefined;
   const words = opts.includeBody ? wordCount(post.content) : undefined;
   const [primary, ...rest] = opts.subjectIds ?? [];
+  const image = imageObjectNode({
+    id: primaryImageId(path),
+    url: post.image,
+    caption: post.imageAlt,
+    credit: post.imageCredit,
+    license: post.imageLicense,
+    licenseUrl: post.imageLicenseUrl,
+    sourceUrl: post.imageSourceUrl,
+  });
 
   return compact({
     "@type": "BlogPosting",
@@ -1044,15 +1076,7 @@ export function postNode(post: PostInput, opts: PostNodeOptions): JsonLdNode {
       : undefined,
     // Credit and licence travel with a free file wherever it is described,
     // markup included — the page renders the same strings under the picture.
-    image: imageObjectNode({
-      id: primaryImageId(path),
-      url: post.image,
-      caption: post.imageAlt,
-      credit: post.imageCredit,
-      license: post.imageLicense,
-      licenseUrl: post.imageLicenseUrl,
-      sourceUrl: post.imageSourceUrl,
-    }),
+    image: image ?? hosted(post.image),
     interactionStatistic:
       post.viewCount != null && post.viewCount > 0
         ? {

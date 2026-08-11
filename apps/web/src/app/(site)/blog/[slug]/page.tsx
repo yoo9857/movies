@@ -32,6 +32,7 @@ import {
   breadcrumbNode,
   type Crumb,
   graph,
+  hasCompleteImageMetadata,
   hosted,
   movieEntityId,
   pageMetadata,
@@ -346,7 +347,14 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
       // licence, the page it came from — so this points at that node instead of
       // repeating the file as a second, thinner ImageObject. A draft emits no
       // BlogPosting, so on a draft there is nothing to point at.
-      imageId: !draft && post.image ? primaryImageId(path) : undefined,
+      imageId:
+        !draft && hasCompleteImageMetadata({
+          url: post.image,
+          licenseUrl: post.imageLicenseUrl,
+          sourceUrl: post.imageSourceUrl,
+        })
+          ? primaryImageId(path)
+          : undefined,
       datePublished: post.publishedAt,
       dateModified: post.updatedAt,
       hasBreadcrumb: true,

@@ -161,11 +161,11 @@ const LICENSED: Partial<PostInput> = {
 
 describe("the hero carries its terms", () => {
   it("absolutises our path and passes a bucket URL through untouched", () => {
-    const local = node({ image: "/uploads/posts/2026/08/x.webp" }).image as Record<string, unknown>;
+    const local = node(LICENSED).image as Record<string, unknown>;
     expect(local.url).toBe("http://localhost:3000/uploads/posts/2026/08/x.webp");
 
     const bucket = "https://pokemon-dive.us-lax-4.linodeobjects.com/cinepixo/posts/x.webp";
-    expect((node({ image: bucket }).image as Record<string, unknown>).url).toBe(bucket);
+    expect((node({ ...LICENSED, image: bucket }).image as Record<string, unknown>).url).toBe(bucket);
   });
 
   it("keeps credit and licence with the file, as the page renders them", () => {
@@ -232,28 +232,26 @@ describe("the hero carries its terms", () => {
 
   // A © over a work nobody owns is worse than the missing field.
   it("claims no copyright over a public-domain file", () => {
-    for (const licence of [
-      { imageLicense: "Public domain", imageLicenseUrl: null },
-      { imageLicense: "CC0", imageLicenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/" },
-    ]) {
-      const image = node({ ...LICENSED, ...licence }).image as Record<string, unknown>;
-      expect("copyrightNotice" in image).toBe(false);
-      expect(image.creditText).toBe("Photograph by Someone");
-    }
+    const image = node({
+      ...LICENSED,
+      imageLicense: "CC0",
+      imageLicenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+    }).image as Record<string, unknown>;
+    expect("copyrightNotice" in image).toBe(false);
+    expect(image.creditText).toBe("Photograph by Someone");
   });
 
-  // An operator's own upload states no licence, so it offers none to acquire.
-  it("offers no licence page for a file with no licence", () => {
+  // An operator's own upload states no licence, so it remains a URL rather
+  // than becoming a partial ImageObject with fields Search Console will flag.
+  it("keeps a file with no licence as a plain URL", () => {
     const image = node({
       image: "/uploads/posts/2026/08/x.webp",
       imageAlt: "The desk's own photograph",
       imageCredit: "CinePixo",
       imageSourceUrl: "https://cinepixo.com/blog/song-kang-ho-off-camera",
-    }).image as Record<string, unknown>;
+    }).image;
 
-    expect("license" in image).toBe(false);
-    expect("acquireLicensePage" in image).toBe(false);
-    expect(image.creditText).toBe("CinePixo");
+    expect(image).toBe("http://localhost:3000/uploads/posts/2026/08/x.webp");
   });
 
   it("omits `image` entirely with no hero", () => {
