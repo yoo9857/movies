@@ -26,6 +26,20 @@ deploy-jobs/<topic>-body.json
 The draft JSON contains the Markdown in its `content` field. There is no second
 standalone `.md` file to register.
 
+**Citations go in the `sources` array and nowhere else. Never write a
+`## Sources` section into `content`.** The post page renders `post.sources`
+itself — same heading, same list, and the same "Every factual claim above is
+drawn from these" line — so a hand-written block prints every citation twice.
+It is not only cosmetic: the renderer gives each source
+`rel="nofollow noopener noreferrer"` on purpose, because a source is evidence
+and not an endorsement we pass rank to, and a markdown copy of the same URLs
+carries no `nofollow` at all. Nine posts written between August 14 and 19 had
+one and were stripped on 2026-08-19; the `.md` rendition is the quickest check
+(`^## Sources$` should match exactly once).
+
+`content` ends on the last sentence of the piece. The strongest concrete thing
+you have left is the right place to stop — not a list.
+
 The image floor is four: one hero and at least three body images. Body jobs use
 `"at": "Exact heading text"` to place an image immediately above a matching
 `##` heading.
@@ -151,6 +165,22 @@ sitemaps, `/blog/feed.xml`, its shelf and `/md/blog/<slug>`, and was accepted
 by IndexNow (3 URLs each). Before publication, all 66 image, licence, source
 and citation URLs were fetched and confirmed to resolve, and each draft was
 checked unauthenticated to confirm it leaked no title, prose or caption.
+
+**Reading the published prose back against the sources found five claims that
+every automated check had passed**, which is the whole reason step 6 asks a
+person to do it. Two were arithmetic (`six features in twenty-nine years` for a
+1997–2018 filmography; `fifteen years as a working actor` for a man whose first
+directing credits are 1963–64 television). One was ambiguous in a way that
+credited an award to the wrong actor (`carried his films to festival prizes`
+read as though Sul Kyung-gu won for *Oasis*; the Mastroianni award for it went
+to Moon So-ri). Two were invented colour — a detail of the premise that appears
+in no report, and an anachronism about a 2005 film. All five were corrected in
+place with guarded exact-match replacements, not a content rewrite: the stored
+`content` carries the spliced image blocks, so writing the whole column would
+delete every picture. Assert the picture count before and after.
+
+The same read found nine posts duplicating their citations in `content`; they
+were stripped, and the rule is now written down in step 2 above.
 
 Two things learned that are worth not relearning:
 
