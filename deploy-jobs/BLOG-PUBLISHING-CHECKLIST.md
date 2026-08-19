@@ -134,6 +134,38 @@ npx tsx scripts/publish-post.ts <slug> --unpublish
 
 ## Completed batches
 
+### 2026-08-19
+
+Published and verified, each with a hero plus four or five body images:
+
+- `lee-chang-dong-returns-to-venice-after-24-years-netflix-is-sending-him-to-theaters-first`
+  (INDUSTRY, 6 pictures, 9 subjects)
+- `werner-herzog-has-two-sisters-digging-through-a-mountain-he-has-done-this-before`
+  (CRAFT, 5 pictures, 8 subjects)
+- `mark-rydell-was-an-actor-first-that-is-why-henry-fonda-finally-won`
+  (PEOPLE, 6 pictures, 15 subjects)
+
+`blog-doctor --fetch` reported zero errors and zero warnings on all three.
+Each returns a public 200 without `noindex`, appears in site search, both
+sitemaps, `/blog/feed.xml`, its shelf and `/md/blog/<slug>`, and was accepted
+by IndexNow (3 URLs each). Before publication, all 66 image, licence, source
+and citation URLs were fetched and confirmed to resolve, and each draft was
+checked unauthenticated to confirm it leaked no title, prose or caption.
+
+Two things learned that are worth not relearning:
+
+- **`upload.wikimedia.org` now refuses arbitrary thumbnail widths** with HTTP
+  400 ("Use thumbnail sizes listed on…"). Verified: `500`, `1280`, `1920` and
+  `3840` are served; `320`, `640`, `800`, `1024`, `1600` and `2560` are not. A
+  hand-built `1600px-` URL — the width our own pipeline resizes to — will fail.
+  Pass the original, or a width from that allowed list.
+- **Penske titles (Deadline, Variety, THR, IndieWire) answer 200 to a plain
+  `fetch` with a real User-Agent and a `Range` header**, while the harness
+  WebFetch tool gets a 307 to `tollbit.<domain>` and then 402. They are fine as
+  citations; they just cannot be read by the agent that cites them, so pair each
+  with a fetchable source (Screen Daily, labiennale.org, AP via a member paper,
+  KOFIC, official studio newsrooms) that carries the same claim.
+
 ### 2026-08-10
 
 Published and verified with four images each:
