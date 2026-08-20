@@ -38,8 +38,29 @@ const DRY = has("dry");
 const SLUG = val("slug");
 const LIMIT = Number(val("limit") ?? 25);
 
-/** The names Search Console showed impressions for, whose pages are noindex. */
+/**
+ * The names Search Console showed impressions for, whose pages had nothing on
+ * them. Append rather than replace: the list is a record of demand we have seen,
+ * and `--demand` only touches rows where `notes` is still null, so a name that
+ * has already been filled costs nothing by staying here.
+ *
+ * The 2026-08-20 report is the clearest version of the problem this file exists
+ * for. Almost every impression the site earns lands on an imported person page,
+ * at a position that would be worth having, with no clicks at all:
+ *
+ *   135 impressions  pos 5.3   a question about Olga Limburg
+ *    80 impressions  pos 5-9   three separate queries for Josephine Lovett's
+ *                              birth and death dates, and where she died
+ *    83 impressions  pos 9.6   "destin daniel cretton age"
+ *    38 impressions  pos 27    "rakesh roshan"
+ *    23 impressions  pos 10.3  "r. d. rajasekhar movies"
+ *    21 impressions  pos 36.8  "christian bale"
+ *
+ * Position five with zero clicks is a page that ranked and then had nothing to
+ * say.
+ */
 const DEMAND = [
+  // Seen in the earlier report.
   "augusto-genina",
   "olga-limburg",
   "henri-alekan",
@@ -48,6 +69,12 @@ const DEMAND = [
   "jose-riesgo",
   "nick-castle",
   "hong-kyung-pyo",
+  // Added from the 2026-08-20 report.
+  "josephine-lovett",
+  "r-d-rajasekhar",
+  "rakesh-roshan",
+  "destin-daniel-cretton",
+  "christian-bale",
 ];
 
 /** Below this many films in the library there is nothing honest to summarise. */
