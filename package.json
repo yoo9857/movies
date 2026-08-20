@@ -32,6 +32,7 @@
     "db:write-posts": "npm run write-posts -w @cinepixo/db --",
     "db:import-sitelinks": "npm run import-wikidata-sitelinks -w @cinepixo/db --",
     "db:person-notes": "npm run person-notes -w @cinepixo/db --",
+    "db:person-bios": "npm run person-bios -w @cinepixo/db --",
     "db:migrate-uploads": "npm run migrate-uploads -w @cinepixo/db --",
     "db:import-trailers": "npm run import-trailers -w @cinepixo/db --",
     "db:import-site-trailers": "npm run import-site-trailers -w @cinepixo/db --",

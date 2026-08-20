@@ -29,6 +29,7 @@
     "write-posts": "tsx prisma/write-posts.ts",
     "import-wikidata-sitelinks": "tsx prisma/import-wikidata-sitelinks.ts",
     "person-notes": "tsx prisma/write-person-notes.ts",
+    "person-bios": "tsx prisma/write-person-bios.ts",
     "migrate-uploads": "tsx prisma/migrate-uploads-to-bucket.ts",
     "import-trailers": "tsx prisma/import-trailers.ts",
     "import-site-trailers": "tsx prisma/import-site-trailers.ts",

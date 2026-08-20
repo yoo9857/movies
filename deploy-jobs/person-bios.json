@@ -1,0 +1,33 @@
+[
+  {
+    "slug": "josephine-lovett",
+    "bio": "An American scenario writer who worked in pictures from 1916 to 1935 and specialised in heroines who were economically and sexually independent — at a time when that had to be written past a censor. Her screenplay for Our Dancing Daughters (1928) made Joan Crawford a star and was nominated for the Academy Award for writing.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Josephine_Lovett",
+      "https://www.oscars.org/oscars/ceremonies/1930"
+    ]
+  },
+  {
+    "slug": "olga-limburg",
+    "bio": "A German stage and film actress whose screen career ran from 1907 to 1957: aunts, neighbours and housekeepers, forty-nine films between 1919 and 1955, four of them opposite Heinz Rühmann. She came up in the Berlin theatres and kept working through the Empire, Weimar, the Third Reich and the Federal Republic.",
+    "sources": ["https://en.wikipedia.org/wiki/Olga_Limburg"]
+  },
+  {
+    "slug": "r-d-rajasekhar",
+    "bio": "An Indian cinematographer in Tamil, Telugu, Malayalam and Hindi films, who spent about nine years shooting advertisements before his 2001 debut. His signature is subtractive: the bleach-bypass look of Kaakha Kaakha, and the two months he spent de-saturating Ghajini, which won him the Tamil Nadu state award for cinematography.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/R._D._Rajasekhar",
+      "https://en.wikipedia.org/wiki/Ghajini_(2005_film)"
+    ]
+  },
+  {
+    "slug": "rakesh-roshan",
+    "bio": "An Indian filmmaker who appeared in eighty-four films through the 1970s and 1980s, mostly in supporting parts, and then built a second career behind the camera as a producer and director in Hindi cinema. Son of the music director Roshan, father of Hrithik Roshan, and the head of Filmkraft Productions.",
+    "sources": ["https://en.wikipedia.org/wiki/Rakesh_Roshan"]
+  },
+  {
+    "slug": "yevgeny-morgunov",
+    "bio": "A Soviet comic actor who, by the account that follows him everywhere, wrote to Stalin about wanting to act and was reportedly given a place at the State Institute of Cinematography. He became the third of Leonid Gaidai's trio — Byvaly, the Experienced one, tight-lipped and aggressive — beside Yuri Nikulin and Georgy Vitsin.",
+    "sources": ["https://en.wikipedia.org/wiki/Yevgeny_Morgunov"]
+  }
+]
