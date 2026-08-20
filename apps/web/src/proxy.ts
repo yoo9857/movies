@@ -12,6 +12,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, newNonce, xsltDocumentPolicy } from "@/lib/csp";
 import { markdownAlternateFor } from "@/lib/markdown-alternate";
+import { SITE_URL } from "@/lib/site";
 
 const SESSION_COOKIE = "cinepixo_session";
 
@@ -64,11 +65,17 @@ export function proxy(request: NextRequest) {
   // the other direction, with `Link: rel="canonical"` back at the HTML.
   const alternate = markdownAlternateFor(pathname);
   if (alternate) {
+    // `SITE_URL`, not `request.nextUrl.origin`. The origin is whatever the server
+    // is bound to — behind nginx that is `https://localhost:3400`, which is what
+    // this header advertised on the first deploy and is unreachable to everyone.
+    // `SITE_URL` is the canonical origin, and it is already what
+    // `markdownResponse` uses for the canonical header pointing back this way.
+    //
     // `append`, never `set`: Next puts its own font and image preloads in this
     // header, and replacing it would quietly cost every page its preloading.
     response.headers.append(
       "Link",
-      `<${request.nextUrl.origin}${alternate}>; rel="alternate"; type="text/markdown"`,
+      `<${SITE_URL}${alternate}>; rel="alternate"; type="text/markdown"`,
     );
   }
 

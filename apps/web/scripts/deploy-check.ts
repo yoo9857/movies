@@ -123,6 +123,34 @@ const adStackInHtml = (body: string): string | null => {
   return missing.length === 0 ? null : `missing ${missing.join("; ")}`;
 };
 
+/**
+ * The Markdown rendition is advertised, and advertised at a URL that exists.
+ *
+ * Both halves matter and only the second is interesting. The `<link>` tag comes
+ * from `pageMetadata`, which builds it from `SITE_URL`; the HTTP header comes
+ * from `proxy.ts`, which on its first deploy built it from
+ * `request.nextUrl.origin` — and behind nginx that is `https://localhost:3400`.
+ * The header was present, well-formed, and pointed somewhere no client on earth
+ * could fetch. Nothing in a unit test sees that, because the function under test
+ * returns a path and the path was right.
+ */
+const markdownAlternate = (base: string) => (body: string, res: Response): string | null => {
+  const problems: string[] = [];
+  if (!/<link[^>]*type="text\/markdown"[^>]*>/.test(body)) {
+    problems.push('no <link rel="alternate" type="text/markdown"> in the HTML');
+  }
+  const header = (res.headers.get("link") ?? "")
+    .split(",")
+    .map((p) => p.trim())
+    .find((p) => p.includes('rel="alternate"') && p.includes("markdown"));
+  if (!header) {
+    problems.push("no Link: rel=alternate header (a HEAD request learns nothing)");
+  } else if (!header.includes(`<${base}/`)) {
+    problems.push(`Link header points off-origin: ${header} (expected ${base}/…)`);
+  }
+  return problems.length === 0 ? null : problems.join("; ");
+};
+
 const indexable = (body: string): string | null => {
   const robots = robotsMeta(body);
   if (robots == null) return "no robots meta tag";
@@ -159,6 +187,15 @@ const CHECKS: Check[] = [
   { path: "/blog/feed.xml", expect: contains("<rss", "Off Camera") },
   { path: "/llms.txt", expect: contains("# CinePixo", "/blog") },
   { path: "/blog", expect: contains("Off Camera") },
+  // The machine-readable half of the site: a rendition exists, and it is
+  // advertised twice, at a URL a client can actually reach.
+  {
+    path: "the newest post's markdown rendition",
+    resolve: newestPost,
+    expect: markdownAlternate(BASE),
+  },
+  { path: "/critics/jonathan-rosenbaum", expect: markdownAlternate(BASE) },
+  { path: "/critics/jonathan-rosenbaum.md", expect: contains("type: 'critic-profile'", "not a byline") },
   // The inventory itself, on the page it is supposed to pay for.
   //
   // `optional` only because the slot id cannot exist before AdSense approves the
