@@ -10,7 +10,9 @@
   {
     "slug": "olga-limburg",
     "bio": "A German stage and film actress whose screen career ran from 1907 to 1957: aunts, neighbours and housekeepers, forty-nine films between 1919 and 1955, four of them opposite Heinz Rühmann. She came up in the Berlin theatres and kept working through the Empire, Weimar, the Third Reich and the Federal Republic.",
-    "sources": ["https://en.wikipedia.org/wiki/Olga_Limburg"]
+    "sources": [
+      "https://en.wikipedia.org/wiki/Olga_Limburg"
+    ]
   },
   {
     "slug": "r-d-rajasekhar",
@@ -23,11 +25,71 @@
   {
     "slug": "rakesh-roshan",
     "bio": "An Indian filmmaker who appeared in eighty-four films through the 1970s and 1980s, mostly in supporting parts, and then built a second career behind the camera as a producer and director in Hindi cinema. Son of the music director Roshan, father of Hrithik Roshan, and the head of Filmkraft Productions.",
-    "sources": ["https://en.wikipedia.org/wiki/Rakesh_Roshan"]
+    "sources": [
+      "https://en.wikipedia.org/wiki/Rakesh_Roshan"
+    ]
   },
   {
     "slug": "yevgeny-morgunov",
     "bio": "A Soviet comic actor who, by the account that follows him everywhere, wrote to Stalin about wanting to act and was reportedly given a place at the State Institute of Cinematography. He became the third of Leonid Gaidai's trio — Byvaly, the Experienced one, tight-lipped and aggressive — beside Yuri Nikulin and Georgy Vitsin.",
-    "sources": ["https://en.wikipedia.org/wiki/Yevgeny_Morgunov"]
+    "sources": [
+      "https://en.wikipedia.org/wiki/Yevgeny_Morgunov"
+    ]
+  },
+  {
+    "slug": "christian-bale",
+    "bio": "An English actor whose reputation rests on physical transformation — a breakthrough at thirteen in Spielberg's Empire of the Sun, then Patrick Bateman in American Psycho, the emaciated lead of The Machinist, and Batman across Christopher Nolan's trilogy. He holds an Academy Award and two Golden Globes.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Christian_Bale"
+    ]
+  },
+  {
+    "slug": "destin-daniel-cretton",
+    "bio": "An American filmmaker from Haiku, on Maui, who moved from small-scale drama into the largest films there are — Short Term 12, The Glass Castle and Just Mercy, then Shang-Chi and the Legend of the Ten Rings and Spider-Man: Brand New Day. He has run his own production company, Hisako, since 2024.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Destin_Daniel_Cretton"
+    ]
+  },
+  {
+    "slug": "augusto-genina",
+    "bio": "An Italian film pioneer who released eighty-eight films across a career running from 1913 to 1955, directing and producing in Italy, Germany and France. He started in the silent era in Rome and was still working in the mid-1950s, which makes his filmography a record of four decades of European production.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Augusto_Genina"
+    ]
+  },
+  {
+    "slug": "henri-alekan",
+    "bio": "A French cinematographer who started out at sixteen as a travelling puppeteer with his brother, then worked up from third assistant cameraman at the Billancourt studios. He operated for Eugen Schüfftan on Carné's Quai des Brumes and took his non-naturalistic light from him; his own breakthrough came in 1946, on La Bataille du Rail and Cocteau's La Belle et la Bête.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Henri_Alekan"
+    ]
+  },
+  {
+    "slug": "gertrud-wolle",
+    "bio": "A German actress who worked as a nanny before drama school, joined the Deutsches Theater in 1916, and was then typecast for the rest of her life as the eccentric older woman — the shrill secretary, teacher, headmistress or neighbour, in small parts meant to amuse. Sound film wanted so many of them that she barely returned to the stage until after 1945.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Gertrud_Wolle"
+    ]
+  },
+  {
+    "slug": "jose-riesgo",
+    "bio": "A Spanish actor who fought in the Civil War with the Republican army and began acting in 1943, working for the next four decades. Late on he played Julián in Barrio Sésamo, the role that finally made him widely known — and he went on playing the same character on stage until he retired.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Jos%C3%A9_Riesgo"
+    ]
+  },
+  {
+    "slug": "nick-castle",
+    "bio": "An American filmmaker who was the man in the mask — Michael Myers in John Carpenter's Halloween, a part he returned to for the 2018 sequel and the two after it. He co-wrote Escape from New York, then directed for himself: The Last Starfighter, The Boy Who Could Fly, Dennis the Menace and Major Payne.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Nick_Castle"
+    ]
+  },
+  {
+    "slug": "hong-kyung-pyo",
+    "bio": "A South Korean cinematographer, also credited as Alex Hong, who shot Bong Joon-ho's Parasite and Lee Chang-dong's Burning and has worked with Na Hong-jin, Kim Ji-woon and Hirokazu Kore-eda. In 2025 he became the first cinematographer to take the Baeksang Grand Prize for Film, for Harbin.",
+    "sources": [
+      "https://en.wikipedia.org/wiki/Hong_Kyung-pyo"
+    ]
   }
 ]
