@@ -92,6 +92,37 @@ const adUnitOnArticle = (body: string): string | null => {
 const robotsMeta = (body: string): string | null =>
   /<meta name="robots" content="([^"]*)"/.exec(body)?.[1] ?? null;
 
+/**
+ * The ad stack, as a machine that does not run JavaScript sees it.
+ *
+ * Both halves have to be *elements in the HTML*, and the old check did not say
+ * so: it looked for the substring "adsbygoogle.js", which a
+ * `<link rel="preload">` hint and a serialised Next runtime instruction both
+ * satisfy. That is exactly what the site was shipping — `next/script` with
+ * `afterInteractive` had the browser create the tag after hydration, so the
+ * served HTML contained the URL twice and a `<script>` tag zero times, and this
+ * check stayed green through an AdSense review that could not find the code.
+ *
+ * So: match the tag. The account meta is what verifies ownership; the loader is
+ * what the instructions tell publishers to paste into `<head>`.
+ */
+const adStackInHtml = (body: string): string | null => {
+  const missing: string[] = [];
+  if (!/<meta name="google-adsense-account" content="ca-pub-[0-9]+"/.test(body)) {
+    missing.push("the google-adsense-account meta tag");
+  }
+  // A real element, not a preload hint and not a JSON blob naming the URL.
+  if (!/<script[^>]*\bsrc="[^"]*adsbygoogle\.js[^"]*"/.test(body)) {
+    missing.push(
+      "a literal <script src=…adsbygoogle.js> in the HTML" +
+        (body.includes("adsbygoogle.js")
+          ? ' (the URL is present, but only as a preload hint or a client-side instruction — this is the next/script "afterInteractive" trap)'
+          : ""),
+    );
+  }
+  return missing.length === 0 ? null : `missing ${missing.join("; ")}`;
+};
+
 const indexable = (body: string): string | null => {
   const robots = robotsMeta(body);
   if (robots == null) return "no robots meta tag";
@@ -116,9 +147,9 @@ const CHECKS: Check[] = [
   },
   {
     path: "/",
-    // Both halves of the ad stack: the account tag AdSense verifies ownership
-    // with, and the script that actually loads.
-    expect: contains("google-adsense-account", "adsbygoogle.js"),
+    // Both halves of the ad stack, as elements in the HTML rather than as
+    // strings that happen to appear in it.
+    expect: adStackInHtml,
   },
   { path: "/robots.txt", expect: contains("Sitemap:", "Disallow: /admin") },
   { path: "/sitemap.xml", expect: contains("<sitemapindex", "/sitemaps/blog") },
