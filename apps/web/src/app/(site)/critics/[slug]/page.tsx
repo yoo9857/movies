@@ -59,6 +59,7 @@ export async function generateMetadata(props: {
     ogType: "profile",
     images: critic.avatarUrl ? [{ url: critic.avatarUrl, alt: critic.name }] : [],
     keywords: [critic.name, `${critic.name} film critic`, "film criticism"],
+    markdownPath: `/critics/${critic.slug}.md`,
   });
 }
 

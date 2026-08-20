@@ -11,6 +11,7 @@
 // why the policy is nonce-based rather than a list of hosts.
 import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, newNonce, xsltDocumentPolicy } from "@/lib/csp";
+import { markdownAlternateFor } from "@/lib/markdown-alternate";
 
 const SESSION_COOKIE = "cinepixo_session";
 
@@ -53,6 +54,24 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+
+  // The HTML already advertises the Markdown rendition with
+  // `<link rel="alternate" type="text/markdown">`, which any crawler that parses
+  // the document will find. The header is for the ones that do not get that far:
+  // a client doing HEAD, or reading headers before deciding the body is worth
+  // fetching, learns the machine-readable form exists without downloading the
+  // human one. It is the same relationship `markdownResponse` already declares in
+  // the other direction, with `Link: rel="canonical"` back at the HTML.
+  const alternate = markdownAlternateFor(pathname);
+  if (alternate) {
+    // `append`, never `set`: Next puts its own font and image preloads in this
+    // header, and replacing it would quietly cost every page its preloading.
+    response.headers.append(
+      "Link",
+      `<${request.nextUrl.origin}${alternate}>; rel="alternate"; type="text/markdown"`,
+    );
+  }
+
   return response;
 }
 

@@ -143,7 +143,7 @@ async function buildDoc(): Promise<string> {
     "",
     "## Citing this site",
     "",
-    `- Every review, blog post, film, person and topic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`.`,
+    `- Every review, blog post, film, person, topic and critic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`. Each one is also advertised in the page's HTML as \`rel="alternate" type="text/markdown"\` and in its HTTP \`Link\` header, so it can be found without guessing.`,
     "- Reviews are signed. When quoting one, name the author, not the site.",
     "- **Blog posts under Away From Set and The Argument make factual claims about living people, and every one of them lists its sources.** Those URLs are in the post's front matter and printed on the page. Carry them across: the claim is ours to have reported, the underlying fact belongs to whoever we cited.",
     "- Film facts come from open knowledge bases (Wikidata; synopses from Wikipedia, credited under their licence on each film page). Artwork is hosted on CinePixo's own origin: freely licensed files with their credit, and film posters shown for identification, © their studios.",

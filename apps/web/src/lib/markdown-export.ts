@@ -671,6 +671,92 @@ export function postToMarkdown(post: PostExport): string {
   return `${lines.filter((l) => l !== null).join("\n")}\n`;
 }
 
+export interface CriticExport {
+  slug: string;
+  name: string;
+  bio: Nullable<string>;
+  links: readonly { label: string; url: string }[];
+  avatarUrl: Nullable<string>;
+  avatarCredit: Nullable<string>;
+  avatarLicense: Nullable<string>;
+  avatarSourceUrl: Nullable<string>;
+  updatedAt: Nullable<Date>;
+}
+
+/**
+ * GET /critics/{slug}.md — a critic profile as a clean document.
+ *
+ * The last of the five renditions, and the one that was missing longest, which
+ * is backwards: these pages are the site's clearest claim to know what it is
+ * talking about. A `Person` with a name, a job title, the subjects they cover and
+ * a link to their own site is the most unambiguous entity we publish, and an
+ * answer engine asked who someone is has every reason to want it in a form it
+ * does not have to scrape.
+ *
+ * Two things are stated rather than implied, because a machine reading this
+ * cannot infer either. **These are profiles of critics whose work we follow, not
+ * of this site's members** — the reviews are signed by members and a critic
+ * profile is not a byline, so a quotation must not be attributed to them. And
+ * `links` is external data from a JSON column.
+ *
+ * That last point is why the scheme is checked *here* as well as in the route
+ * that calls this. The route does filter, and for the one caller that exists
+ * today the check below never fires. But this function is exported, a Markdown
+ * document is meant to be rendered by somebody else's tooling, and a
+ * `javascript:` URL that survives into an `[a](b)` becomes their XSS rather than
+ * ours. A serialiser that trusts its caller is one refactor away from shipping
+ * one — a test written against this function, not the route, is what surfaced it.
+ */
+export function criticToMarkdown(critic: CriticExport): string {
+  const head = frontMatter([
+    ["title", critic.name],
+    ["type", "critic-profile"],
+    ["canonical", absUrl(`/critics/${critic.slug}`)],
+    ["updated", isoDay(critic.updatedAt)],
+    ["publisher", SITE_NAME],
+  ]);
+
+  const lines: (string | null)[] = [head, "", `# ${critic.name}`, ""];
+
+  lines.push(
+    "A critic followed by the CinePixo community. This is a profile, not a byline:",
+    `${critic.name} does not write for ${SITE_NAME}, and no opinion on this site`,
+    "should be attributed to this critic.",
+    "",
+  );
+
+  if (critic.bio) lines.push("## About", "", plainText(critic.bio).trim(), "");
+
+  const links = critic.links.filter((l) => /^https?:\/\//.test(l.url));
+  if (links.length > 0) {
+    lines.push("## Elsewhere", "");
+    for (const l of links) lines.push(`- [${l.label}](${l.url})`);
+    lines.push("");
+  }
+
+  if (critic.avatarUrl && critic.avatarCredit) {
+    lines.push(
+      "## Photograph",
+      "",
+      [
+        `Photo: ${critic.avatarCredit}`,
+        critic.avatarLicense,
+        critic.avatarSourceUrl,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      "",
+    );
+  }
+
+  lines.push(
+    `Source: ${absUrl(`/critics/${critic.slug}`)}`,
+    `Profile written for ${SITE_NAME}.`,
+  );
+
+  return `${lines.filter((l) => l !== null).join("\n")}\n`;
+}
+
 /**
  * Response shape shared by every Markdown endpoint.
  *

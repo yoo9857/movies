@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  criticToMarkdown,
   exportMarkdownBody,
   markdownResponse,
   movieToMarkdown,
@@ -349,5 +350,72 @@ describe("plainText and authoring directives", () => {
     const out = plainText("![poster](/uploads/x.webp) see [the film](/movies/1)");
     expect(out).not.toContain("uploads");
     expect(out).toContain("see the film");
+  });
+});
+
+/**
+ * The critic rendition was the last of the six and the one most likely to be
+ * misread, because a critic profile looks exactly like a byline and is not one.
+ * Jonathan Rosenbaum has a page here; he has never written for this site. An
+ * answer engine that conflates the two attributes our members' opinions to him.
+ */
+describe("criticToMarkdown", () => {
+  const critic = {
+    slug: "jane-doe-critic",
+    name: "Jane Doe",
+    bio: "Wrote about westerns for thirty years.",
+    links: [{ label: "Her site", url: "https://example.com/jane" }],
+    avatarUrl: "https://cdn.example.com/jane.webp",
+    avatarCredit: "Some Photographer",
+    avatarLicense: "CC BY-SA 4.0",
+    avatarSourceUrl: "https://commons.wikimedia.org/wiki/File:Jane.jpg",
+    updatedAt: new Date("2026-08-20T00:00:00Z"),
+  };
+
+  it("says in the document that this is not a byline", () => {
+    const md = criticToMarkdown(critic);
+    expect(md).toContain("not a byline");
+    expect(md).toContain("does not write for");
+    expect(md).toContain("attributed to this critic");
+  });
+
+  it("declares its own type and canonical, so the pair never competes", () => {
+    const md = criticToMarkdown(critic);
+    expect(md).toContain("type: 'critic-profile'");
+    expect(md).toContain(`canonical: '${SITE_URL}/critics/jane-doe-critic'`);
+  });
+
+  it("carries the photograph's credit, licence and source together", () => {
+    const md = criticToMarkdown(critic);
+    expect(md).toContain("Some Photographer");
+    expect(md).toContain("CC BY-SA 4.0");
+    expect(md).toContain("commons.wikimedia.org");
+  });
+
+  it("prints no photograph section when the credit is missing", () => {
+    // A licence without its source is refused everywhere else on this site; an
+    // image with no credit at all has nothing to print, so it prints nothing
+    // rather than an empty heading.
+    const md = criticToMarkdown({ ...critic, avatarCredit: null, avatarLicense: null });
+    expect(md).not.toContain("## Photograph");
+  });
+
+  it("keeps only http(s) links, the same filter the page applies", () => {
+    const md = criticToMarkdown({
+      ...critic,
+      links: [
+        { label: "Her site", url: "https://example.com/jane" },
+        { label: "Bad", url: "javascript:alert(1)" },
+      ],
+    });
+    expect(md).toContain("https://example.com/jane");
+    // The route filters before it gets here; this pins that the serialiser does
+    // not reintroduce anything by rendering the label of a rejected entry.
+    expect(md).not.toContain("javascript:");
+  });
+
+  it("ends on where the profile came from", () => {
+    const md = criticToMarkdown(critic);
+    expect(md.trimEnd().endsWith("Profile written for CinePixo.")).toBe(true);
   });
 });
