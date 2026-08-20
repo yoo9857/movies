@@ -229,9 +229,19 @@ themselves live on the topic pages that render them. Two rules hold everywhere:
 
 **Indexing policy** — `/search` and the authenticated pages are `noindex, follow`;
 admin is `noindex, nofollow` in metadata *and* via `X-Robots-Tag`, because a crawler
-blocked by robots.txt never reads the tag inside the page. On `/movies`, genre and
-decade filters each get their own canonical URL; sort order and view mode
-canonicalise away.
+blocked by robots.txt never reads the tag inside the page.
+
+Everything derived from the bulk Wikidata import is `noindex, follow` until somebody
+writes about it. A film page earns indexing with a published review or a place on an
+editorial axis; a person, with our prose or a reviewed film of theirs. The same rule
+governs the **listings** that enumerate them (`src/lib/browse-index.ts`): a browse
+state is indexable only where the sitemap submits it — `/movies`, `/movies?genre=`
+and `/movies?decade=` at page one, and `/people` bare. Pagination, genre×decade
+cross-sections, and the people directory's role and alphabet slices stay walkable
+and unindexed; sort order and view mode canonicalise away entirely. Without that
+last part the library offered crawlers tens of thousands of URLs holding thirty rows
+of an import apiece. `test/browse-index.test.ts` pins both directions and
+`deploy-check` re-checks them against the running site.
 
 ## Security posture
 

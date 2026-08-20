@@ -10,6 +10,7 @@ import { MovieCard } from "@/components/MovieCard";
 import { MovieFilterBar } from "@/components/MovieFilterBar";
 import { Poster } from "@/components/Poster";
 import { RatingHistogram } from "@/components/RatingHistogram";
+import { movieBrowseIsIndexable } from "@/lib/browse-index";
 import {
   breadcrumbNode,
   type Crumb,
@@ -79,6 +80,11 @@ export async function generateMetadata(props: {
 
   return pageMetadata({
     path: canonicalPath(genre, decade, page),
+    // Self-canonical either way — page 7 of the westerns holds films that are on
+    // no other URL, so pointing it at page 1 would tell a crawler they do not
+    // exist. It is `noindex` because nobody should arrive there from a search,
+    // not because it is a duplicate.
+    noIndex: !movieBrowseIsIndexable(genre, decade, page),
     title: page > 1 ? `${base} — page ${page}` : base,
     description: scope
       ? `Films ${scope} in the CinePixo library — full credits, and the criticism written about each one.`

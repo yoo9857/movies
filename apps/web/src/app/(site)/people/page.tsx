@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { PersonCard } from "@/components/PersonCard";
 import { ReelDivider, SectionHead } from "@/components/ReelDivider";
+import { peopleBrowseIsIndexable } from "@/lib/browse-index";
 import {
   breadcrumbNode,
   type Crumb,
@@ -240,6 +241,10 @@ export async function generateMetadata(props: {
   const scope = active ? (active === "Acting" ? "Actors" : `${active}s`) : "People";
   return pageMetadata({
     path: query ? `/people?${query}` : "/people",
+    // Only `/people` itself is a destination — the one URL the sitemap
+    // announces. A role or an initial keeps its own canonical and stays
+    // walkable; see `lib/browse-index.ts` for why it is not offered.
+    noIndex: !peopleBrowseIsIndexable(active ?? null, initial ?? null),
     title: initial ? `${scope} — ${initial}` : scope,
     description: active
       ? `Everyone credited as ${active} in the CinePixo library, with the reviews written here about their work.`

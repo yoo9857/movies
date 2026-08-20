@@ -298,6 +298,15 @@ export async function sectionUrls(section: Section): Promise<SitemapUrl[]> {
       // Sort order and grid-vs-index canonicalise away on that page, so they are
       // deliberately absent here: listing them would submit URLs that declare a
       // different address as their canonical.
+      //
+      // This list *is* the indexable set, and `movieBrowseIsIndexable` in
+      // `lib/browse-index.ts` is the same rule written as a predicate: one
+      // facet, page one. Page two onward and every genre×decade cross-section
+      // are `noindex, follow` — walkable, not offered — because thirty rows of
+      // an imported library is not a destination. Add a state here and you must
+      // widen that predicate in the same commit, or the sitemap will advertise a
+      // page that tells the crawler to forget it. Same for `/people`, whose only
+      // indexable state is the bare listing this file submits below.
       const browseUrl = (params: Record<string, string>) =>
         absUrl(`/movies?${new URLSearchParams(params).toString()}`);
 
