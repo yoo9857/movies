@@ -29,7 +29,8 @@
 import { streamedRenderProblem } from "../src/lib/deploy-health";
 
 const ARG = (process.argv.find((a) => a.startsWith("--url=")) ?? "").split("=").slice(1).join("=");
-const BASE = (ARG || process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3400").replace(/\/+$/, "");
+const REQUESTED_BASE = (ARG || process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3400").replace(/\/+$/, "");
+let BASE = REQUESTED_BASE;
 const PEOPLE_SAMPLE = Number(
   (process.argv.find((a) => a.startsWith("--people-sample=")) ?? "--people-sample=40")
     .split("=")
@@ -330,6 +331,20 @@ async function checkPeopleSample(): Promise<{ checked: number; failures: string[
 }
 
 async function main() {
+  // Follow the host redirect once, then exercise the canonical origin directly.
+  // Otherwise a full people sample through `www` doubles every request and can
+  // trip Nginx's rate limiter, manufacturing the very 503s this script is meant
+  // to detect.
+  try {
+    const probe = await fetch(`${BASE}/`, {
+      method: "HEAD",
+      headers: { "User-Agent": "CinePixo-deploy-check/1.0" },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (probe.ok) BASE = new URL(probe.url).origin;
+  } catch {
+    // `run` below will report the useful reachability failure per surface.
+  }
   console.log(`Checking ${BASE}\n`);
   const results = await Promise.all(
     CHECKS.map(async (c) => ({ check: c, problem: await run(c) })),
