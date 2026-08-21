@@ -143,8 +143,9 @@ const adStackInHtml = (body: string): string | null => {
  * could fetch. Nothing in a unit test sees that, because the function under test
  * returns a path and the path was right.
  */
-const markdownAlternate = (base: string) => (body: string, res: Response): string | null => {
+const markdownAlternate = (body: string, res: Response): string | null => {
   const problems: string[] = [];
+  const responseOrigin = new URL(res.url).origin;
   if (!/<link[^>]*type="text\/markdown"[^>]*>/.test(body)) {
     problems.push('no <link rel="alternate" type="text/markdown"> in the HTML');
   }
@@ -154,8 +155,8 @@ const markdownAlternate = (base: string) => (body: string, res: Response): strin
     .find((p) => p.includes('rel="alternate"') && p.includes("markdown"));
   if (!header) {
     problems.push("no Link: rel=alternate header (a HEAD request learns nothing)");
-  } else if (!header.includes(`<${base}/`)) {
-    problems.push(`Link header points off-origin: ${header} (expected ${base}/…)`);
+  } else if (!header.includes(`<${responseOrigin}/`)) {
+    problems.push(`Link header points off-origin: ${header} (expected ${responseOrigin}/…)`);
   }
   return problems.length === 0 ? null : problems.join("; ");
 };
@@ -202,9 +203,9 @@ const CHECKS: Check[] = [
   {
     path: "the newest post's markdown rendition",
     resolve: newestPost,
-    expect: markdownAlternate(BASE),
+    expect: markdownAlternate,
   },
-  { path: "/critics/jonathan-rosenbaum", expect: markdownAlternate(BASE) },
+  { path: "/critics/jonathan-rosenbaum", expect: markdownAlternate },
   { path: "/critics/jonathan-rosenbaum.md", expect: contains("type: 'critic-profile'", "not a byline") },
   // The inventory itself, on the page it is supposed to pay for.
   //

@@ -10,6 +10,7 @@
 // header must be set on the request as well as the response. See lib/csp.ts for
 // why the policy is nonce-based rather than a list of hosts.
 import { NextResponse, type NextRequest } from "next/server";
+import { canonicalHostRedirect } from "@/lib/canonical-host";
 import { contentSecurityPolicy, newNonce, xsltDocumentPolicy } from "@/lib/csp";
 import { markdownAlternateFor } from "@/lib/markdown-alternate";
 import { SITE_URL } from "@/lib/site";
@@ -27,6 +28,13 @@ const SESSION_COOKIE = "cinepixo_session";
 const XSLT_DOCUMENT = /^\/(?:sitemap\.xml|sitemaps\/[a-z-]+\.xml|feed\.xml|sitemap\.xsl|feed\.xsl)$/;
 
 export function proxy(request: NextRequest) {
+  const canonical = canonicalHostRedirect(
+    SITE_URL,
+    request.url,
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
+  );
+  if (canonical) return NextResponse.redirect(canonical, 308);
+
   const { pathname } = request.nextUrl;
   const hasCookie = request.cookies.has(SESSION_COOKIE);
 
