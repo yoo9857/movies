@@ -138,16 +138,35 @@ GROUP BY ?film`);
       const trailer = youtubeKey(b.trailer?.value);
       const minutes = Math.round(Number(b.runtime?.value));
 
-      if (!movie.originalLanguage && language) (data.originalLanguage = language), filled.push("language");
-      if (!movie.certification && rating) (data.certification = rating), filled.push("rating");
-      if (!movie.collectionName && series) (data.collectionName = series), filled.push("series");
-      if (!movie.homepage && website?.startsWith("http"))
-        (data.homepage = website.slice(0, 500)), filled.push("website");
-      if (!movie.trailerKey && trailer) (data.trailerKey = trailer), filled.push("trailer");
-      if (!movie.runtime && Number.isFinite(minutes) && minutes > 0 && minutes <= 1200)
-        (data.runtime = minutes), filled.push("runtime");
+      if (!movie.originalLanguage && language) {
+        data.originalLanguage = language;
+        filled.push("language");
+      }
+      if (!movie.certification && rating) {
+        data.certification = rating;
+        filled.push("rating");
+      }
+      if (!movie.collectionName && series) {
+        data.collectionName = series;
+        filled.push("series");
+      }
+      if (!movie.homepage && website?.startsWith("http")) {
+        data.homepage = website.slice(0, 500);
+        filled.push("website");
+      }
+      if (!movie.trailerKey && trailer) {
+        data.trailerKey = trailer;
+        filled.push("trailer");
+      }
+      if (!movie.runtime && Number.isFinite(minutes) && minutes > 0 && minutes <= 1200) {
+        data.runtime = minutes;
+        filled.push("runtime");
+      }
       const hasCompanies = Array.isArray(movie.companies) && movie.companies.length > 0;
-      if (!hasCompanies && companies.length > 0) (data.companies = companies), filled.push("companies");
+      if (!hasCompanies && companies.length > 0) {
+        data.companies = companies;
+        filled.push("companies");
+      }
     }
   }
 

@@ -64,6 +64,8 @@ export type TmdbSize =
  * one choke point instead of forty call sites.
  */
 export function tmdbImage(_path: Nullable<string>, _size: TmdbSize): string | undefined {
+  void _path;
+  void _size;
   return undefined;
 }
 
@@ -190,9 +192,9 @@ const nameSlug = (name: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "") || "unknown";
 
-/** Members have no public profile page, so their identity hangs off the site. */
+/** A publishing member's public profile owns their identity. */
 export const memberEntityId = (username: string) =>
-  `${SITE_URL}/#/schema/member/${nameSlug(username)}`;
+  `${SITE_URL}/writers/${username}#person`;
 
 /** Cast, crew and directors: no page either, but a shared id de-duplicates a
  *  writer-director across the `director` and `author` slots of one film. */
@@ -402,7 +404,7 @@ export function organizationNode(): JsonLdNode {
     knowsAbout: SITE_KEYWORDS,
     // The rating rules are published, not implied — an answer engine that cites
     // one of our scores can find out exactly what the number means.
-    publishingPrinciples: absUrl("/about"),
+    publishingPrinciples: absUrl("/editorial"),
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "editorial",
@@ -558,15 +560,22 @@ export function memberNode(member: {
   username: string;
   displayName?: Nullable<string>;
   bio?: Nullable<string>;
+  avatarUrl?: Nullable<string>;
   reviewCount?: Nullable<number>;
 }): JsonLdNode {
+  const path = `/writers/${member.username}`;
+  const desk = member.username === "cinepixo";
   return compact({
-    "@type": "Person",
+    "@type": desk ? "Organization" : "Person",
     "@id": memberEntityId(member.username),
+    url: absUrl(path),
     name: member.displayName ?? member.username,
     alternateName: member.displayName ? member.username : undefined,
     description: clamp(member.bio ?? undefined, 300),
-    memberOf: ref(ORG_ID),
+    image: hosted(member.avatarUrl),
+    mainEntityOfPage: ref(pageId(path)),
+    memberOf: desk ? undefined : ref(ORG_ID),
+    parentOrganization: desk ? ref(ORG_ID) : undefined,
     knowsAbout: ["film criticism", "movie reviews"],
   });
 }
@@ -998,6 +1007,8 @@ export interface PostInput {
   content: string;
   /** The `PostCategory` label as the page prints it, not the enum member. */
   categoryLabel: string;
+  /** The reader-facing job: comparison, checklist, first-hand guide, etc. */
+  formatLabel?: string;
   tags?: readonly string[];
   /** Source URLs — every one of which the page renders. */
   sources?: readonly string[];
@@ -1062,6 +1073,7 @@ export function postNode(post: PostInput, opts: PostNodeOptions): JsonLdNode {
     inLanguage: SITE_LANG,
     isAccessibleForFree: true,
     articleSection: post.categoryLabel,
+    genre: post.formatLabel,
     keywords: post.tags?.length ? post.tags.join(", ") : undefined,
     author: memberNode(opts.author),
     publisher: ref(ORG_ID),

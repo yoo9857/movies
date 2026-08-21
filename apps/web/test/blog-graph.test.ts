@@ -36,6 +36,7 @@ const POST: PostInput = {
   dek: "Two refusals, one of them to a director he had never turned down before.",
   content: "## The first no\n\nHe was reading four scripts a week.",
   categoryLabel: "Away From Set",
+  formatLabel: "Reported analysis",
   tags: ["korean cinema", "casting"],
   sources: ["https://example.com/interview", "https://example.org/report"],
   publishedAt: new Date("2026-08-05T09:00:00.000Z"),
@@ -61,6 +62,7 @@ describe("postNode identity", () => {
     const n = node();
     expect(n.articleSection).toBe("Away From Set");
     expect(n.keywords).toBe("korean cinema, casting");
+    expect(n.genre).toBe("Reported analysis");
   });
 
   it("clamps the headline to what a result will show, keeping the full name", () => {

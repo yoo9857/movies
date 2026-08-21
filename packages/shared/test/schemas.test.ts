@@ -5,6 +5,7 @@ import {
   movieSlug,
   paginationSchema,
   passwordSchema,
+  profileInputSchema,
   ratingSchema,
   registerSchema,
   reviewInputSchema,
@@ -245,6 +246,20 @@ describe("registerSchema", () => {
       displayName: "Devoh",
     };
     expect(registerSchema.safeParse(ok).success).toBe(true);
+  });
+});
+
+describe("profileInputSchema", () => {
+  it("normalises cleared public fields to undefined", () => {
+    expect(profileInputSchema.parse({ displayName: "  ", bio: "" })).toEqual({
+      displayName: undefined,
+      bio: undefined,
+    });
+  });
+
+  it("caps a public biography", () => {
+    expect(profileInputSchema.safeParse({ bio: "a".repeat(601) }).success).toBe(false);
+    expect(profileInputSchema.safeParse({ bio: "Film critic and festival programmer." }).success).toBe(true);
   });
 });
 

@@ -44,7 +44,6 @@ const OUT = strArg("out");
 
 const UA = "CinePixo/1.0 (https://cinepixo.com) film-criticism site";
 const WD = "https://www.wikidata.org/w/api.php";
-const COMMONS = "https://commons.wikimedia.org/w/api.php";
 /** Category tree breadth-first, but never past grandchildren. */
 const MAX_DEPTH = 2;
 /** Enough files to sort; more is just more API calls. */
@@ -71,9 +70,6 @@ interface WdEntities {
   >;
 }
 
-/** Their name as we hold it, for the relevance gate. Set by `resolveCategory`. */
-let PERSON_NAME: string | null = null;
-
 /** The person's Commons category (P373), from whatever identity we hold. */
 async function resolveCategory(): Promise<string> {
   if (CATEGORY) return CATEGORY;
@@ -84,7 +80,6 @@ async function resolveCategory(): Promise<string> {
     select: { name: true, wikidataId: true, wikipediaUrl: true },
   });
   if (!person) throw new Error(`no person with slug ${PERSON}`);
-  PERSON_NAME = person.name;
 
   let qid = person.wikidataId;
   if (!qid && person.wikipediaUrl) {

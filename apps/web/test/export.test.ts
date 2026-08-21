@@ -5,6 +5,8 @@ import {
   markdownResponse,
   movieToMarkdown,
   personToMarkdown,
+  postToMarkdown,
+  postTrustMarkdown,
   topicToMarkdown,
 } from "@/lib/markdown-export";
 import { plainText } from "@/lib/seo";
@@ -79,6 +81,44 @@ describe("exportMarkdownBody", () => {
   it("passes ordinary markdown through byte-for-byte", () => {
     const src = "## Heading\n\n**기생충!**은 걸작. `code` and > quote\n";
     expect(exportMarkdownBody(src)).toBe(src);
+  });
+});
+
+describe("post trust export", () => {
+  const trust = {
+    formatLabel: "First-hand guide",
+    methodNote: "Watched both cuts on the same calibrated display.",
+    disclosure: "CinePixo paid for access.",
+    correctionNote: "Updated the runtime on August 22.",
+  };
+
+  it("keeps method, disclosure and correction together for feeds", () => {
+    const markdown = postTrustMarkdown(trust);
+    expect(markdown).toContain("**Format:** First-hand guide");
+    expect(markdown).toContain(trust.methodNote);
+    expect(markdown).toContain(`**Disclosure:** ${trust.disclosure}`);
+    expect(markdown).toContain(`**Correction:** ${trust.correctionNote}`);
+  });
+
+  it("includes the same trust block in the canonical Markdown rendition", () => {
+    const markdown = postToMarkdown({
+      slug: "two-cuts-compared",
+      title: "Two Cuts Compared",
+      dek: "The practical difference.",
+      content: "The body.",
+      categoryLabel: "Craft",
+      ...trust,
+      tags: [],
+      sources: ["https://example.com/source"],
+      publishedAt: new Date("2026-08-22"),
+      updatedAt: new Date("2026-08-22"),
+      author: { username: "cinepixo", displayName: "CinePixo" },
+      people: [],
+      films: [],
+    });
+    expect(markdown).toContain("## How this piece was made");
+    expect(markdown).toContain(trust.disclosure);
+    expect(markdown).toContain("## Sources");
   });
 });
 

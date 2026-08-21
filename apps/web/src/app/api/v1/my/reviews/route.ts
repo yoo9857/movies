@@ -2,6 +2,7 @@ import { prisma } from "@cinepixo/db";
 import { reviewInputSchema } from "@cinepixo/shared";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
+import { assertPublishingAuthor } from "@/lib/publication-author";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 // Member: list own reviews (any status).
@@ -31,6 +32,7 @@ export const POST = handle(async (request: Request) => {
   rateLimit(`review-create:${clientIp(request)}`, 10, 60 * 60_000); // spam guard
 
   const input = reviewInputSchema.parse(await parseJson(request));
+  await assertPublishingAuthor(user.id, input.status);
 
   const movie = await prisma.movie.findUnique({ where: { id: input.movieId } });
   if (!movie) throw new ApiError(400, "Unknown movieId");

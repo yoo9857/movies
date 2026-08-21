@@ -8,8 +8,8 @@
 //
 // See /feed.json for the same content without the namespace gymnastics.
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
-import { exportMarkdownBody } from "@/lib/markdown-export";
+import { POST_CATEGORY_LABELS, POST_FORMAT_LABELS } from "@cinepixo/shared";
+import { exportMarkdownBody, postTrustMarkdown } from "@/lib/markdown-export";
 import { absUrl, clamp, hosted, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -84,6 +84,10 @@ export async function GET() {
         dek: true,
         content: true,
         category: true,
+        format: true,
+        methodNote: true,
+        disclosure: true,
+        correctionNote: true,
         tags: true,
         sources: true,
         publishedAt: true,
@@ -157,11 +161,17 @@ export async function GET() {
       // full, and a full reprint that drops the sources is the same lie the
       // blog feed was caught telling — `Post_claims_are_sourced` guards the
       // row, never the render, so every surface has to be checked by hand.
-      `      <content:encoded>${cdata(withSources(exportMarkdownBody(p.content), p.sources))}</content:encoded>`,
+      `      <content:encoded>${cdata(withSources(`${exportMarkdownBody(p.content).trimEnd()}\n\n${postTrustMarkdown({
+        formatLabel: POST_FORMAT_LABELS[p.format],
+        methodNote: p.methodNote,
+        disclosure: p.disclosure,
+        correctionNote: p.correctionNote,
+      })}`, p.sources))}</content:encoded>`,
       `      <dc:creator>${xml(author)}</dc:creator>`,
       // The shelf, then the tags the page prints. No rating element: a post has
       // no score, and inventing one here would misreport the piece.
       `      <category>${xml(POST_CATEGORY_LABELS[p.category])}</category>`,
+      `      <category>${xml(POST_FORMAT_LABELS[p.format])}</category>`,
       ...p.tags.map((t) => `      <category>${xml(t)}</category>`),
       p.publishedAt ? `      <pubDate>${new Date(p.publishedAt).toUTCString()}</pubDate>` : "",
       hero

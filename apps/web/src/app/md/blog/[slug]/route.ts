@@ -1,5 +1,5 @@
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
+import { POST_CATEGORY_LABELS, POST_FORMAT_LABELS } from "@cinepixo/shared";
 import { markdownResponse, notFoundMarkdown, postToMarkdown } from "@/lib/markdown-export";
 
 // Served at /blog/{slug}.md via the rewrite in next.config.ts. A route handler,
@@ -33,6 +33,10 @@ export async function GET(
       dek: post.dek,
       content: post.content,
       categoryLabel: POST_CATEGORY_LABELS[post.category],
+      formatLabel: POST_FORMAT_LABELS[post.format],
+      methodNote: post.methodNote,
+      disclosure: post.disclosure,
+      correctionNote: post.correctionNote,
       tags: post.tags,
       sources: post.sources,
       publishedAt: post.publishedAt,

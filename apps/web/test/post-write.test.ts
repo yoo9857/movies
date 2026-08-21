@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { postWriteData } from "@/lib/post-write";
+import { assertPostPictureFloor, postWriteData } from "@/lib/post-write";
 import type { PostInput } from "@cinepixo/shared";
 
 /**
@@ -19,6 +19,7 @@ const INPUT: PostInput = {
   title: "A Post",
   content: "Body.",
   category: "CRAFT",
+  format: "EDITORIAL_FEATURE",
   status: "DRAFT",
   tags: [],
   sources: [],
@@ -63,6 +64,9 @@ describe("postWriteData optional columns", () => {
     const data = postWriteData(INPUT, null);
     for (const key of [
       "dek",
+      "methodNote",
+      "disclosure",
+      "correctionNote",
       "image",
       "imageAlt",
       "imageCredit",
@@ -78,5 +82,24 @@ describe("postWriteData optional columns", () => {
     const data = postWriteData({ ...INPUT, tags: ["a"], sources: ["https://x.test/y"] }, null);
     expect(data.tags).toEqual(["a"]);
     expect(data.sources).toEqual(["https://x.test/y"]);
+  });
+});
+
+describe("post publication pictures", () => {
+  it("does not block an unfinished draft", () => {
+    expect(() => assertPostPictureFloor(INPUT)).not.toThrow();
+  });
+
+  it("requires one hero and three body images at publication", () => {
+    expect(() => assertPostPictureFloor({ ...INPUT, status: "PUBLISHED" })).toThrow();
+    const content = [1, 2, 3].map((n) => `![Still ${n}](/uploads/posts/${n}.webp)`).join("\n");
+    expect(() =>
+      assertPostPictureFloor({
+        ...INPUT,
+        status: "PUBLISHED",
+        image: "/uploads/posts/hero.webp",
+        content,
+      }),
+    ).not.toThrow();
   });
 });

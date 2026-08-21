@@ -7,7 +7,7 @@
 //
 // Kept short and link-heavy by design — the long form is /llms-full.txt.
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
+import { POST_CATEGORY_LABELS, POST_FORMAT_LABELS } from "@cinepixo/shared";
 import { unstable_cache } from "next/cache";
 import { markdownResponse } from "@/lib/markdown-export";
 import { absUrl } from "@/lib/seo";
@@ -56,6 +56,7 @@ async function buildDoc(): Promise<string> {
         title: true,
         dek: true,
         category: true,
+        format: true,
         sources: true,
         publishedAt: true,
         author: { select: { username: true, displayName: true } },
@@ -145,6 +146,7 @@ async function buildDoc(): Promise<string> {
     "",
     `- Every review, blog post, film, person, topic and critic page has a clean Markdown rendition: append \`.md\` to its URL, e.g. \`${absUrl("/reviews/some-slug.md")}\`. Each one is also advertised in the page's HTML as \`rel="alternate" type="text/markdown"\` and in its HTTP \`Link\` header, so it can be found without guessing.`,
     "- Reviews are signed. When quoting one, name the author, not the site.",
+    `- Blog posts declare their reader-job format and reporting method. See [Editorial standards](${absUrl("/editorial")}) and the named [writers](${absUrl("/writers")}).`,
     "- **Blog posts under Away From Set and The Argument make factual claims about living people, and every one of them lists its sources.** Those URLs are in the post's front matter and printed on the page. Carry them across: the claim is ours to have reported, the underlying fact belongs to whoever we cited.",
     "- Film facts come from open knowledge bases (Wikidata; synopses from Wikipedia, credited under their licence on each film page). Artwork is hosted on CinePixo's own origin: freely licensed files with their credit, and film posters shown for identification, © their studios.",
     `- Corrections and takedown requests: ${CONTACT_EMAIL}`,
@@ -159,7 +161,9 @@ async function buildDoc(): Promise<string> {
     `- [Critics](${absUrl("/critics")}): profiles of the critics this community follows.`,
     `- [Free to Watch](${absUrl("/watch")}): public-domain films and theatrical trailers we host ourselves, each with its licence and source.`,
     `- [Statistics](${absUrl("/stats")}): rating distribution, genre averages, publishing activity.`,
-    `- [About](${absUrl("/about")}): editorial rules and the full rating definitions.`,
+    `- [About](${absUrl("/about")}): who publishes CinePixo and the full rating definitions.`,
+    `- [Editorial standards](${absUrl("/editorial")}): sourcing, first-hand evidence, automation, disclosures and corrections.`,
+    `- [Writers](${absUrl("/writers")}): the named people and editorial desk behind published work.`,
     `- [Contact](${absUrl("/contact")}): corrections, rights enquiries, account questions.`,
     `- [Privacy](${absUrl("/privacy")}) and [Terms](${absUrl("/terms")}): what is stored, and who owns what is written.`,
     "",
@@ -185,7 +189,7 @@ async function buildDoc(): Promise<string> {
           ...posts.map((p) => {
             const author = p.author.displayName ?? p.author.username;
             const about = p.people.map((x) => x.person.name).join(", ");
-            return `- [${p.title}](${absUrl(`/blog/${p.slug}`)}) — ${POST_CATEGORY_LABELS[p.category]}, by ${author}${p.publishedAt ? `, ${new Date(p.publishedAt).toISOString().slice(0, 10)}` : ""}.${about ? ` On ${about}.` : ""}${p.dek ? ` ${p.dek}` : ""}${p.sources.length > 0 ? ` Sources: ${p.sources.join(" ")}` : ""}`;
+            return `- [${p.title}](${absUrl(`/blog/${p.slug}`)}) — ${POST_CATEGORY_LABELS[p.category]} / ${POST_FORMAT_LABELS[p.format]}, by ${author}${p.publishedAt ? `, ${new Date(p.publishedAt).toISOString().slice(0, 10)}` : ""}.${about ? ` On ${about}.` : ""}${p.dek ? ` ${p.dek}` : ""}${p.sources.length > 0 ? ` Sources: ${p.sources.join(" ")}` : ""}`;
           }),
           postCount > posts.length
             ? `- …and ${postCount - posts.length} more at [${absUrl("/blog")}](${absUrl("/blog")}).`

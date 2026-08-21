@@ -210,6 +210,7 @@ export default async function MoviePage(props: { params: Promise<{ slug: string 
       title: true,
       dek: true,
       category: true,
+      format: true,
       publishedAt: true,
       image: true,
       imageAlt: true,

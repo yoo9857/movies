@@ -9,8 +9,8 @@
 // Same shape as /feed.xml deliberately, minus the rating (a post has no score)
 // and with the shelf as the leading category, so a reader can filter by it.
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
-import { exportMarkdownBody } from "@/lib/markdown-export";
+import { POST_CATEGORY_LABELS, POST_FORMAT_LABELS } from "@cinepixo/shared";
+import { exportMarkdownBody, postTrustMarkdown } from "@/lib/markdown-export";
 import { absUrl, clamp, hosted, plainText } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -63,6 +63,10 @@ export async function GET() {
       dek: true,
       content: true,
       category: true,
+      format: true,
+      methodNote: true,
+      disclosure: true,
+      correctionNote: true,
       tags: true,
       sources: true,
       image: true,
@@ -89,9 +93,15 @@ export async function GET() {
         // reprints the whole piece while dropping them is the lie that
         // constraint exists to prevent — this feed hands a reader the full
         // text, so it owes them the same footnotes the page prints.
-        `      <content:encoded>${cdata(withSources(exportMarkdownBody(p.content), p.sources))}</content:encoded>`,
+        `      <content:encoded>${cdata(withSources(`${exportMarkdownBody(p.content).trimEnd()}\n\n${postTrustMarkdown({
+          formatLabel: POST_FORMAT_LABELS[p.format],
+          methodNote: p.methodNote,
+          disclosure: p.disclosure,
+          correctionNote: p.correctionNote,
+        })}`, p.sources))}</content:encoded>`,
         `      <dc:creator>${xml(author)}</dc:creator>`,
         `      <category>${xml(POST_CATEGORY_LABELS[p.category])}</category>`,
+        `      <category>${xml(POST_FORMAT_LABELS[p.format])}</category>`,
         ...p.tags.map((t) => `      <category>${xml(t)}</category>`),
         p.publishedAt ? `      <pubDate>${new Date(p.publishedAt).toUTCString()}</pubDate>` : "",
         hero

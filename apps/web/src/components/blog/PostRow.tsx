@@ -1,4 +1,9 @@
-import { POST_CATEGORY_LABELS, type PostCategory } from "@cinepixo/shared";
+import {
+  POST_CATEGORY_LABELS,
+  POST_FORMAT_LABELS,
+  type PostCategory,
+  type PostFormat,
+} from "@cinepixo/shared";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -7,6 +12,7 @@ export interface PostRowData {
   title: string;
   dek: string | null;
   category: PostCategory;
+  format: PostFormat;
   publishedAt: Date | null;
   image: string | null;
   imageAlt: string | null;
@@ -52,6 +58,11 @@ export function PostRow({ post }: { post: PostRowData }) {
           <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
             {POST_CATEGORY_LABELS[post.category]}
           </span>
+          {post.format !== "EDITORIAL_FEATURE" && (
+            <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+              {POST_FORMAT_LABELS[post.format]}
+            </span>
+          )}
           <h3 className="mt-1 text-balance text-lg font-semibold leading-snug transition-colors group-hover:text-accent">
             {post.title}
           </h3>

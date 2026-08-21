@@ -11,6 +11,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
   const post = await prisma.post.findUnique({
     where: { id },
     include: {
+      author: { select: { bio: true } },
       // Resolved here so the pickers can name what is already linked without a
       // request — the same reason the film picker takes an `initial` list.
       people: {
@@ -40,6 +41,7 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
       </div>
 
       <PostForm
+        authorReady={Boolean(post.author.bio?.trim())}
         postId={post.id}
         initialStatus={post.status}
         initial={{
@@ -48,6 +50,10 @@ export default async function EditPostPage(props: { params: Promise<{ id: string
           dek: post.dek ?? "",
           content: post.content,
           category: post.category,
+          format: post.format,
+          methodNote: post.methodNote ?? "",
+          disclosure: post.disclosure ?? "",
+          correctionNote: post.correctionNote ?? "",
           tags: post.tags,
           sources: post.sources,
           personIds: post.people.map((p) => p.person.id),

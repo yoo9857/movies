@@ -52,6 +52,7 @@ export const GET = handle(async (request: Request) => {
         title: true,
         dek: true,
         category: true,
+        format: true,
         publishedAt: true,
         people: { orderBy: { sort: "asc" }, select: { person: { select: { name: true } } } },
       },
@@ -107,6 +108,7 @@ export const GET = handle(async (request: Request) => {
       title: p.title,
       dek: p.dek,
       category: p.category,
+      format: p.format,
       publishedAt: p.publishedAt,
       // Who the piece is about, flattened — a consumer of this endpoint should
       // not have to walk a join table to answer "is this the actor I meant?".

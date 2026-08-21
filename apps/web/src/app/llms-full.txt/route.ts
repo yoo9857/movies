@@ -8,7 +8,7 @@
 // silently — a truncated corpus that claims to be complete is worse than one that
 // says where it stopped.
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS } from "@cinepixo/shared";
+import { POST_CATEGORY_LABELS, POST_FORMAT_LABELS } from "@cinepixo/shared";
 import { exportMarkdownBody, markdownResponse } from "@/lib/markdown-export";
 import { absUrl, isoDay } from "@/lib/seo";
 import { SITE_ABOUT, SITE_NAME } from "@/lib/site";
@@ -100,6 +100,10 @@ async function blogSection(): Promise<string> {
       dek: true,
       content: true,
       category: true,
+      format: true,
+      methodNote: true,
+      disclosure: true,
+      correctionNote: true,
       tags: true,
       sources: true,
       publishedAt: true,
@@ -126,7 +130,11 @@ async function blogSection(): Promise<string> {
       `### ${p.title}`,
       "",
       `- Section: ${POST_CATEGORY_LABELS[p.category]}`,
+      `- Format: ${POST_FORMAT_LABELS[p.format]}`,
       `- Author: ${author}`,
+      p.methodNote ? `- Method: ${p.methodNote}` : null,
+      p.disclosure ? `- Disclosure: ${p.disclosure}` : null,
+      p.correctionNote ? `- Correction: ${p.correctionNote}` : null,
       p.publishedAt ? `- Published: ${isoDay(p.publishedAt)}` : null,
       `- Source: ${absUrl(`/blog/${p.slug}`)}`,
       p.people.length > 0

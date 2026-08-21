@@ -4,8 +4,13 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
-import { assertHeroIsOurs, postWriteData, syncPostSubjects } from "@/lib/post-write";
-import { autoAttachPostHero } from "@/lib/auto-post-hero";
+import {
+  assertHeroIsOurs,
+  assertPostPictureFloor,
+  postWriteData,
+  syncPostSubjects,
+} from "@/lib/post-write";
+import { assertPublishingAuthor } from "@/lib/publication-author";
 
 const idSchema = z.string().min(1).max(64);
 
@@ -30,14 +35,16 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
   const postId = idSchema.parse(id);
   const input = postInputSchema.parse(await parseJson(request));
   assertHeroIsOurs(input);
+  assertPostPictureFloor(input);
 
   const existing = await prisma.post.findUnique({
     where: { id: postId },
     // The publication date has to come out of the row: re-saving a published
     // post must not restamp it. See `postWriteData`.
-    select: { id: true, publishedAt: true },
+    select: { id: true, authorId: true, publishedAt: true },
   });
   if (!existing) throw new ApiError(404, "Post not found");
+  await assertPublishingAuthor(existing.authorId, input.status);
 
   const clash = await prisma.post.findFirst({
     where: {
@@ -54,7 +61,6 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
     select: { id: true, slug: true },
   });
   await syncPostSubjects(post.id, input);
-  if (input.status === "PUBLISHED" && !input.image) await autoAttachPostHero(post.id);
   dropPostListings();
 
   return json({ post });

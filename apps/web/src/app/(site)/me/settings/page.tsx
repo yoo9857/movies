@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AvatarUpload } from "@/components/AvatarUpload";
+import { ProfileForm } from "@/components/ProfileForm";
 import { SectionHead } from "@/components/ReelDivider";
 import { getCurrentUser } from "@/lib/auth";
 import { pageMetadata } from "@/lib/seo";
@@ -30,6 +31,13 @@ export default async function SettingsPage() {
       </p>
 
       <section className="mt-9">
+        <SectionHead>Public byline</SectionHead>
+        <div className="mt-4">
+          <ProfileForm displayName={user.displayName} bio={user.bio} />
+        </div>
+      </section>
+
+      <section className="mt-12">
         <SectionHead>Profile picture</SectionHead>
         <div className="mt-4">
           <AvatarUpload current={user.avatarUrl} name={name} />

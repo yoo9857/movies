@@ -3,6 +3,7 @@ import { reviewInputSchema } from "@cinepixo/shared";
 import { z } from "zod";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
+import { assertPublishingAuthor } from "@/lib/publication-author";
 
 const idSchema = z.string().min(1).max(64);
 
@@ -30,6 +31,7 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
   const current = await ownedReview(idSchema.parse(id), user.id);
 
   const input = reviewInputSchema.parse(await parseJson(request));
+  await assertPublishingAuthor(user.id, input.status);
 
   const slugTaken = await prisma.review.findFirst({
     where: { slug: input.slug, NOT: { id: current.id } },

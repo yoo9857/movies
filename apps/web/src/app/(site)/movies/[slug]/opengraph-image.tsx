@@ -2,7 +2,7 @@ import { prisma } from "@cinepixo/db";
 import { toStarScale } from "@cinepixo/shared";
 import { ImageResponse } from "next/og";
 import { MovieCard, OG_CONTENT_TYPE, OG_SIZE, ogFontOptions, ourImageAsPng } from "@/lib/og-card";
-import { absUrl, posterUrl } from "@/lib/seo";
+import { absUrl } from "@/lib/seo";
 
 export const alt = "A film in the CinePixo library";
 export const size = OG_SIZE;

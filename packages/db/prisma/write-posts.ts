@@ -2,8 +2,9 @@
 //
 //   npm run db:write-posts -- --sources=x.json           # write a post per source, as DRAFT
 //   npm run db:write-posts -- --sources=x.json --dry     # generate, print, write nothing
-//   npm run db:write-posts -- --sources=x.json --publish # opt in to going live now
+//   npm run db:write-posts -- --sources=x.json           # generated copy can only land as DRAFT
 //   npm run db:write-posts -- --drafts=x.json            # prose written elsewhere, same checks
+//   npm run publish-post -- <slug>                       # the only publication gate
 //
 // The sibling of write-reviews.ts, and deliberately not a copy of it. A review is
 // generated from facts the library already owns — a title, a year, a synopsis we
@@ -14,11 +15,10 @@
 //
 // Three rules this script does not let a caller past:
 //
-//  · **It lands DRAFT unless told otherwise.** `Post_claims_are_sourced` can prove
-//    a citation exists; nothing in a database can prove the prose is faithful to
-//    it. That check is a person reading both, so the default is a draft waiting at
-//    its own URL (an admin can read it there — see the preview banner). `--publish`
-//    is the flag that says a human already did that, or accepts not having.
+//  · **Every job always lands DRAFT.** `Post_claims_are_sourced` can prove a
+//    citation exists; nothing in a database can prove the prose is faithful to
+//    it. That check is a person reading both, so `--sources` and `--publish` are
+//    mutually exclusive. Every job goes through publish-post after review.
 //  · **It never reproduces the source.** The model is given facts and told to
 //    write our own English piece that attributes them. A post that rephrases a wire
 //    story is both an infringement and the thing this blog exists not to be.
@@ -49,7 +49,7 @@ const DRAFTS = strArg("drafts");
 /** Whose byline. Defaults to the site's admin — the blog is the desk's. */
 const AS = strArg("as");
 const DRY = process.argv.includes("--dry");
-/** Publish immediately instead of leaving a draft for someone to read. */
+/** Retained only to reject the old unsafe workflow with a useful message. */
 const PUBLISH = process.argv.includes("--publish");
 
 /**
@@ -60,10 +60,16 @@ const PUBLISH = process.argv.includes("--publish");
  */
 const RESERVED = ["category", "page", "feed"];
 
-/** The two shelves whose claims are about living people. */
-const SOURCED_CATEGORIES = ["PEOPLE", "ISSUE"] as const;
-
 const categorySchema = z.enum(["PEOPLE", "ISSUE", "INDUSTRY", "CRAFT", "WATCHLIST"]);
+const formatSchema = z.enum([
+  "EDITORIAL_FEATURE",
+  "REPORTED_ANALYSIS",
+  "PROBLEM_SOLVING",
+  "COMPARISON",
+  "ROUNDUP",
+  "CHECKLIST",
+  "FIRST_HAND_GUIDE",
+]);
 
 const httpUrl = z
   .string()
@@ -80,6 +86,10 @@ const sourceJobSchema = z.object({
   /** Where the facts came from. Printed on the page; at least one for PEOPLE/ISSUE. */
   sources: z.array(httpUrl).min(1).max(20),
   category: categorySchema,
+  format: formatSchema.default("EDITORIAL_FEATURE"),
+  /** Written by the operator, never invented by the drafting model. */
+  methodNote: z.string().min(20).max(1_500).optional(),
+  disclosure: z.string().min(1).max(800).optional(),
   /**
    * The facts, pasted. Required whenever the sources cannot be fetched — which
    * for Naver-syndicated Korean press is always. Anything the model asserts must
@@ -111,6 +121,10 @@ const generatedSchema = z.object({
 /** Prose written elsewhere, carrying the context generation would have had. */
 const handwrittenSchema = generatedSchema.extend({
   category: categorySchema,
+  format: formatSchema.default("EDITORIAL_FEATURE"),
+  methodNote: z.string().min(20).max(1_500).optional(),
+  disclosure: z.string().min(1).max(800).optional(),
+  correctionNote: z.string().min(1).max(1_500).optional(),
   sources: z.array(httpUrl).max(20).default([]),
   people: z.array(z.string()).max(20).default([]),
   films: z.array(z.string()).max(20).default([]),
@@ -253,6 +267,7 @@ const DESK: Record<string, string[]> = {
  * persona: a voice decides how a piece sounds, never what it may assert.
  */
 const COMMON = [
+  "PERSPECTIVE: never claim you watched, attended, tested, visited, bought or compared something. Only an operator can supply first-hand evidence, and generated drafts are never labelled first-hand. Never pretend to a consensus that does not exist ('fans agree', 'everyone is saying').",
   "HEADLINES: earn the click with a real claim, never with a withheld one. No 'you won't believe', no questions the piece does not answer, no manufactured shock. The headline must be true of the piece and of the facts.",
   "ETHICS: this is a factual piece about real, living people. Assert only what the reporting below supports, and attribute it to the outlet that reported it. Where something is contested, say who says it. Where you do not know, say the piece does not know — never fill a gap with a plausible sentence.",
   // A published piece said "The supplied material also names Disney's Snow
@@ -282,6 +297,8 @@ async function generate(job: z.infer<typeof sourceJobSchema>, material: string) 
     "Write a blog post from the material below.",
     job.angle ? `The angle the desk wants: ${job.angle}` : "",
     `The section it will be filed under: ${job.category}.`,
+    `The reader job it must perform: ${job.format}.`,
+    job.methodNote ? `OPERATOR-SUPPLIED METHOD NOTE (do not add to it): ${job.methodNote}` : "",
     "",
     "MATERIAL — every factual claim in your piece must be traceable to this text:",
     material,
@@ -295,6 +312,10 @@ async function generate(job: z.infer<typeof sourceJobSchema>, material: string) 
     "- Open with the thing that happened, not with scene-setting.",
     "- Attribute reported facts in the prose ('as Edaily reported', 'according to the agency').",
     "- Do not use `#` (the page renders the headline itself), and do not add a sources list.",
+    job.format === "PROBLEM_SOLVING" ? "- State the reader's problem, decision path and usable next steps." : "",
+    job.format === "COMPARISON" ? "- Compare on consistent named criteria and include a concise Markdown table." : "",
+    job.format === "ROUNDUP" ? "- State the inclusion rule and give every included item an individual reason." : "",
+    job.format === "CHECKLIST" ? "- Include a scannable checklist of at least five concrete checks." : "",
     "- The piece is in English, for readers who do not follow the Korean press.",
     "",
     'Answer with ONLY a JSON object, no code fences: {"title": string (the headline), "dek": string (one or two sentences under it, written to be read out of context), "content": string (the Markdown body), "tags": string[] (3-8 long-tail search phrases a reader would actually type, printed on the page)}',
@@ -353,9 +374,17 @@ async function main() {
       "nothing to write: pass --sources=<file.json> or --drafts=<file.json> (see the header of this file)",
     );
   }
+  if (PUBLISH) {
+    throw new Error(
+      "write-posts only creates drafts; review the page, run blog-doctor, then use publish-post.ts",
+    );
+  }
 
   const author = AS
-    ? await prisma.user.findUnique({ where: { username: AS }, select: { id: true, username: true } })
+    ? await prisma.user.findUnique({
+        where: { username: AS },
+        select: { id: true, username: true },
+      })
     : await prisma.user.findFirst({
         where: { role: "ADMIN" },
         orderBy: { createdAt: "asc" },
@@ -379,15 +408,19 @@ async function main() {
           job: {
             sources: ready.sources,
             category: ready.category,
+            format: ready.format,
+            methodNote: ready.methodNote,
+            disclosure: ready.disclosure,
             people: ready.people,
             films: ready.films,
+            byline: ready.byline,
           } as z.infer<typeof sourceJobSchema>,
           ready,
         }));
 
   console.log(
     `House posts: ${jobs.length} from ${SOURCES ?? DRAFTS} · by ${author.username} · ` +
-      `${DRY ? "dry run" : PUBLISH ? "PUBLISHING LIVE" : "landing as drafts"}`,
+      `${DRY ? "dry run" : "landing as drafts"}`,
   );
 
   /**
@@ -414,15 +447,9 @@ async function main() {
   for (const { job, ready } of jobs) {
     const label = ready?.title ?? job.sources[0];
     try {
-      // Refused before the model is called, not after: the database would reject
-      // the row anyway, and a spent generation is a spent usage limit.
-      if (
-        PUBLISH &&
-        SOURCED_CATEGORIES.includes(job.category as (typeof SOURCED_CATEGORIES)[number]) &&
-        job.sources.length === 0
-      ) {
+      if (!ready && job.format === "FIRST_HAND_GUIDE") {
         throw new Error(
-          `${job.category} cannot be published without a source (Post_claims_are_sourced)`,
+          "a generated draft cannot be first-hand; supply handwritten copy and an operator-written methodNote",
         );
       }
 
@@ -468,7 +495,6 @@ async function main() {
         continue;
       }
 
-      const publishing = PUBLISH;
       const created = await prisma.post.create({
         data: {
           slug,
@@ -476,8 +502,12 @@ async function main() {
           dek: post.dek,
           content: post.content,
           category: job.category,
-          status: publishing ? "PUBLISHED" : "DRAFT",
-          publishedAt: publishing ? new Date() : null,
+          format: job.format,
+          methodNote: post.methodNote ?? job.methodNote ?? null,
+          disclosure: post.disclosure ?? job.disclosure ?? null,
+          correctionNote: post.correctionNote ?? null,
+          status: "DRAFT",
+          publishedAt: null,
           tags: post.tags,
           sources: job.sources,
           authorId: signer.id,
@@ -488,7 +518,7 @@ async function main() {
       });
       written += 1;
       console.log(
-        `${publishing ? "published" : "drafted"}: /blog/${created.slug} — ${job.category}` +
+        `drafted: /blog/${created.slug} — ${job.category}` +
           ` · by ${signer.username}` +
           `${personIds.length + movieIds.length > 0 ? ` · ${personIds.length + movieIds.length} subject(s)` : ""}`,
       );
@@ -497,10 +527,10 @@ async function main() {
     }
   }
 
-  console.log(`\n${written} ${DRY ? "generated" : PUBLISH ? "published" : "drafted"} · ${skipped.length} skipped`);
+  console.log(`\n${written} ${DRY ? "generated" : "drafted"} · ${skipped.length} skipped`);
   for (const line of skipped) console.warn(`  ${line}`);
 
-  if (written > 0 && !DRY && !PUBLISH) {
+  if (written > 0 && !DRY) {
     console.log(
       "\nDrafts are readable at their own /blog/<slug> URL while signed in as an admin —" +
         " noindex, on no shelf and in no feed. Read one against its sources before publishing it.",

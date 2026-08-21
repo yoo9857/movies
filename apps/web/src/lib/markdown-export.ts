@@ -595,6 +595,10 @@ export interface PostExport {
   content: string;
   /** The shelf label as the site prints it, not the enum member. */
   categoryLabel: string;
+  formatLabel: string;
+  methodNote: Nullable<string>;
+  disclosure: Nullable<string>;
+  correctionNote: Nullable<string>;
   tags: readonly string[];
   sources: readonly string[];
   publishedAt: Nullable<Date>;
@@ -602,6 +606,16 @@ export interface PostExport {
   author: { username: string; displayName: Nullable<string> };
   people: { slug: string; name: string }[];
   films: { slug: string; title: string; year: number | null }[];
+}
+
+export function postTrustMarkdown(
+  post: Pick<PostExport, "formatLabel" | "methodNote" | "disclosure" | "correctionNote">,
+): string {
+  const lines = ["## How this piece was made", "", `**Format:** ${post.formatLabel}`, ""];
+  if (post.methodNote) lines.push(post.methodNote, "");
+  if (post.disclosure) lines.push(`**Disclosure:** ${post.disclosure}`, "");
+  if (post.correctionNote) lines.push(`**Correction:** ${post.correctionNote}`, "");
+  return lines.join("\n").trimEnd();
 }
 
 /**
@@ -622,6 +636,10 @@ export function postToMarkdown(post: PostExport): string {
     ["title", post.title],
     ["type", "blog post"],
     ["section", post.categoryLabel],
+    ["format", post.formatLabel],
+    ["method", post.methodNote ?? undefined],
+    ["disclosure", post.disclosure ?? undefined],
+    ["correction", post.correctionNote ?? undefined],
     ["standfirst", post.dek ?? undefined],
     ["author", author],
     ["published", isoDay(post.publishedAt)],
@@ -643,6 +661,8 @@ export function postToMarkdown(post: PostExport): string {
     exportMarkdownBody(post.content).trim(),
     "",
   );
+
+  lines.push(postTrustMarkdown(post), "");
 
   if (post.people.length > 0 || post.films.length > 0) {
     lines.push("## In this piece", "");

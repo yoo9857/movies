@@ -19,8 +19,10 @@ export function SiteFooter() {
           <Link href="/movies" className="hover:text-foreground">Movies</Link>
           <Link href="/watch" className="hover:text-foreground">Watch</Link>
           <Link href="/critics" className="hover:text-foreground">Critics</Link>
+          <Link href="/writers" className="hover:text-foreground">Writers</Link>
           <Link href="/stats" className="hover:text-foreground">Stats</Link>
           <Link href="/about" className="hover:text-foreground">About</Link>
+          <Link href="/editorial" className="hover:text-foreground">Editorial Standards</Link>
           <Link href="/contact" className="hover:text-foreground">Contact</Link>
           <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
           <Link href="/terms" className="hover:text-foreground">Terms</Link>

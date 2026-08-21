@@ -535,7 +535,8 @@ describe("Post", () => {
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
     return db.query(
       `INSERT INTO "Post" (${cols.map((c) => `"${c}"`).join(", ")}, "updatedAt")
-       VALUES (${placeholders}, CURRENT_TIMESTAMP)`,
+       VALUES (${placeholders}, CURRENT_TIMESTAMP)
+       RETURNING "id"`,
       Object.values(row) as never[],
     );
   }
@@ -566,6 +567,58 @@ describe("Post", () => {
       "leaves %s free to publish uncited — it is our own reading",
       async (category) => {
         await expect(insertPost({ category, ...PUBLISHED })).resolves.toBeTruthy();
+      },
+    );
+  });
+
+  describe("reader-job evidence", () => {
+    it("keeps legacy posts on the neutral editorial feature default", async () => {
+      const result = await insertPost();
+      const { rows } = await db.query<{ format: string }>(
+        `SELECT "format" FROM "Post" WHERE "id" = $1`,
+        [result.rows[0]?.id],
+      );
+      expect(rows[0]?.format).toBe("EDITORIAL_FEATURE");
+    });
+
+    it("refuses a published first-hand claim without both method and disclosure", async () => {
+      await rejects(
+        () => insertPost({ format: "FIRST_HAND_GUIDE", ...PUBLISHED }),
+        SQLSTATE.check,
+      );
+      await rejects(
+        () =>
+          insertPost({
+            format: "FIRST_HAND_GUIDE",
+            methodNote: "Watched both cuts in the same screening room on August 20.",
+            ...PUBLISHED,
+          }),
+        SQLSTATE.check,
+      );
+      await expect(
+        insertPost({
+          format: "FIRST_HAND_GUIDE",
+          methodNote: "Watched both cuts in the same screening room on August 20.",
+          disclosure: "CinePixo paid for access; no studio reviewed the article.",
+          ...PUBLISHED,
+        }),
+      ).resolves.toBeTruthy();
+    });
+
+    it.each(["PROBLEM_SOLVING", "COMPARISON", "ROUNDUP", "CHECKLIST"])(
+      "requires sources or a method for published %s",
+      async (format) => {
+        await rejects(() => insertPost({ format, ...PUBLISHED }), SQLSTATE.check);
+        await expect(
+          insertPost({ format, sources: ["https://example.com/evidence"], ...PUBLISHED }),
+        ).resolves.toBeTruthy();
+        await expect(
+          insertPost({
+            format,
+            methodNote: "Compared every entry against the same published criteria on August 20.",
+            ...PUBLISHED,
+          }),
+        ).resolves.toBeTruthy();
       },
     );
   });

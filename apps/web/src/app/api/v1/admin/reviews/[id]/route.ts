@@ -3,6 +3,7 @@ import { reviewInputSchema } from "@cinepixo/shared";
 import { z } from "zod";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
+import { assertPublishingAuthor } from "@/lib/publication-author";
 
 const idSchema = z.string().min(1).max(64);
 
@@ -27,6 +28,7 @@ export const PUT = handle(async (request: Request, ctx: { params: Promise<{ id: 
 
   const current = await prisma.review.findUnique({ where: { id: reviewId } });
   if (!current) throw new ApiError(404, "Review not found");
+  await assertPublishingAuthor(current.authorId, input.status);
 
   const slugTaken = await prisma.review.findFirst({
     where: { slug: input.slug, NOT: { id: reviewId } },

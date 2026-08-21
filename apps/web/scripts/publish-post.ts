@@ -15,7 +15,12 @@
 // look at what the piece actually claims.
 import "../../../packages/db/prisma/env";
 import { prisma } from "@cinepixo/db";
-import { type PostCategory, postCategorySlug } from "@cinepixo/shared";
+import {
+  auditPostQuality,
+  POST_FORMAT_LABELS,
+  type PostCategory,
+  postCategorySlug,
+} from "@cinepixo/shared";
 import { submitUrls } from "@/lib/indexnow";
 import {
   DEFAULT_MIN_POST_PICTURES,
@@ -90,8 +95,10 @@ async function main() {
   const post = await prisma.post.findUnique({
     where: { slug: SLUG },
     select: {
-      id: true, slug: true, title: true, dek: true, status: true, category: true, content: true,
+      id: true, slug: true, title: true, dek: true, status: true, category: true, format: true,
+      methodNote: true, disclosure: true, content: true, tags: true,
       sources: true, image: true, imageCredit: true, imageLicense: true,
+      author: { select: { username: true, displayName: true, bio: true } },
       people: { orderBy: { sort: "asc" }, select: { person: { select: { slug: true } } } },
       movies: { orderBy: { sort: "asc" }, select: { movie: { select: { slug: true } } } },
     },
@@ -124,6 +131,10 @@ async function main() {
 
   console.log(`${post.title}\n${post.dek ?? ""}\n`);
   console.log(`  section    ${post.category}`);
+  console.log(`  format     ${POST_FORMAT_LABELS[post.format]}`);
+  console.log(`  byline     ${post.author.displayName ?? post.author.username}`);
+  console.log(`  method     ${post.methodNote ?? "not stated"}`);
+  console.log(`  disclosure ${post.disclosure ?? "not stated"}`);
   console.log(`  subjects   ${[...post.people.map((p) => p.person.slug), ...post.movies.map((m) => m.movie.slug)].join(", ") || "none"}`);
   console.log(`  sources    ${post.sources.length}`);
   for (const s of post.sources) console.log(`             ${s}`);
@@ -132,6 +143,33 @@ async function main() {
   console.log(`  pictures   ${bodyPictures} in the body, hero ${post.image ? "set" : "MISSING"} (${pictures} total)`);
   if (post.image && !post.imageCredit) console.log("             hero has no credit line");
   if (post.image && !post.imageLicense) console.log("             hero states no licence (fine for our own file)");
+
+  const quality = auditPostQuality({
+    title: post.title,
+    dek: post.dek ?? undefined,
+    content: post.content,
+    format: post.format,
+    methodNote: post.methodNote ?? undefined,
+    disclosure: post.disclosure ?? undefined,
+    sources: post.sources,
+    tags: post.tags,
+    personIds: post.people.map((p) => p.person.slug),
+    movieIds: post.movies.map((m) => m.movie.slug),
+  });
+  if (!post.author.bio?.trim()) {
+    quality.push({
+      level: "error",
+      code: "author-bio",
+      message: "The public byline has no biography; complete the writer profile before promoting the piece.",
+    });
+  }
+  for (const issue of quality) {
+    console.log(`  ${issue.level === "error" ? "FAIL" : "warn"}       ${issue.message}`);
+  }
+  const qualityErrors = quality.filter((issue) => issue.level === "error");
+  if (qualityErrors.length > 0) {
+    throw new Error(`editorial quality gate failed with ${qualityErrors.length} error(s)`);
+  }
 
   if (post.status === "PUBLISHED") {
     if (PING) {

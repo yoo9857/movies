@@ -64,6 +64,20 @@ enum PostCategory {
   WATCHLIST
 }
 
+/// The reader-facing job a post does. Category says what the piece is about;
+/// format says how it helps. Keeping the two separate lets Craft contain both
+/// a reported analysis and a hands-on comparison without pretending they were
+/// produced the same way.
+enum PostFormat {
+  EDITORIAL_FEATURE
+  REPORTED_ANALYSIS
+  PROBLEM_SOLVING
+  COMPARISON
+  ROUNDUP
+  CHECKLIST
+  FIRST_HAND_GUIDE
+}
+
 /// Fan account. Reviews are written by users; the site owner is role=ADMIN.
 model User {
   id           String   @id @default(cuid())
@@ -467,6 +481,18 @@ model Post {
   /// disabled. Markdown stays the storage format here too.
   content String
   category PostCategory
+  /// How the article helps the reader. Existing reporting defaults to analysis;
+  /// utility formats are selected deliberately by the editor.
+  format   PostFormat @default(EDITORIAL_FEATURE)
+  /// A concise, visible account of how the piece was produced: what was
+  /// watched, tested, compared or checked. Required for a first-hand guide.
+  methodNote String?
+  /// Tickets, screeners, travel, samples or commercial relationships that a
+  /// reader needs in order to judge the piece. Null means none was entered.
+  disclosure String?
+  /// A public correction or material-revision note. Minor copy edits do not
+  /// need one; factual changes do.
+  correctionNote String?
   status   ReviewStatus @default(DRAFT)
   publishedAt DateTime? @db.Timestamptz(3)
   /// The long-tail phrases this piece is written for. Rendered on the page as

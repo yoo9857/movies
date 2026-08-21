@@ -205,6 +205,14 @@ export default async function AboutPage() {
           published without at least one. If we have a fact wrong, tell us at the address above
           and we will correct it and say that we did.
         </p>
+        <p className="mt-3">
+          Our source hierarchy, first-hand evidence rules, automation policy, disclosures and
+          corrections process are published in the{" "}
+          <Link href="/editorial" className="text-accent hover:opacity-80">
+            Editorial Standards
+          </Link>
+          .
+        </p>
       </section>
 
       {/* ⑥ Join CTA */}

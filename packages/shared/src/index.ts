@@ -53,6 +53,12 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+export const profileInputSchema = z.object({
+  displayName: optionalText(50),
+  bio: optionalText(600),
+});
+export type ProfileInput = z.infer<typeof profileInputSchema>;
+
 // ── Reviews ──────────────────────────────────────────────────────
 
 export const reviewStatusSchema = z.enum(["DRAFT", "PUBLISHED"]);
@@ -255,6 +261,53 @@ export const postCategorySchema = z.enum([
 ]);
 export type PostCategory = z.infer<typeof postCategorySchema>;
 
+/** What the article does for its reader, independent of its subject shelf. */
+export const postFormatSchema = z.enum([
+  "EDITORIAL_FEATURE",
+  "REPORTED_ANALYSIS",
+  "PROBLEM_SOLVING",
+  "COMPARISON",
+  "ROUNDUP",
+  "CHECKLIST",
+  "FIRST_HAND_GUIDE",
+]);
+export type PostFormat = z.infer<typeof postFormatSchema>;
+
+export const POST_FORMAT_LABELS: Record<PostFormat, string> = {
+  EDITORIAL_FEATURE: "Editorial feature",
+  REPORTED_ANALYSIS: "Reported analysis",
+  PROBLEM_SOLVING: "Problem-solving guide",
+  COMPARISON: "Comparison",
+  ROUNDUP: "Roundup",
+  CHECKLIST: "Checklist",
+  FIRST_HAND_GUIDE: "First-hand guide",
+};
+
+export const POST_FORMAT_BLURBS: Record<PostFormat, string> = {
+  EDITORIAL_FEATURE:
+    "A CinePixo feature whose more specific reporting or utility method has not been claimed.",
+  REPORTED_ANALYSIS:
+    "A sourced event or argument, reported clearly and interpreted by the desk.",
+  PROBLEM_SOLVING:
+    "Starts with a real reader problem and leaves them with a usable answer or sequence of steps.",
+  COMPARISON:
+    "Compares the same decision on consistent criteria, states trade-offs and names who each option suits.",
+  ROUNDUP:
+    "Organises a finite set, explains the inclusion rule and gives every item a reason to be here.",
+  CHECKLIST:
+    "A scannable set of checks a reader can complete before booking, buying, watching or publishing.",
+  FIRST_HAND_GUIDE:
+    "Built from something the writer actually watched, visited, tested or compared, with the method disclosed.",
+};
+
+/** Published utility formats need sources or a visible account of our own test. */
+export const EVIDENCE_FORMATS: readonly PostFormat[] = [
+  "PROBLEM_SOLVING",
+  "COMPARISON",
+  "ROUNDUP",
+  "CHECKLIST",
+];
+
 /**
  * The shelf label, as it reads in navigation and on a card.
  *
@@ -323,6 +376,13 @@ export const postInputSchema = z
     dek: optionalText(500),
     content: z.string().min(1).max(100_000),
     category: postCategorySchema,
+    format: postFormatSchema.default("EDITORIAL_FEATURE"),
+    /** Visible production notes. A first-hand label cannot exist without one. */
+    methodNote: optionalText(1_500),
+    /** Screeners, tickets, travel, samples, sponsorship or the absence thereof. */
+    disclosure: optionalText(800),
+    /** Public note for a factual correction or material revision. */
+    correctionNote: optionalText(1_500),
     status: reviewStatusSchema,
     /** Long-tail phrases the piece is written for; the page renders them. */
     tags: z.array(z.string().trim().min(1).max(60)).max(12).default([]),
@@ -391,8 +451,122 @@ export const postInputSchema = z
       message:
         "A post about people or a live argument needs at least one source before it can be published",
     },
+  )
+  .refine(
+    (p) =>
+      p.status !== "PUBLISHED" ||
+      p.format !== "FIRST_HAND_GUIDE" ||
+      Boolean(p.methodNote && p.methodNote.length >= 20),
+    {
+      path: ["methodNote"],
+      message:
+        "A first-hand guide must say what was watched, visited, tested or compared",
+    },
+  )
+  .refine(
+    (p) =>
+      p.status !== "PUBLISHED" ||
+      p.format !== "FIRST_HAND_GUIDE" ||
+      Boolean(p.disclosure?.trim()),
+    {
+      path: ["disclosure"],
+      message:
+        "A first-hand guide must disclose who paid for access, travel or equipment",
+    },
+  )
+  .refine(
+    (p) =>
+      p.status !== "PUBLISHED" ||
+      !EVIDENCE_FORMATS.includes(p.format) ||
+      p.sources.length > 0 ||
+      Boolean(p.methodNote && p.methodNote.length >= 20),
+    {
+      path: ["methodNote"],
+      message: "A utility piece needs sources or a method note describing our own test",
+    },
   );
 export type PostInput = z.infer<typeof postInputSchema>;
+
+export interface PostQualityIssue {
+  level: "error" | "warning";
+  code: string;
+  message: string;
+}
+
+/**
+ * Editorial checks that are useful in the browser, CLI and doctor alike.
+ *
+ * Errors defend claims ("first hand", "comparison", "checklist") that would
+ * otherwise be unsupported. Warnings describe a strong house shape without
+ * turning word counts or a particular Markdown construction into fake quality.
+ */
+export function auditPostQuality(
+  post: Pick<
+    PostInput,
+    | "title"
+    | "dek"
+    | "content"
+    | "format"
+    | "methodNote"
+    | "disclosure"
+    | "sources"
+    | "tags"
+    | "personIds"
+    | "movieIds"
+  >,
+): PostQualityIssue[] {
+  const issues: PostQualityIssue[] = [];
+  const plain = post.content
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[[^\]]+\]\([^)]*\)/g, " ")
+    .replace(/[`*_>#|~-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = plain ? plain.split(" ").length : 0;
+  const headings = [...post.content.matchAll(/^##\s+.+$/gm)].length;
+  const listItems = [...post.content.matchAll(/^\s*(?:[-*+] |\d+[.)]\s+)/gm)].length;
+  const checklistItems = [...post.content.matchAll(/^\s*[-*+]\s+\[[ xX]\]\s+/gm)].length;
+  const hasTable = /^\s*\|.+\|\s*$/m.test(post.content) && /^\s*\|?\s*:?-{3,}/m.test(post.content);
+  const hasEvidence = post.sources.length > 0 || Boolean(post.methodNote?.trim());
+
+  const warn = (code: string, message: string) =>
+    issues.push({ level: "warning", code, message });
+  const error = (code: string, message: string) =>
+    issues.push({ level: "error", code, message });
+
+  if (!post.dek?.trim()) warn("standfirst", "Add a standfirst that answers the reader before the article begins.");
+  if (words < 600) warn("depth", `The body is about ${words} words; confirm it fully answers the question rather than padding it.`);
+  if (headings < 3) warn("structure", "Use at least three descriptive sections so the argument is easy to scan.");
+  if (post.tags.length < 3) warn("findability", "Add three or more readable phrases that match how a reader would look for this piece.");
+  if (post.personIds.length + post.movieIds.length === 0) {
+    warn("subjects", "Link the people or films this piece is about so it joins the site's editorial graph.");
+  }
+
+  if (post.format === "FIRST_HAND_GUIDE" && (post.methodNote?.trim().length ?? 0) < 20) {
+    error("first-hand-method", "A first-hand guide must disclose what was watched, visited, tested or compared.");
+  }
+  if (EVIDENCE_FORMATS.includes(post.format) && !hasEvidence) {
+    error("utility-evidence", "This utility format needs sources or a visible method note.");
+  }
+
+  if (post.format === "COMPARISON" && !hasTable) {
+    warn("comparison-table", "A consistent comparison table would make the trade-offs verifiable at a glance.");
+  }
+  if (post.format === "CHECKLIST" && Math.max(checklistItems, listItems) < 5) {
+    warn("checklist-items", "A checklist should expose at least five concrete checks a reader can complete.");
+  }
+  if (post.format === "ROUNDUP" && Math.max(headings, listItems) < 3) {
+    warn("roundup-items", "State the inclusion rule and give at least three entries an individual reason to be included.");
+  }
+  if (post.format === "PROBLEM_SOLVING" && headings < 3 && listItems < 3) {
+    warn("problem-steps", "Make the problem, decision path and usable next steps visibly distinct.");
+  }
+  if (post.format === "FIRST_HAND_GUIDE" && !post.disclosure?.trim()) {
+    error("experience-disclosure", "State who paid for tickets, access, travel or equipment, even when the answer is CinePixo.");
+  }
+
+  return issues;
+}
 
 /**
  * The hostname a source URL is credited as: "variety.com" from a Variety link.

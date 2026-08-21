@@ -1,6 +1,8 @@
 import { prisma } from "@cinepixo/db";
 import {
   POST_CATEGORY_LABELS,
+  POST_FORMAT_BLURBS,
+  POST_FORMAT_LABELS,
   type PostCategory,
   extractHeadings,
   postCategorySlug,
@@ -101,6 +103,7 @@ const relatedFor = unstable_cache(
           title: true,
           dek: true,
           category: true,
+          format: true,
           publishedAt: true,
           image: true,
           imageAlt: true,
@@ -322,6 +325,10 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
   const url = absUrl(path);
   const author = post.author.displayName ?? post.author.username;
   const date = post.publishedAt ? new Date(post.publishedAt) : null;
+  const updated = post.updatedAt ? new Date(post.updatedAt) : null;
+  const materiallyUpdated = Boolean(
+    date && updated && updated.getTime() - date.getTime() > 60 * 60 * 1000,
+  );
   const minutes = readingMinutes(post.content);
   const headings = extractHeadings(post.content);
   const hasContents = headings.length >= 3;
@@ -376,6 +383,7 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
       {
         ...post,
         categoryLabel: POST_CATEGORY_LABELS[post.category],
+        formatLabel: POST_FORMAT_LABELS[post.format],
       },
       { author: post.author, includeBody: true, subjectIds },
     ),
@@ -436,6 +444,9 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
             >
               {POST_CATEGORY_LABELS[post.category]}
             </Link>
+            <span className="ml-2 inline-block rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+              {POST_FORMAT_LABELS[post.format]}
+            </span>
             <h1 className="mt-1.5 text-balance text-[clamp(1.8rem,5vw,2.9rem)] font-bold leading-[1.12] tracking-tight">
               {post.title}
             </h1>
@@ -446,12 +457,27 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
             )}
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs text-muted">
               <span>
-                by <span className="font-semibold text-foreground/90">{author}</span>
+                by{" "}
+                <Link
+                  href={`/writers/${post.author.username}`}
+                  rel="author"
+                  className="font-semibold text-foreground/90 hover:text-accent"
+                >
+                  {author}
+                </Link>
               </span>
               {date && (
                 <time dateTime={date.toISOString()}>
                   {date.toLocaleDateString("en-US", { dateStyle: "long" })}
                 </time>
+              )}
+              {materiallyUpdated && updated && (
+                <span>
+                  updated{" "}
+                  <time dateTime={updated.toISOString()}>
+                    {updated.toLocaleDateString("en-US", { dateStyle: "medium" })}
+                  </time>
+                </span>
               )}
               <span>{minutes} min read</span>
               {post.viewCount > 0 && <span>{post.viewCount.toLocaleString("en-US")} views</span>}
@@ -527,6 +553,33 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
 
           <footer className="mt-12 space-y-9">
             <ReelDivider />
+
+            <section className="rounded-xl border border-line bg-surface p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <SectionHead>How this piece was made</SectionHead>
+                <Link href="/editorial" className="text-xs text-accent hover:opacity-80">
+                  Editorial standards →
+                </Link>
+              </div>
+              <p className="mt-3 text-sm font-medium text-foreground/90">
+                {POST_FORMAT_LABELS[post.format]}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                {post.methodNote ?? POST_FORMAT_BLURBS[post.format]}
+              </p>
+              {post.disclosure && (
+                <p className="mt-3 border-t border-line pt-3 text-sm leading-relaxed text-muted">
+                  <span className="font-medium text-foreground/90">Disclosure:</span>{" "}
+                  {post.disclosure}
+                </p>
+              )}
+              {post.correctionNote && (
+                <p className="mt-3 border-t border-line pt-3 text-sm leading-relaxed text-muted">
+                  <span className="font-medium text-foreground/90">Correction:</span>{" "}
+                  {post.correctionNote}
+                </p>
+              )}
+            </section>
 
             {/* ── Who and what this is about ── */}
             {(people.length > 0 || films.length > 0) && (
@@ -647,10 +700,22 @@ export default async function PostPage(props: { params: Promise<{ slug: string }
               <div className="flex items-start gap-4">
                 <Avatar src={post.author.avatarUrl} name={author} size={44} />
                 <div className="min-w-0">
-                  <p className="font-semibold">{author}</p>
+                  <Link
+                    href={`/writers/${post.author.username}`}
+                    rel="author"
+                    className="font-semibold hover:text-accent"
+                  >
+                    {author}
+                  </Link>
                   <p className="mt-1 text-sm leading-relaxed text-muted">
                     {post.author.bio ?? "Writing for CinePixo."}
                   </p>
+                  <Link
+                    href={`/writers/${post.author.username}`}
+                    className="mt-2 inline-block text-xs text-accent hover:opacity-80"
+                  >
+                    Full profile and all work →
+                  </Link>
                 </div>
               </div>
             </section>

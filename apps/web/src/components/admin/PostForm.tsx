@@ -21,16 +21,23 @@
  * no film to pull media from — which matches how a topic essay renders.
  */
 import {
+  auditPostQuality,
   POST_CATEGORY_BLURBS,
   POST_CATEGORY_LABELS,
+  POST_FORMAT_BLURBS,
+  POST_FORMAT_LABELS,
   RESERVED_POST_SLUGS,
   SOURCED_CATEGORIES,
   type PostCategory,
+  type PostFormat,
+  postFormatSchema,
   sourceHost,
 } from "@cinepixo/shared";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { RichEditor, type UploadedImage } from "@/components/review/editor/RichEditor";
+import { DEFAULT_MIN_POST_PICTURES, postPictureCount } from "@/lib/post-visuals";
 import { SubjectPicker, type Subject } from "./SubjectPicker";
 
 export interface PostFormValues {
@@ -39,6 +46,10 @@ export interface PostFormValues {
   dek: string;
   content: string;
   category: PostCategory;
+  format: PostFormat;
+  methodNote: string;
+  disclosure: string;
+  correctionNote: string;
   tags: string[];
   sources: string[];
   personIds: string[];
@@ -57,6 +68,10 @@ const EMPTY: PostFormValues = {
   dek: "",
   content: "",
   category: "PEOPLE",
+  format: "EDITORIAL_FEATURE",
+  methodNote: "",
+  disclosure: "",
+  correctionNote: "",
   tags: [],
   sources: [],
   personIds: [],
@@ -70,6 +85,7 @@ const EMPTY: PostFormValues = {
 };
 
 const CATEGORIES = Object.keys(POST_CATEGORY_LABELS) as PostCategory[];
+const FORMATS = postFormatSchema.options;
 
 /** Same grammar as the slug CHECK constraint: lowercase, digits, single hyphens. */
 function slugify(s: string): string {
@@ -91,6 +107,7 @@ export function PostForm({
   initial,
   postId,
   initialStatus = "DRAFT",
+  authorReady = true,
   knownPeople = [],
   knownFilms = [],
 }: {
@@ -102,6 +119,7 @@ export function PostForm({
    * say so is a button that quietly takes a page off the site.
    */
   initialStatus?: "DRAFT" | "PUBLISHED";
+  authorReady?: boolean;
   /** Subjects already linked, resolved server-side so the picker can name them. */
   knownPeople?: Subject[];
   knownFilms?: Subject[];
@@ -125,6 +143,20 @@ export function PostForm({
   const needsSources = SOURCED_CATEGORIES.includes(v.category);
   const sourcesMissing = needsSources && v.sources.length === 0;
   const slugReserved = RESERVED_POST_SLUGS.includes(v.slug);
+  const pictureCount = postPictureCount(v.content, v.image);
+  const qualityIssues = [
+    ...auditPostQuality(v),
+    ...(pictureCount < DEFAULT_MIN_POST_PICTURES || !v.image
+      ? [
+          {
+            level: "error" as const,
+            code: "picture-floor",
+            message: `Add one hero and at least ${DEFAULT_MIN_POST_PICTURES - 1} body images before publishing (${pictureCount}/${DEFAULT_MIN_POST_PICTURES}).`,
+          },
+        ]
+      : []),
+  ];
+  const qualityErrors = qualityIssues.filter((issue) => issue.level === "error");
 
   /** The body's inline images — the same hardened pipeline reviews use. */
   const uploadOne = useCallback(async (file: File): Promise<UploadedImage | null> => {
@@ -294,6 +326,36 @@ export function PostForm({
         </div>
       </fieldset>
 
+      <fieldset className="max-w-3xl text-sm">
+        <legend className="text-muted">Reader job</legend>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          The shelf says what the piece is about. This says what the reader can do with it.
+          Choose the strongest claim the article can honestly support.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {FORMATS.map((format) => (
+            <label
+              key={format}
+              className={`cursor-pointer rounded-lg border px-3 py-2 ${
+                v.format === format ? "border-accent" : "border-line"
+              }`}
+            >
+              <input
+                type="radio"
+                name="format"
+                className="sr-only"
+                checked={v.format === format}
+                onChange={() => set("format", format)}
+              />
+              <span className="font-medium">{POST_FORMAT_LABELS[format]}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                {POST_FORMAT_BLURBS[format]}
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       <label className="block max-w-3xl text-sm">
         <span className="text-muted">
           Standfirst — the sentence under the headline, and the one search results and share
@@ -422,6 +484,46 @@ export function PostForm({
           media={{ trailerKey: null, stills: [] }}
         />
       </div>
+
+      <fieldset className="max-w-3xl rounded-lg border border-line p-4 text-sm">
+        <legend className="px-1 text-muted">How this piece was made</legend>
+        <label className="block">
+          <span className="text-muted">
+            Method note
+            {v.format === "FIRST_HAND_GUIDE" ? " — required for first-hand work" : " (recommended)"}
+          </span>
+          <textarea
+            rows={3}
+            maxLength={1500}
+            value={v.methodNote}
+            onChange={(e) => set("methodNote", e.target.value)}
+            className={inputCls}
+            placeholder="What was watched, tested, visited, compared or checked; when and under what conditions."
+          />
+        </label>
+        <label className="mt-4 block">
+          <span className="text-muted">Access and commercial disclosure</span>
+          <textarea
+            rows={2}
+            maxLength={800}
+            value={v.disclosure}
+            onChange={(e) => set("disclosure", e.target.value)}
+            className={inputCls}
+            placeholder="Example: CinePixo bought the ticket. No studio reviewed or approved this piece."
+          />
+        </label>
+        <label className="mt-4 block">
+          <span className="text-muted">Correction or material revision note</span>
+          <textarea
+            rows={2}
+            maxLength={1500}
+            value={v.correctionNote}
+            onChange={(e) => set("correctionNote", e.target.value)}
+            className={inputCls}
+            placeholder="Leave blank for ordinary copy edits. State what factual claim changed and when."
+          />
+        </label>
+      </fieldset>
 
       {/* ── Subjects ── */}
       <div className="grid max-w-3xl gap-4">
@@ -570,6 +672,30 @@ export function PostForm({
         </div>
       </fieldset>
 
+      <section className="max-w-3xl rounded-lg border border-line bg-surface p-4 text-sm">
+        <h2 className="font-medium">Editorial readiness</h2>
+        {qualityIssues.length === 0 ? (
+          <p className="mt-2 text-positive">
+            No structural issues found. Human source-checking still decides publication.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {qualityIssues.map((issue) => (
+              <li key={issue.code} className="flex gap-2">
+                <span
+                  className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] ${
+                    issue.level === "error" ? "text-red-400" : "text-accent"
+                  }`}
+                >
+                  {issue.level}
+                </span>
+                <span className="text-muted">{issue.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {error && (
         <p role="alert" className="text-sm text-red-400">
           {error}
@@ -591,10 +717,24 @@ export function PostForm({
         </button>
         <button
           type="button"
-          disabled={busy || sourcesMissing || slugReserved || !v.title || !v.content}
+          disabled={
+            busy ||
+            sourcesMissing ||
+            qualityErrors.length > 0 ||
+            !authorReady ||
+            slugReserved ||
+            !v.title ||
+            !v.content
+          }
           onClick={() => void save("PUBLISHED")}
           className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
-          title={sourcesMissing ? "This shelf needs at least one source" : undefined}
+          title={
+            sourcesMissing
+              ? "This shelf needs at least one source"
+              : qualityErrors.length > 0
+                ? qualityErrors[0]?.message
+                : undefined
+          }
         >
           {initialStatus === "PUBLISHED" ? "Save changes" : "Publish"}
         </button>
@@ -604,6 +744,16 @@ export function PostForm({
             Add a source and Publish unlocks — {POST_CATEGORY_LABELS[v.category]} makes claims
             about real people.
           </span>
+        )}
+        {!sourcesMissing && qualityErrors.length > 0 && (
+          <span className="text-sm text-muted">
+            Resolve the editorial error above before publishing.
+          </span>
+        )}
+        {!authorReady && (
+          <Link href="/me/settings" className="text-sm text-accent hover:opacity-80">
+            Add the writer biography before publishing →
+          </Link>
         )}
       </div>
     </form>

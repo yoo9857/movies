@@ -7,7 +7,13 @@
 //
 // Spec: https://www.jsonfeed.org/version/1.1/
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS, type PostCategory } from "@cinepixo/shared";
+import {
+  POST_CATEGORY_LABELS,
+  POST_FORMAT_LABELS,
+  type PostCategory,
+  type PostFormat,
+} from "@cinepixo/shared";
+import { postTrustMarkdown } from "@/lib/markdown-export";
 import { absUrl, clamp, hosted, plainText, posterUrl } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_LANG, SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -46,6 +52,10 @@ export async function GET(): Promise<Response> {
         dek: true,
         content: true,
         category: true,
+        format: true,
+        methodNote: true,
+        disclosure: true,
+        correctionNote: true,
         tags: true,
         sources: true,
         publishedAt: true,
@@ -116,6 +126,10 @@ type PostRow = {
   dek: string | null;
   content: string;
   category: PostCategory;
+  format: PostFormat;
+  methodNote: string | null;
+  disclosure: string | null;
+  correctionNote: string | null;
   tags: string[];
   sources: string[];
   publishedAt: Date | null;
@@ -181,14 +195,29 @@ function buildItems(reviews: ReviewRow[], posts: PostRow[], topics: TopicRow[]) 
         url,
         title: p.title,
         summary: p.dek ?? clamp(plainText(p.content), 300),
-        content_text: plainText(p.content),
+        content_text: [
+          plainText(p.content),
+          plainText(
+            postTrustMarkdown({
+              formatLabel: POST_FORMAT_LABELS[p.format],
+              methodNote: p.methodNote,
+              disclosure: p.disclosure,
+              correctionNote: p.correctionNote,
+            }),
+          ),
+          ...(p.sources.length > 0 ? ["Sources", ...p.sources] : []),
+        ].join("\n\n"),
         image: hosted(p.image),
         date_published: p.publishedAt?.toISOString(),
         date_modified: p.updatedAt.toISOString(),
         authors: [{ name: author }],
-        tags: [POST_CATEGORY_LABELS[p.category], ...p.tags],
+        tags: [POST_CATEGORY_LABELS[p.category], POST_FORMAT_LABELS[p.format], ...p.tags],
         _cinepixo: {
           category: p.category,
+          format: p.format,
+          method: p.methodNote,
+          disclosure: p.disclosure,
+          correction: p.correctionNote,
           // The sources travel with the piece. A reader taking this feed into a
           // reader still gets the evidence the page prints — which is the point
           // of having demanded it at the database.

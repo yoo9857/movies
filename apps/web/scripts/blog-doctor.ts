@@ -30,7 +30,9 @@
 // the data is judged.
 import "../../../packages/db/prisma/env";
 import { prisma } from "@cinepixo/db";
+import { auditPostQuality } from "@cinepixo/shared";
 import { isOurObjectUrl } from "@/lib/media/storage";
+import { DEFAULT_MIN_POST_PICTURES, minimumPictureMessage } from "@/lib/post-visuals";
 
 function strArg(name: string): string | null {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -80,13 +82,22 @@ async function main() {
       slug: true,
       status: true,
       category: true,
+      format: true,
+      methodNote: true,
+      disclosure: true,
       content: true,
+      dek: true,
+      title: true,
+      tags: true,
       sources: true,
       image: true,
       imageAlt: true,
       imageCredit: true,
       imageLicense: true,
       imageSourceUrl: true,
+      people: { select: { personId: true } },
+      movies: { select: { movieId: true } },
+      author: { select: { bio: true } },
     },
   });
   if (posts.length === 0) throw new Error(ONE ? `no post with slug ${ONE}` : "no posts");
@@ -99,6 +110,16 @@ async function main() {
   for (const post of posts) {
     const say = (level: Problem["level"], what: string) =>
       problems.push({ slug: post.slug, level, what });
+
+    const body = bodyPictures(post.content);
+    const postPictures = body.length + (post.image ? 1 : 0);
+    if (
+      !post.image ||
+      postPictures < DEFAULT_MIN_POST_PICTURES ||
+      body.length < DEFAULT_MIN_POST_PICTURES - 1
+    ) {
+      say("error", minimumPictureMessage(postPictures, DEFAULT_MIN_POST_PICTURES));
+    }
 
     if (post.image) {
       pictures += 1;
@@ -118,7 +139,7 @@ async function main() {
       }
     }
 
-    for (const pic of bodyPictures(post.content)) {
+    for (const pic of body) {
       pictures += 1;
       if (!isOurObjectUrl(pic.url)) say("error", `body picture is not ours: ${pic.url}`);
       if (!pic.alt.trim()) say("warning", `body picture has no alt text: ${pic.url}`);
@@ -130,6 +151,24 @@ async function main() {
     if (post.status === "PUBLISHED" && SOURCED.has(post.category) && post.sources.length === 0) {
       // The database refuses this. Reaching it means something wrote around it.
       say("error", `published ${post.category} with no sources`);
+    }
+
+    for (const issue of auditPostQuality({
+      title: post.title,
+      dek: post.dek ?? undefined,
+      content: post.content,
+      format: post.format,
+      methodNote: post.methodNote ?? undefined,
+      disclosure: post.disclosure ?? undefined,
+      sources: post.sources,
+      tags: post.tags,
+      personIds: post.people.map((p) => p.personId),
+      movieIds: post.movies.map((m) => m.movieId),
+    })) {
+      say(issue.level, issue.message);
+    }
+    if (post.status === "PUBLISHED" && !post.author.bio?.trim()) {
+      say("error", "published byline has no writer biography");
     }
   }
 

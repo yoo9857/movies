@@ -36,6 +36,7 @@ export default async function EditMyReviewPage(props: { params: Promise<{ id: st
       <h1 className="text-3xl font-bold tracking-tight">Edit review</h1>
       <div className="mt-7">
         <ReviewEditor
+          canPublish={Boolean(user.bio?.trim())}
           reviewId={review.id}
           initial={{
             slug: review.slug,

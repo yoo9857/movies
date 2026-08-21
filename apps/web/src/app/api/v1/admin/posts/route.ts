@@ -3,8 +3,13 @@ import { postInputSchema } from "@cinepixo/shared";
 import { revalidateTag } from "next/cache";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
-import { assertHeroIsOurs, postWriteData, syncPostSubjects } from "@/lib/post-write";
-import { autoAttachPostHero } from "@/lib/auto-post-hero";
+import {
+  assertHeroIsOurs,
+  assertPostPictureFloor,
+  postWriteData,
+  syncPostSubjects,
+} from "@/lib/post-write";
+import { assertPublishingAuthor } from "@/lib/publication-author";
 
 /**
  * The blog is editorial: only an admin writes here, and the list is small enough
@@ -21,6 +26,7 @@ export const GET = handle(async () => {
       slug: true,
       title: true,
       category: true,
+      format: true,
       status: true,
       publishedAt: true,
       updatedAt: true,
@@ -38,6 +44,8 @@ export const POST = handle(async (request: Request) => {
 
   const input = postInputSchema.parse(await parseJson(request));
   assertHeroIsOurs(input);
+  assertPostPictureFloor(input);
+  await assertPublishingAuthor(admin.id, input.status);
 
   // Checked here for a readable error; the database enforces both anyway
   // (unique slug, unique LOWER(title)).
@@ -54,7 +62,6 @@ export const POST = handle(async (request: Request) => {
     select: { id: true, slug: true },
   });
   await syncPostSubjects(post.id, input);
-  if (input.status === "PUBLISHED" && !input.image) await autoAttachPostHero(post.id);
   // The listings hold their rows for a minute; a new piece should not. Expire
   // rather than mark stale — the editor is about to go looking for it.
   revalidateTag("posts", { expire: 0 });

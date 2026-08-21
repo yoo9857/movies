@@ -2,6 +2,12 @@ import { prisma } from "@cinepixo/db";
 import type { PostInput } from "@cinepixo/shared";
 import { ApiError } from "./api";
 import { isOurObjectUrl } from "./media/storage";
+import {
+  bodyPictureCount,
+  DEFAULT_MIN_POST_PICTURES,
+  minimumPictureMessage,
+  postPictureCount,
+} from "./post-visuals";
 
 /**
  * The columns a post write sets, and the one rule the caller must not guess at.
@@ -26,6 +32,10 @@ export function postWriteData(input: PostInput, existingPublishedAt: Date | null
     dek: input.dek ?? null,
     content: input.content,
     category: input.category,
+    format: input.format,
+    methodNote: input.methodNote ?? null,
+    disclosure: input.disclosure ?? null,
+    correctionNote: input.correctionNote ?? null,
     status: input.status,
     publishedAt:
       input.status === "PUBLISHED" ? (existingPublishedAt ?? new Date()) : null,
@@ -54,6 +64,17 @@ export function assertHeroIsOurs(input: Pick<PostInput, "image">): void {
       400,
       "A hero image has to be uploaded here, not linked from somewhere else",
     );
+  }
+}
+
+export function assertPostPictureFloor(
+  input: Pick<PostInput, "content" | "image" | "status">,
+): void {
+  if (input.status !== "PUBLISHED") return;
+  const total = postPictureCount(input.content, input.image);
+  const body = bodyPictureCount(input.content);
+  if (!input.image || total < DEFAULT_MIN_POST_PICTURES || body < DEFAULT_MIN_POST_PICTURES - 1) {
+    throw new ApiError(400, minimumPictureMessage(total, DEFAULT_MIN_POST_PICTURES));
   }
 }
 

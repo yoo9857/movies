@@ -94,6 +94,7 @@ export default async function WritePage(props: {
 
       <div className="mt-7">
         <ReviewEditor
+          canPublish={Boolean(user.bio?.trim())}
           initial={
             preset
               ? {

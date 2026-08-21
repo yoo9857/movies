@@ -163,6 +163,7 @@ export default async function HomePage() {
         title: true,
         dek: true,
         category: true,
+        format: true,
         publishedAt: true,
         image: true,
         imageAlt: true,

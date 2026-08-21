@@ -2,6 +2,7 @@ import { prisma } from "@cinepixo/db";
 import { reviewInputSchema } from "@cinepixo/shared";
 import { ApiError, handle, json, parseJson, requireSameOrigin } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
+import { assertPublishingAuthor } from "@/lib/publication-author";
 
 // Admin: list all reviews including drafts.
 export const GET = handle(async () => {
@@ -28,6 +29,7 @@ export const POST = handle(async (request: Request) => {
   requireSameOrigin(request);
   const admin = await requireAdmin();
   const input = reviewInputSchema.parse(await parseJson(request));
+  await assertPublishingAuthor(admin.id, input.status);
 
   const movie = await prisma.movie.findUnique({ where: { id: input.movieId } });
   if (!movie) throw new ApiError(400, "Unknown movieId");

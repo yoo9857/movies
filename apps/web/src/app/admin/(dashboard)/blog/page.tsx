@@ -1,5 +1,5 @@
 import { prisma } from "@cinepixo/db";
-import { POST_CATEGORY_LABELS, SOURCED_CATEGORIES } from "@cinepixo/shared";
+import { POST_CATEGORY_LABELS, POST_FORMAT_LABELS, SOURCED_CATEGORIES } from "@cinepixo/shared";
 import Link from "next/link";
 import { DeletePostButton } from "@/components/admin/DeletePostButton";
 
@@ -23,12 +23,13 @@ export default async function AdminBlogPage() {
       slug: true,
       title: true,
       category: true,
+      format: true,
       status: true,
       publishedAt: true,
       updatedAt: true,
       sources: true,
       viewCount: true,
-      author: { select: { username: true, displayName: true } },
+      author: { select: { username: true, displayName: true, bio: true } },
       _count: { select: { people: true, movies: true } },
     },
   });
@@ -85,8 +86,16 @@ export default async function AdminBlogPage() {
                         {p.author.displayName ?? p.author.username}
                         {p.viewCount > 0 ? ` · ${p.viewCount.toLocaleString("en-US")} views` : ""}
                       </span>
+                      {!p.author.bio?.trim() && (
+                        <span className="mt-1 block text-xs text-red-400">writer bio required</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-muted">{POST_CATEGORY_LABELS[p.category]}</td>
+                    <td className="px-4 py-3 text-muted">
+                      {POST_CATEGORY_LABELS[p.category]}
+                      <span className="mt-0.5 block font-mono text-[10px] text-muted">
+                        {POST_FORMAT_LABELS[p.format]}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs tabular-nums">
                       {blocked ? (
                         <span className="text-red-400">required</span>

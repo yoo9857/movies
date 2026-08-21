@@ -26,8 +26,15 @@
 //
 // So this asks the questions a person would ask if they thought to, and it is
 // cheap enough to run after every deploy. Exit code 1 if anything failed.
+import { streamedRenderProblem } from "../src/lib/deploy-health";
+
 const ARG = (process.argv.find((a) => a.startsWith("--url=")) ?? "").split("=").slice(1).join("=");
 const BASE = (ARG || process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3400").replace(/\/+$/, "");
+const PEOPLE_SAMPLE = Number(
+  (process.argv.find((a) => a.startsWith("--people-sample=")) ?? "--people-sample=40")
+    .split("=")
+    .at(-1),
+);
 
 interface Check {
   /** Fixed path, or the label to print when `resolve` finds the real one. */
@@ -42,6 +49,8 @@ interface Check {
   expect?: (body: string, res: Response) => string | null;
   /** A 404 here is a finding, not a failure — some surfaces are optional. */
   optional?: boolean;
+  /** Repeat database-backed pages to catch intermittent 5xx responses. */
+  attempts?: number;
 }
 
 const contains = (...needles: string[]) => (body: string) => {
@@ -182,6 +191,7 @@ const CHECKS: Check[] = [
   { path: "/robots.txt", expect: contains("Sitemap:", "Disallow: /admin") },
   { path: "/sitemap.xml", expect: contains("<sitemapindex", "/sitemaps/blog") },
   { path: "/sitemaps/blog.xml", expect: contains("<urlset", "/blog/") },
+  { path: "/sitemaps/people.xml", expect: contains("<urlset", "/people/") },
   { path: "/feed.xml", expect: contains("<rss", "rel=\"self\"") },
   { path: "/feed.json", expect: contains("\"version\"", "jsonfeed") },
   { path: "/blog/feed.xml", expect: contains("<rss", "Off Camera") },
@@ -222,6 +232,20 @@ const CHECKS: Check[] = [
   { path: "/movies?genre=Drama&decade=1990", expect: notIndexable },
   { path: "/people", expect: indexable },
   { path: "/people?letter=A", expect: notIndexable },
+  { path: "/about", expect: contains("About CinePixo") },
+  { path: "/contact", expect: contains("Contact") },
+  { path: "/privacy", expect: contains("Privacy Policy") },
+  { path: "/terms", expect: contains("Terms of Use") },
+  { path: "/editorial", expect: contains("Editorial standards", "First-hand") },
+  { path: "/writers", expect: contains("Writers") },
+  // These are representative URLs from the 153-person-page Search Console
+  // 5xx incident. Two successful renders each make a transient database or
+  // server-rendering regression visible immediately after deployment.
+  { path: "/people/robert-brown-2", attempts: 2 },
+  { path: "/people/samantha-smith", attempts: 2 },
+  { path: "/people/ger-duany", attempts: 2 },
+  { path: "/people/leslie-belzberg", attempts: 2 },
+  { path: "/people/peter-nelson", attempts: 2 },
   // Only present once a key is configured; its absence is worth saying but is
   // not a broken deploy.
   { path: "/indexnow-key.txt", optional: true },
@@ -241,20 +265,67 @@ async function run(check: Check): Promise<string | null> {
   }
 
   const url = `${BASE}${path}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { "User-Agent": "CinePixo-deploy-check/1.0" },
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch {
-    return "could not be reached";
+  const attempts = check.attempts ?? 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { "User-Agent": "CinePixo-deploy-check/1.0" },
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      return `could not be reached${attempts > 1 ? ` on attempt ${attempt}` : ""}`;
+    }
+    if (res.status === 404 && check.optional) return "not configured";
+    if (!res.ok) return `answered ${res.status}${attempts > 1 ? ` on attempt ${attempt}` : ""}`;
+    const body = await res.text();
+    if (!body.trim()) return `answered empty${attempts > 1 ? ` on attempt ${attempt}` : ""}`;
+    const problem = streamedRenderProblem(body) ?? check.expect?.(body, res) ?? null;
+    if (problem) return `${problem}${attempts > 1 ? ` on attempt ${attempt}` : ""}`;
   }
-  if (res.status === 404 && check.optional) return "not configured";
-  if (!res.ok) return `answered ${res.status}`;
-  const body = await res.text();
-  if (!body.trim()) return "answered empty";
-  return check.expect?.(body, res) ?? null;
+  return null;
+}
+
+async function checkPeopleSample(): Promise<{ checked: number; failures: string[] }> {
+  if (!Number.isInteger(PEOPLE_SAMPLE) || PEOPLE_SAMPLE < 1 || PEOPLE_SAMPLE > 500) {
+    throw new Error("--people-sample must be an integer from 1 to 500");
+  }
+  const sitemap = await fetch(`${BASE}/sitemaps/people.xml`, {
+    headers: { "User-Agent": "CinePixo-deploy-check/1.0" },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!sitemap.ok) return { checked: 0, failures: [`people sitemap answered ${sitemap.status}`] };
+  const xml = await sitemap.text();
+  const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
+    .map((match) => match[1].replaceAll("&amp;", "&"))
+    .filter((url) => new URL(url).pathname.startsWith("/people/"));
+  if (urls.length === 0) return { checked: 0, failures: ["people sitemap has no person URLs"] };
+  if (urls.length > 50_000) {
+    return { checked: 0, failures: [`people sitemap exceeds the 50,000 URL limit (${urls.length})`] };
+  }
+
+  const count = Math.min(PEOPLE_SAMPLE, urls.length);
+  const sampled = Array.from(
+    new Set(
+      Array.from({ length: count }, (_, index) =>
+        urls[Math.round((index * (urls.length - 1)) / Math.max(1, count - 1))],
+      ),
+    ),
+  );
+  const failures: string[] = [];
+  for (let start = 0; start < sampled.length; start += 5) {
+    const batch = sampled.slice(start, start + 5);
+    const results = await Promise.all(
+      batch.map(async (url) => {
+        const path = new URL(url).pathname;
+        return { path, problem: await run({ path, attempts: 2 }) };
+      }),
+    );
+    for (const result of results) {
+      if (result.problem) failures.push(`${result.path}: ${result.problem}`);
+    }
+  }
+  return { checked: sampled.length, failures };
 }
 
 async function main() {
@@ -262,6 +333,7 @@ async function main() {
   const results = await Promise.all(
     CHECKS.map(async (c) => ({ check: c, problem: await run(c) })),
   );
+  const people = await checkPeopleSample();
 
   let failed = 0;
   for (const { check, problem } of results) {
@@ -274,8 +346,16 @@ async function main() {
       console.log(`  FAIL  ${check.path}  ${problem}`);
     }
   }
+  const surfaceFailed = failed;
 
-  console.log(`\n${results.length - failed}/${results.length} surfaces good`);
+  if (people.failures.length === 0) {
+    console.log(`  ok    people sitemap sample (${people.checked} pages)`);
+  } else {
+    failed += people.failures.length;
+    for (const problem of people.failures) console.log(`  FAIL  ${problem}`);
+  }
+
+  console.log(`\n${results.length - surfaceFailed}/${results.length} fixed surfaces good; ${people.checked} person pages sampled`);
   if (failed > 0) {
     console.log(
       "\nIf ads.txt or the ad code is the failure, the likely cause is a build that ran\n" +

@@ -7,7 +7,7 @@ import { readSession } from "./session";
 
 export type SafeUser = Pick<
   User,
-  "id" | "email" | "username" | "displayName" | "role" | "avatarUrl"
+  "id" | "email" | "username" | "displayName" | "bio" | "role" | "avatarUrl"
 >;
 
 const safeSelect = {
@@ -15,6 +15,7 @@ const safeSelect = {
   email: true,
   username: true,
   displayName: true,
+  bio: true,
   role: true,
   avatarUrl: true,
 } as const;

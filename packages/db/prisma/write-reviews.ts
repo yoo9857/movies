@@ -4,13 +4,13 @@
 //   npm run db:write-reviews -- --film=oldboy-2003 # a specific film
 //   npm run db:write-reviews -- --film=x --again    # a second voice, on purpose
 //   npm run db:write-reviews -- --limit=4 --dry    # generate, print, write nothing
-//   npm run db:write-reviews -- --drafts=x.json    # publish prose written elsewhere
+//   npm run db:write-reviews -- --drafts=x.json    # import prose written elsewhere as drafts
 //
 // The desk has four house critics — Vera Lindqvist (form), Marcus Reid (the
 // Saturday-night crowd), Amara Osei (lineage), Dorothy Kwan (the skeptic) —
 // created as real User rows by their seed. This script picks the most-documented
 // films that have a synopsis and no review yet, hands one to the next persona in
-// rotation with their voice sheet, and publishes what comes back — after zod has
+// rotation with their voice sheet, and saves what comes back as a draft after zod has
 // said the rating is a real half-star, the prose is long enough to be a review,
 // and the slug is free.
 //
@@ -21,7 +21,7 @@
 //
 // That CLI has a usage limit, and when it is spent no review can be generated
 // for days. `--drafts` is the way past it: a JSON file of prose written anywhere
-// else, each entry naming its film and its byline, published through the same
+// else, each entry naming its film and its byline, imported through the same
 // schema, the same slug minting and the same second-review guard. Nothing gets
 // in that way that generation could not have written.
 import { execFileSync } from "node:child_process";
@@ -45,17 +45,14 @@ function strArg(name: string): string | null {
 
 const LIMIT = arg("limit", 1);
 const FILM = strArg("film");
-/** A JSON file of ready prose to publish instead of calling the model. */
+/** A JSON file of ready prose to import as drafts instead of calling the model. */
 const DRAFTS = strArg("drafts");
 const DRY = process.argv.includes("--dry");
 /** Deliberately add another critic's take to a film that already has one. */
 const AGAIN = process.argv.includes("--again");
 /**
- * Seed mode: spread publication over the last N days instead of stamping
- * everything "just now". A desk that came online this afternoon and published
- * its whole archive in one minute does not read as a desk — backdating gives
- * each review an age, a plausible view count for that age, and a few helpful
- * votes from the colleagues who would actually have read it.
+ * Archive-import mode: preserve an approximate original creation window for
+ * draft material. Publication is still stamped later by the guarded web API.
  */
 const BACKDATE = arg("backdate", 0);
 
@@ -280,8 +277,8 @@ async function main() {
   // critic, opening on the same section heading, four weeks apart — nothing
   // refused the second because nothing checked.
   //
-  // A second take on one film is a legitimate thing for a desk with four critics
-  // to publish. It should be a decision, though, not an accident, so it now needs
+  // A second take on one film is legitimate for a desk with four critics to
+  // draft. It should be a decision, though, not an accident, so it now needs
   // `--again` and says whose take already exists.
   let queue = films;
   if (named && !AGAIN) {
@@ -320,7 +317,7 @@ async function main() {
         draft: null,
       }));
 
-  let published = 0;
+  let created = 0;
   const skipped: string[] = [];
   for (const { film, persona, draft: ready } of jobs) {
     try {
@@ -335,7 +332,7 @@ async function main() {
         console.log(
           `\n— ${film.title} · by ${persona.username} · ★${draft.rating}\n${draft.title}\n${draft.verdict}\n${draft.content.slice(0, 300)}…`,
         );
-        published += 1;
+        created += 1;
         continue;
       }
 
@@ -343,8 +340,6 @@ async function main() {
         BACKDATE > 0
           ? new Date(Date.now() - Math.random() * BACKDATE * 86_400_000)
           : new Date();
-      const ageDays = (Date.now() - when.getTime()) / 86_400_000;
-
       await prisma.review.create({
         data: {
           slug,
@@ -353,56 +348,29 @@ async function main() {
           excerpt: draft.excerpt,
           content: draft.content,
           rating: draft.rating,
-          status: "PUBLISHED",
+          // Generated or imported prose is never a publication decision. A
+          // human verifies its claims and byline in the admin editor.
+          status: "DRAFT",
           spoilers: "NONE",
-          publishedAt: when,
+          publishedAt: null,
           createdAt: when,
-          viewCount: BACKDATE > 0 ? Math.round(ageDays * (3 + Math.random() * 15)) : 0,
+          viewCount: 0,
           authorId: persona.user!.id,
           movieId: film.id,
         },
       });
-      published += 1;
+      created += 1;
       console.log(
-        `published: /reviews/${slug} — ${film.title} · ${persona.username} · ★${draft.rating}${BACKDATE > 0 ? ` · ${when.toISOString().slice(0, 10)}` : ""}`,
+        `draft: /admin/reviews — ${film.title} · ${persona.username} · ★${draft.rating}`,
       );
     } catch (e) {
       skipped.push(`${film.title}: ${(e as Error).message.slice(0, 160)}`);
     }
   }
 
-  console.log(`\n${published} ${DRY ? "generated" : "published"} · ${skipped.length} skipped`);
+  console.log(`\n${created} ${DRY ? "generated" : "drafted"} · ${skipped.length} skipped`);
   for (const line of skipped) console.warn(`  ${line}`);
 
-  // Colleagues read each other. In seed mode, every house review picks up nought
-  // to three helpful votes from the other personas — real ReviewVote rows, cast
-  // after publication, with helpfulCount recomputed the same way the API does.
-  if (BACKDATE > 0 && !DRY) {
-    const houseReviews = await prisma.review.findMany({
-      where: { author: { username: { in: PERSONAS.map((p) => p.username) } } },
-      select: { id: true, authorId: true, publishedAt: true },
-    });
-    let votes = 0;
-    for (const review of houseReviews) {
-      const voters = personas
-        .filter((p) => p.user!.id !== review.authorId && Math.random() < 0.55)
-        .slice(0, 3);
-      for (const voter of voters) {
-        const at = new Date(
-          (review.publishedAt ?? new Date()).getTime() +
-            Math.random() * 3 * 86_400_000,
-        );
-        const cast = await prisma.reviewVote.createMany({
-          data: [{ reviewId: review.id, userId: voter.user!.id, createdAt: at }],
-          skipDuplicates: true,
-        });
-        votes += cast.count;
-      }
-      const helpfulCount = await prisma.reviewVote.count({ where: { reviewId: review.id } });
-      await prisma.review.update({ where: { id: review.id }, data: { helpfulCount } });
-    }
-    console.log(`${votes} helpful votes cast between the desk's critics`);
-  }
 }
 
 main()

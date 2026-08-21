@@ -13,6 +13,25 @@ rows.
 - Write an angle, not a rewritten news report. Every material factual claim
   must be traceable to a URL in `sources`.
 
+Before drafting, choose the reader job. It is a promise about the structure,
+not a decorative label:
+
+- `REPORTED_ANALYSIS`: explain what happened, what the evidence supports and
+  what remains uncertain;
+- `PROBLEM_SOLVING`: define the problem, diagnose it and give usable next
+  steps;
+- `COMPARISON`: state common criteria, compare every option on those criteria
+  and explain the trade-off;
+- `ROUNDUP`: publish an inclusion rule and a specific reason for every entry;
+- `CHECKLIST`: give concrete checks a reader can complete and verify;
+- `FIRST_HAND_GUIDE`: disclose exactly what was watched, visited, tested or
+  compared, and who paid for access, travel or equipment.
+
+Every post needs a named byline with a completed `/writers/<username>` profile.
+Utility formats need sources or a visible `methodNote`. A first-hand guide must
+have both a specific `methodNote` and a `disclosure`; generated copy may never
+claim first-hand experience. Follow the public policy at `/editorial`.
+
 ## 2. Prepare the three job files
 
 Create:
@@ -40,6 +59,20 @@ one and were stripped on 2026-08-19; the `.md` rendition is the quickest check
 `content` ends on the last sentence of the piece. The strongest concrete thing
 you have left is the right place to stop — not a list.
 
+The editorial fields belong in that same draft job:
+
+```json
+{
+  "format": "COMPARISON",
+  "methodNote": "Compared the same release data, credits and primary reporting for every entry.",
+  "disclosure": "No studio supplied travel, access, payment or editorial approval.",
+  "correctionNote": "Optional: describe a material correction and its date."
+}
+```
+
+Do not invent a method note to satisfy the gate. If the work was not actually
+done, change the format or do the work.
+
 The image floor is four: one hero and at least three body images. Body jobs use
 `"at": "Exact heading text"` to place an image immediately above a matching
 `##` heading.
@@ -55,13 +88,27 @@ crops and unreadable watermarks. Alt text describes what is visibly present.
 
 ## 3. Commit and deploy the jobs
 
-Commit and push the three JSON files before touching production. After the
-normal code deploy, run the remaining commands on production:
+Commit and push the three JSON files before touching production. For a release
+that includes a Prisma migration, apply the database migration before switching
+production traffic to the new application build. The added columns are
+backward-compatible with the old build; the new build is not compatible with
+an unmigrated database.
+
+On production, use this order:
 
 ```sh
 cd ~/cinepixo
 export PATH=$HOME/.nvm/versions/node/v22.19.0/bin:$PATH
+npm ci
+npm run db:generate
+npm run db:deploy
+npm run db:status
+npm run build
 ```
+
+Only restart or switch traffic to the new application after `db:status` reports
+that the schema is current and the build succeeds. If `db:deploy` fails, keep
+the previous application running and stop the release.
 
 Do not put credentials in a command, job file, commit message or Markdown
 document. Production reads its own environment.
@@ -115,6 +162,11 @@ Expected result: one hero, at least three body images, zero errors and zero
 warnings. While signed in as admin, preview `/blog/<slug>` and compare the prose
 with its sources.
 
+The doctor also checks the reader-job contract: useful depth and headings,
+searchable tags, linked film/person subjects, evidence, comparison tables,
+checklist items and first-hand disclosure. Treat a warning as a review prompt,
+not an invitation to pad the article.
+
 Also test without a session. A draft must not reveal its title, prose or image
 captions. Next.js streaming can return an HTTP 200 containing the rendered 404
 fallback, so status alone is not a privacy test; inspect the response body.
@@ -139,6 +191,22 @@ Verify all of the following:
 
 Google does not participate in IndexNow. Its normal discovery paths are the
 sitemap, internal subject links and manual Request Indexing in Search Console.
+
+Run the deployment surface check after every release:
+
+```sh
+cd ~/cinepixo/apps/web
+npx tsx scripts/deploy-check.ts --url=https://www.cinepixo.com
+```
+
+This now repeats representative person pages from the August 2026 Search
+Console 5xx incident, as well as checking ads.txt, sitemaps, feeds, About,
+Contact, Privacy, Terms, editorial standards and writer pages. It also rejects
+Next.js streamed render errors that can arrive inside an HTTP 200 shell. If
+Search Console reports 5xx again, do not click
+"Validate fix" until this command passes and several affected URLs return 200
+without a session. Then use URL Inspection on a small sample, request indexing,
+start validation for the issue and monitor server logs through the next crawl.
 
 To withdraw a published post:
 

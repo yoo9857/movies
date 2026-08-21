@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { PostForm } from "@/components/admin/PostForm";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default function NewPostPage() {
+export default async function NewPostPage() {
+  const admin = await requireAdmin();
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -17,7 +19,7 @@ export default function NewPostPage() {
         field here on purpose. Pick the shelf first — it decides whether the piece has to cite
         anything, and Away From Set and The Argument both do.
       </p>
-      <PostForm />
+      <PostForm authorReady={Boolean(admin.bio?.trim())} />
     </div>
   );
 }

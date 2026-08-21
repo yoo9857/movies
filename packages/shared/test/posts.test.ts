@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  auditPostQuality,
+  EVIDENCE_FORMATS,
   POST_CATEGORY_LABELS,
+  POST_FORMAT_LABELS,
   RESERVED_POST_SLUGS,
   SOURCED_CATEGORIES,
   postCategoryFromSlug,
   postCategorySchema,
   postCategorySlug,
+  postFormatSchema,
   postInputSchema,
   sourceHost,
 } from "../src/index";
@@ -205,5 +209,63 @@ describe("defaults", () => {
     expect(res.sources).toEqual([]);
     expect(res.personIds).toEqual([]);
     expect(res.movieIds).toEqual([]);
+    expect(res.format).toBe("EDITORIAL_FEATURE");
+  });
+});
+
+describe("reader-job evidence", () => {
+  it("has a printable label for every format", () => {
+    for (const format of postFormatSchema.options) expect(POST_FORMAT_LABELS[format]).toBeTruthy();
+  });
+
+  it("will not publish a first-hand claim without a visible method and disclosure", () => {
+    const missing = parse({ format: "FIRST_HAND_GUIDE", status: "PUBLISHED" });
+    expect(missing.success).toBe(false);
+    expect(missing.error?.issues.some((issue) => issue.path[0] === "methodNote")).toBe(true);
+    expect(missing.error?.issues.some((issue) => issue.path[0] === "disclosure")).toBe(true);
+    expect(
+      parse({
+        format: "FIRST_HAND_GUIDE",
+        status: "PUBLISHED",
+        methodNote: "Watched both presentations on August 20 from the same auditorium row.",
+        disclosure: "CinePixo paid for both tickets; no distributor supplied access.",
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(EVIDENCE_FORMATS)("requires evidence for published %s", (format) => {
+    expect(parse({ format, status: "PUBLISHED" }).success).toBe(false);
+    expect(parse({ format, status: "PUBLISHED", sources: ["https://example.com/evidence"] }).success).toBe(true);
+    expect(
+      parse({
+        format,
+        status: "PUBLISHED",
+        methodNote: "Compared the two published specifications field by field on August 20.",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("keeps structural advice as warnings rather than fake quality rules", () => {
+    const issues = auditPostQuality({
+      ...postInputSchema.parse(post),
+      personIds: [],
+      movieIds: [],
+    });
+    expect(issues.some((issue) => issue.code === "depth" && issue.level === "warning")).toBe(true);
+    expect(issues.some((issue) => issue.level === "error")).toBe(false);
+  });
+
+  it.each([
+    ["COMPARISON", "comparison-table"],
+    ["CHECKLIST", "checklist-items"],
+    ["ROUNDUP", "roundup-items"],
+    ["PROBLEM_SOLVING", "problem-steps"],
+  ] as const)("audits the visible structure of %s", (format, code) => {
+    const parsed = postInputSchema.parse({
+      ...post,
+      format,
+      sources: ["https://example.com/evidence"],
+    });
+    expect(auditPostQuality(parsed).some((issue) => issue.code === code)).toBe(true);
   });
 });

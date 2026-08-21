@@ -110,6 +110,7 @@ const getWritingAbout = cache(async (personId: string) =>
       title: true,
       dek: true,
       category: true,
+      format: true,
       publishedAt: true,
       image: true,
       imageAlt: true,

@@ -1,6 +1,7 @@
 "use client";
 
 import { countWords, readingMinutes } from "@cinepixo/shared";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -102,6 +103,7 @@ export function ReviewEditor({
   apiBase = "/api/v1/my/reviews",
   doneHref = "/me/reviews",
   draftSync = true,
+  canPublish = true,
 }: {
   /**
    * Films to seed the picker with: the newest few, plus the one this review is
@@ -122,6 +124,8 @@ export function ReviewEditor({
    * this browser and Ctrl+S saves in place through the admin API instead.
    */
   draftSync?: boolean;
+  /** False when this byline still needs a public biography. */
+  canPublish?: boolean;
 }) {
   const router = useRouter();
   const [v, setV] = useState<ReviewDraft>(initial ?? EMPTY);
@@ -1287,12 +1291,17 @@ export function ReviewEditor({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || !canPublish}
           onClick={() => void save("PUBLISHED")}
           className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
         >
           {busy ? "Saving…" : v.status === "PUBLISHED" ? "Save changes" : "Publish review"}
         </button>
+        {!canPublish && (
+          <Link href="/me/settings" className="text-sm text-accent hover:opacity-80">
+            Add your writer biography before publishing →
+          </Link>
+        )}
         <button
           type="button"
           disabled={busy}

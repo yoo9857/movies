@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 export default async function EditReviewPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
 
-  const review = await prisma.review.findUnique({ where: { id } });
+  const review = await prisma.review.findUnique({
+    where: { id },
+    include: { author: { select: { bio: true } } },
+  });
   if (!review) notFound();
 
   // Sequential on purpose: the seed has to pin this review's own film, so it has
@@ -21,6 +24,7 @@ export default async function EditReviewPage(props: { params: Promise<{ id: stri
       <h1 className="text-2xl font-bold">Edit review</h1>
       <div className="mt-6">
         <ReviewEditor
+          canPublish={Boolean(review.author.bio?.trim())}
           reviewId={review.id}
           apiBase="/api/v1/admin/reviews"
           doneHref="/admin/reviews"

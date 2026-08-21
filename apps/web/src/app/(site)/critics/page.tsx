@@ -91,7 +91,7 @@ export default async function CriticsPage() {
             {house.map((u) => (
               <Link
                 key={u.username}
-                href={`/reviews?author=${u.username}`}
+                href={`/writers/${u.username}`}
                 className="group flex items-start gap-4"
               >
                 <span className="relative block size-14 shrink-0 overflow-hidden rounded-full border border-line bg-surface-raised">

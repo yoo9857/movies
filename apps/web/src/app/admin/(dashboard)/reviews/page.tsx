@@ -16,6 +16,7 @@ export default async function AdminReviewsPage() {
       viewCount: true,
       updatedAt: true,
       movie: { select: { title: true } },
+      author: { select: { username: true, displayName: true, bio: true } },
     },
   });
 
@@ -50,7 +51,17 @@ export default async function AdminReviewsPage() {
             <tbody>
               {reviews.map((r) => (
                 <tr key={r.id} className="border-t border-line">
-                  <td className="px-4 py-3 font-medium">{r.title}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {r.title}
+                    <span className="mt-0.5 block font-mono text-[10px] font-normal text-muted">
+                      {r.author.displayName ?? r.author.username}
+                    </span>
+                    {!r.author.bio?.trim() && (
+                      <span className="mt-1 block text-xs font-normal text-red-400">
+                        writer bio required
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted">{r.movie.title}</td>
                   <td className="px-4 py-3 tabular-nums">{r.rating.toFixed(1)}</td>
                   <td className="px-4 py-3">

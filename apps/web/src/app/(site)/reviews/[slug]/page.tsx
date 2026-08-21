@@ -280,7 +280,13 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
             <StarRating rating={review.rating} />
             <span>
               by{" "}
-              <span className="font-semibold not-italic text-foreground/90">{authorName}</span>
+              <Link
+                href={`/writers/${review.author.username}`}
+                rel="author"
+                className="font-semibold not-italic text-foreground/90 hover:text-accent"
+              >
+                {authorName}
+              </Link>
             </span>
             {date && (
               <time dateTime={date.toISOString()}>
@@ -367,10 +373,22 @@ export default async function ReviewPage(props: { params: Promise<{ slug: string
             <div className="flex items-start gap-4">
               <Avatar src={review.author.avatarUrl} name={authorName} size={44} />
               <div className="min-w-0">
-                <p className="font-semibold">{authorName}</p>
+                <Link
+                  href={`/writers/${review.author.username}`}
+                  rel="author"
+                  className="font-semibold hover:text-accent"
+                >
+                  {authorName}
+                </Link>
                 <p className="mt-1 text-sm leading-relaxed text-muted">
                   {review.author.bio ?? "A member of the CinePixo fandom."}
                 </p>
+                <Link
+                  href={`/writers/${review.author.username}`}
+                  className="mt-2 inline-block text-xs text-accent hover:opacity-80"
+                >
+                  Full profile and all work →
+                </Link>
               </div>
             </div>
             {moreByAuthor.length > 0 && (
