@@ -45,6 +45,7 @@
     "topic": "npm run topic -w web --",
     "publish": "npm run publish -w web --",
     "publish-post": "npm run publish-post -w web --",
+    "news-lane": "npm run news-lane -w web --",
     "blog-doctor": "npm run blog-doctor -w web --",
     "deploy-check": "npm run deploy-check -w web --",
     "save-media": "npm run save-media -w web --",

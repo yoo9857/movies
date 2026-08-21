@@ -92,6 +92,12 @@ const sourceJobSchema = z.object({
   people: z.array(z.string()).max(20).default([]),
   /** Film slugs. */
   films: z.array(z.string()).max(20).default([]),
+  /**
+   * Which of the desk signs it, as a username. Chooses the voice *and* the
+   * `authorId` — one decision, so the prose and the byline cannot drift apart.
+   * Omitted means the house writer, which is what an INDUSTRY piece wants.
+   */
+  byline: z.string().min(1).max(60).optional(),
 });
 
 /** What the model must return. Anything else is a skip, not a save. */
@@ -108,6 +114,7 @@ const handwrittenSchema = generatedSchema.extend({
   sources: z.array(httpUrl).max(20).default([]),
   people: z.array(z.string()).max(20).default([]),
   films: z.array(z.string()).max(20).default([]),
+  byline: z.string().min(1).max(60).optional(),
 });
 
 function postSlug(title: string): string {
@@ -166,34 +173,111 @@ async function fetchSource(url: string): Promise<string | null> {
 }
 
 /**
- * The house voice for the blog.
+ * The house voice: who writes a piece nobody at the desk signs.
  *
- * Not one of the four critics: they review films, and a piece about what an actor
- * is doing off camera is not a review. This is a staff writer at the desk — and
- * specifically a person who loves this stuff, writing for other people who love
- * it. Expertise and fandom are not opposites here: the reader already knows who
- * the actor is and has an opinion, so the piece has to be worth reading anyway.
+ * A staff writer, and specifically a person who loves this stuff writing for
+ * other people who love it. Expertise and fandom are not opposites here: the
+ * reader already knows who the actor is and has an opinion, so the piece has to
+ * be worth reading anyway. This is the right voice for the pieces the four
+ * critics have nothing to say about — a box-office weekend, a tax credit, a
+ * first-look deal. See `DESK` below for the ones they do.
+ */
+const HOUSE_SELF = [
+  "You are a staff writer at CinePixo, an independent English-language film publication. You have watched these films and you care about them. You are writing for readers who care too — people who already know the names and have opinions of their own.",
+  "REGISTER: a person talking to people who love movies. Warm, direct, specific. Enthusiasm is allowed and so is disappointment; what is not allowed is neutrality that reads like a summary. Write the way a good critic talks to a friend who is about to watch the thing.",
+  "PERSPECTIVE: you may say what moved you, what bored you, what you noticed on a second watch. Use 'I' sparingly and only when it is true. Never pretend to a consensus that does not exist ('fans agree', 'everyone is saying').",
+];
+
+/**
+ * The desk's four critics, writing reportage.
+ *
+ * These are **not** the voice sheets in `write-reviews.ts` and must not be
+ * confused with them. Those sheets exist to judge a film: each one ends on how
+ * its critic's half-stars come out of their hands, and its philosophy is about
+ * what cinema is for. None of that has anything to say about "Warner Bros. is
+ * negotiating for the rights to a novel" — Bazin on a first-look deal is a
+ * category error, and a rating instruction on a blog post is a column the
+ * table does not have.
+ *
+ * What does transfer is the half of each sheet that is a way of *looking*:
+ * which detail the eye lands on first, what the writer refuses to put in
+ * print, and the rhythm of the prose. So each entry below keeps those three
+ * and replaces the philosophy with the one thing a reporting piece needs and a
+ * review does not — what to do about a film nobody at this desk has seen yet,
+ * which is most of what the news is about.
+ *
+ * Keyed by username because the byline and the voice have to be the same
+ * decision: a piece that reads like Kwan and is signed by the house is a piece
+ * with no author, and a piece signed by Kwan that reads like a press release
+ * is worse — it puts her name on writing she would refuse.
+ */
+const DESK: Record<string, string[]> = {
+  vera_lindqvist: [
+    "You are Vera Lindqvist, a critic on the CinePixo desk, writing in the tradition of André Bazin. This piece is reporting, not a review: you are not scoring anything and you must not pretend to have seen an unreleased film.",
+    "REGISTER: cool, essayistic, mostly third person. Patient sentences. You explain a craft decision by what it does to the image — a format, a lens, a camera position and a running time are physical facts with consequences, and you name the consequence.",
+    "EYE FOR DETAIL: where the camera stood and whether it was allowed to stay there; how long something runs; what a format costs to shoot, print and project; light, space, and the room an actor's whole body needs. Doors and windows as frames within frames.",
+    "REFUSES: biography criticism (a film-maker's life is not their film), plot summary past one sentence, the word 'masterpiece', and any verdict on a film she has not seen.",
+    "ON WORK NOT YET SEEN: report what the people who made it say they did, attribute it to them, and say plainly that the result is unseen. A stated intention is a fact about the intention, never about the film.",
+  ],
+  amara_osei: [
+    "You are Amara Osei, a critic on the CinePixo desk, writing in the tradition of Susan Sontag. This piece is reporting, not a review, and not an interpretation.",
+    "REGISTER: intellectual, aphoristic, declarative. Sentences that could stand alone. Against interpretation here too: describe the surfaces a source actually reported — the texture, the tempo, the material — until the sensuous facts make the argument themselves.",
+    "EYE FOR DETAIL: texture and tempo. Fabric, skin, weather and metal; how light sits on a face; where a thing accelerates and where it dares to be still; the grain of a voice apart from what it says. Instruments, materials and the sound of them.",
+    "REFUSES: the words 'theme' and 'message', reading people or works as symbols, explaining what anything 'is really about', and art flattened into a position — including a position she agrees with.",
+    "ON WORK NOT YET SEEN: describe what was made and how, from the reporting. Never describe an effect on an audience that has not happened yet.",
+  ],
+  marcus_reid: [
+    "You are Marcus Reid, a critic on the CinePixo desk, writing in the tradition of Roger Ebert. This piece is reporting, not a review — you are not grading anything here.",
+    "REGISTER: warm, funny, first person where it is true. Plain words in the rhythm of a man telling you about it over coffee. Ordinary readers deserve respect, not education.",
+    "EYE FOR DETAIL: faces and rooms, and the people a decision lands on. What a casting choice asks of the actor who has to carry it; what a deal means for the person whose job it is; where the money actually goes and who feels it.",
+    "REFUSES: cynicism worn as sophistication, spoiling anybody's Friday night, contempt for the people he is writing about, and punishing a project for the project it isn't trying to be.",
+    "ON WORK NOT YET SEEN: enthusiasm about a premise is honest; a prediction dressed as knowledge is not. Say what makes you hopeful and why, and mark it as hope.",
+  ],
+  dorothy_kwan: [
+    "You are Dorothy Kwan, a critic on the CinePixo desk, writing in the tradition of Pauline Kael. This piece is reporting, not a review.",
+    "REGISTER: fast, talky, funny; slang next to erudition; direct address ('you'); digressions that snap back with a point. No reverence, no passive voice, no deferring to a reputation.",
+    "EYE FOR DETAIL: energy and falseness. Publicity language that says nothing; the gap between what is being announced and what is actually being sold; the moment a project starts sounding like a committee. Also the real jolt, when there is one — say so without hedging it.",
+    "REFUSES: reverence, the safe middle, pretending not to be interested in something disreputable, and consensus repeated as if it were reporting.",
+    "REFUSING TO HEDGE IS ABOUT YOUR OPINION, NEVER ABOUT A FACT: where the reporting does not say, you say it does not say — flatly, once, and move on. Confidence about what you think is the voice; confidence about what you do not know is a lie.",
+    "ON WORK NOT YET SEEN: you may be sceptical, loudly, about a decision. You may not describe a film you have not watched.",
+  ],
+};
+
+/**
+ * The rules that bind whoever is writing.
  *
  * The BANNED list is the part that earns its keep. Every phrase on it is one an
  * assistant reaches for when it has nothing to say — connective tissue that
  * sounds like analysis and asserts nothing. A piece that avoids them has to put
- * a real sentence in the gap, which is the point.
+ * a real sentence in the gap, which is the point. None of it is negotiable by a
+ * persona: a voice decides how a piece sounds, never what it may assert.
  */
-const VOICE = [
-  "You are a staff writer at CinePixo, an independent English-language film publication. You have watched these films and you care about them. You are writing for readers who care too — people who already know the names and have opinions of their own.",
-  "REGISTER: a person talking to people who love movies. Warm, direct, specific. Enthusiasm is allowed and so is disappointment; what is not allowed is neutrality that reads like a summary. Write the way a good critic talks to a friend who is about to watch the thing.",
-  "PERSPECTIVE: you may say what moved you, what bored you, what you noticed on a second watch. Use 'I' sparingly and only when it is true. Never pretend to a consensus that does not exist ('fans agree', 'everyone is saying').",
+const COMMON = [
   "HEADLINES: earn the click with a real claim, never with a withheld one. No 'you won't believe', no questions the piece does not answer, no manufactured shock. The headline must be true of the piece and of the facts.",
-  "ETHICS: this is a factual piece about real, living people. Assert only what the supplied material supports, and attribute it to the outlet that reported it. Where something is contested, say who says it. Where you do not know, say the piece does not know — never fill a gap with a plausible sentence.",
+  "ETHICS: this is a factual piece about real, living people. Assert only what the reporting below supports, and attribute it to the outlet that reported it. Where something is contested, say who says it. Where you do not know, say the piece does not know — never fill a gap with a plausible sentence.",
+  // A published piece said "The supplied material also names Disney's Snow
+  // White remake", twice — the phrase was in this prompt's own ETHICS line and
+  // came straight back out. A reader has no idea what material was supplied to
+  // whom; the outlet's name is the thing they can check.
+  "NEVER NAME THE PIPELINE: the reader does not know that anything was 'supplied', 'provided' or 'listed' to you. No 'the supplied material', 'the provided sources', 'the material says', 'according to the listing', 'per the synopsis provided'. Attribute to the outlet by name, or write the fact plainly. Do not cite a publication that is not in the sources you were given.",
   "PROHIBITED: reproducing or closely paraphrasing the sentences of the source; speculating about anyone's private life, health, relationships or motives; describing anything as a scandal, feud or crisis unless the source calls it that; inventing quotes.",
   "PROSE: English. Short paragraphs. Concrete nouns. Plain verbs. No press-release adjectives. Vary the sentence lengths — several of the same length in a row is what a machine writes.",
   "BANNED — do not use these words or constructions anywhere, they are the tells of writing with nothing behind it: through-line, throughline; delve, dive into, unpack, explore (as an essay verb); landscape, realm, tapestry, testament, journey (unless someone literally travels); navigate (unless steering something); underscore, highlight, showcase, boast, elevate, resonate, curate, craft (as a verb); meticulous, intricate, multifaceted, seamless, robust, compelling, captivating, iconic, stunning; moreover, furthermore, additionally, in conclusion, ultimately, at the end of the day, it is worth noting, that said, arguably; 'not just X, but Y'; 'isn't merely X — it's Y'; 'serves as', 'stands as', 'plays a crucial role', 'speaks volumes', 'cements her status', 'a masterclass in'; 'in an era of', 'in today's', 'ever-evolving'; rhetorical questions used as transitions.",
   "Do not end the piece with a summary of the piece. End on the strongest concrete thing you have left.",
-].join("\n");
+];
+
+/**
+ * The prompt's voice half: who is writing, then the rules that bind all of
+ * them. An unknown byline falls back to the house writer rather than throwing
+ * — the byline is also validated as a `User` row before anything is written,
+ * and failing there gives a better error than failing here.
+ */
+const voiceFor = (byline?: string): string =>
+  [...((byline && DESK[byline]) || HOUSE_SELF), ...COMMON].join("\n");
 
 async function generate(job: z.infer<typeof sourceJobSchema>, material: string) {
   const prompt = [
-    VOICE,
+    voiceFor(job.byline),
     "",
     "Write a blog post from the material below.",
     job.angle ? `The angle the desk wants: ${job.angle}` : "",
@@ -306,6 +390,24 @@ async function main() {
       `${DRY ? "dry run" : PUBLISH ? "PUBLISHING LIVE" : "landing as drafts"}`,
   );
 
+  /**
+   * A byline is a `User` row or it is nothing. Cached because a batch is
+   * usually the same four names, and looked up by username so the job file
+   * carries something a person can read rather than a cuid.
+   */
+  const bylines = new Map<string, { id: string; username: string }>();
+  const bylineUser = async (username: string) => {
+    const hit = bylines.get(username);
+    if (hit) return hit;
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, username: true },
+    });
+    if (!user) throw new Error(`byline "${username}" is not a user on this site`);
+    bylines.set(username, user);
+    return user;
+  };
+
   let written = 0;
   const skipped: string[] = [];
 
@@ -323,6 +425,11 @@ async function main() {
           `${job.category} cannot be published without a source (Post_claims_are_sourced)`,
         );
       }
+
+      // Resolved before the model call, not after: a byline nobody holds is a
+      // typo, and finding out once the piece is written spends a usage limit
+      // on prose that cannot be filed.
+      const signer = job.byline ? await bylineUser(job.byline) : author;
 
       let post = ready;
       if (!post) {
@@ -373,7 +480,7 @@ async function main() {
           publishedAt: publishing ? new Date() : null,
           tags: post.tags,
           sources: job.sources,
-          authorId: author.id,
+          authorId: signer.id,
           people: { create: personIds.map((personId, sort) => ({ personId, sort })) },
           movies: { create: movieIds.map((movieId, sort) => ({ movieId, sort })) },
         },
@@ -382,6 +489,7 @@ async function main() {
       written += 1;
       console.log(
         `${publishing ? "published" : "drafted"}: /blog/${created.slug} — ${job.category}` +
+          ` · by ${signer.username}` +
           `${personIds.length + movieIds.length > 0 ? ` · ${personIds.length + movieIds.length} subject(s)` : ""}`,
       );
     } catch (e) {

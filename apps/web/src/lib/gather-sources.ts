@@ -166,6 +166,24 @@ export interface Photo {
  * photograph, and it goes in the credit line anyway. Those sentences are
  * dropped; the title stays as the fallback for a file that describes nothing.
  */
+/**
+ * A sentence about the *file* rather than about what it shows.
+ *
+ * Commons derivatives describe themselves. The whole `ImageDescription` of one
+ * crop is "A cropped version of File:Johnny Depp (3).jpg" — which names the
+ * subject, so `nameMatches` preferred it to the title and it went out as the
+ * alt text of a published piece. `Post_image_needs_alt` is satisfied, because
+ * it is not blank, and the reader who cannot see the photograph is handed the
+ * name of a file. Dropped alongside the licence instructions and for the same
+ * reason: true of the file, and not a description of the picture.
+ *
+ * `news-lane` checks the written alt text for this shape as well. The gather is
+ * where it can still be fixed — a piece whose hero is captioned properly is a
+ * piece that publishes — and the check downstream is what catches the next way
+ * a description turns out to be about the upload.
+ */
+const ABOUT_THE_FILE = /file:|cropped (?:version|from)|derivative work|\.(?:jpe?g|png|webp|gif)/i;
+
 export function photoAlt(
   description: string | null,
   title: string,
@@ -177,7 +195,12 @@ export function photoAlt(
 ): string {
   const kept = (description ?? "")
     .split(/(?<=[.!?])\s+/)
-    .filter((s) => s.trim() && !/please attribute|if used elsewhere|do not (?:use|reuse)|all rights reserved|©/i.test(s))
+    .filter(
+      (s) =>
+        s.trim() &&
+        !/please attribute|if used elsewhere|do not (?:use|reuse)|all rights reserved|©/i.test(s) &&
+        !ABOUT_THE_FILE.test(s),
+    )
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
@@ -304,6 +327,29 @@ const ARCHIVAL =
 export const looksArchival = (title: string): boolean => ARCHIVAL.test(title);
 
 /**
+ * A place that carries the name, rather than the person who was given it.
+ *
+ * `nameMatches` needs every token and that is usually enough — "Higashino
+ * Station" loses on the missing given name. It is not enough when a *toponym*
+ * contains both tokens: a gather for the director Denis Villeneuve ranked
+ * "Cimetière - Villeneuve-Saint-Denis (FR77)" — a cemetery in a commune of
+ * that name, CC BY-SA, high resolution, and one step from being a photograph
+ * in a piece about a living film-maker (it reached one, on 2026-08-21).
+ *
+ * Matched separately from `JUNK` and `ARCHIVAL` so the reason a file was
+ * refused stays legible, and kept deliberately narrow: place *types* that are
+ * never the setting of a photograph we want, plus the Commons commune code,
+ * which is a strong statement that the subject of the file is a location.
+ * Not included, because a person is legitimately photographed there: churches,
+ * schools, theatres, stations.
+ */
+const PLACE =
+  /cemetery|cimeti[eè]re|cementerio|friedhof|graveyard|columbarium|monument to|memorial to|commemorative plaque|street sign|road sign|\((?:FR|DE|IT|ES|BE|CH|NL|AT|PL)\d{2,3}\)/i;
+
+/** Exported for the same reason as `looksArchival`. */
+export const looksLikePlace = (title: string): boolean => PLACE.test(title);
+
+/**
  * Pictures worth reaching for first: a performer at work or in front of press.
  * Scored rather than filtered, so a category with nothing better still yields
  * something.
@@ -392,7 +438,7 @@ function commonsCandidate(
   if (!info?.url || !info.descriptionurl || !license) return null;
   if (!licenceAllows(license)) return null;
   if ((info.width ?? 0) < minWidth) return null;
-  if (JUNK.test(title) || ARCHIVAL.test(title)) return null;
+  if (JUNK.test(title) || ARCHIVAL.test(title) || PLACE.test(title)) return null;
   if (looksLikeMontage(info.width ?? 0, info.height ?? 0)) return null;
   return {
     title,

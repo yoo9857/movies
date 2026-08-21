@@ -3,6 +3,7 @@ import {
   eventKey,
   licenceAllows,
   looksArchival,
+  looksLikePlace,
   nameMatches,
   photoAlt,
   photoPlan,
@@ -114,6 +115,24 @@ describe("photoAlt", () => {
     );
   });
 
+  it("refuses a description of the file, which is how a filename became alt text", () => {
+    // Published, on a piece about Johnny Depp. The description named him, so it
+    // won on `nameMatches`, and the reader who needed the caption was told the
+    // name of a crop.
+    expect(
+      photoAlt("A cropped version of File:Johnny Depp (3).jpg", "Johnny Depp (3)", "Johnny Depp"),
+    ).toBe("Johnny Depp (3)");
+    // Sentence by sentence, like the licence instructions: the note about the
+    // upload goes and the description of the photograph stays.
+    expect(
+      photoAlt(
+        "Bong Joon-ho at the Cannes press conference. Cropped from File:Bong.jpg.",
+        "Bong Joon-ho 2019",
+        "Bong Joon-ho",
+      ),
+    ).toBe("Bong Joon-ho at the Cannes press conference.");
+  });
+
   it("falls back to the title when the file describes nothing", () => {
     expect(photoAlt(null, "Dwayne_Johnson-1690")).toBe("Dwayne Johnson-1690");
     expect(photoAlt("   ", "Dwayne Johnson-1690")).toBe("Dwayne Johnson-1690");
@@ -161,6 +180,41 @@ describe("archival paper is not a photograph of anyone", () => {
       expect(looksArchival(title)).toBe(false);
     }
     expect(nameMatches(NAME, "Martin McDonagh at the Banshees premiere")).toBe(true);
+  });
+});
+
+/**
+ * The one that got published: a gather for Denis Villeneuve returned a
+ * cemetery in the French commune of Villeneuve-Saint-Denis, which carries
+ * both of his tokens in the wrong order. `nameMatches` cannot see it — the
+ * McDonagh card above pins that it deliberately ignores order — so the title
+ * filter has to, exactly as it does for archival paper.
+ */
+describe("a place named after someone is not a photograph of them", () => {
+  it("refuses the toponym that reads as the name", () => {
+    for (const title of [
+      "Cimetière - Villeneuve-Saint-Denis (FR77) - 2025-08-01 - 1",
+      "Cemetery of Villeneuve-Saint-Denis",
+      "Monument to Charlie Chaplin in Vevey",
+      "Memorial to Satyajit Ray",
+      "Rue Jean Renoir street sign",
+    ]) {
+      expect(looksLikePlace(title)).toBe(true);
+    }
+    // Both tokens are there, in the wrong order — which is the whole problem.
+    expect(nameMatches("Denis Villeneuve", "Cimetière - Villeneuve-Saint-Denis (FR77)")).toBe(true);
+  });
+
+  it("keeps photographs of people, including ones taken at a place", () => {
+    for (const title of [
+      "Denis Villeneuve March 2026 Dune Trailer Launch 3",
+      "Bong Joon-ho at the Église Saint-Sulpice memorial service",
+      "Anne Hathaway arrives at Grand Central Station",
+      "Park Chan-wook at a school screening in Busan",
+      "Christopher Nolan at the NYC Premiere of The Odyssey",
+    ]) {
+      expect(looksLikePlace(title)).toBe(false);
+    }
   });
 });
 

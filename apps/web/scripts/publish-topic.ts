@@ -25,6 +25,9 @@
 //   --prose=<file.md>    skip generation, use this Markdown (the workstation
 //                        path — `codex` lives on the server). A leading `# `
 //                        line becomes the headline.
+//   --byline=<username>  which of the desk signs it — picks the voice and the
+//                        author together (see DESK in write-posts.ts). Omitted
+//                        means the house writer.
 //   --dek="…"            the standfirst, with --prose. Twenty characters at
 //                        least, because it is what a search result shows and
 //                        the writer's job to make it worth reading.
@@ -99,6 +102,8 @@ const YOUTUBES = [...new Set(strArgs("youtube"))];
 const SOCIALS = [...new Set(strArgs("social"))];
 const BRIEF = strArg("brief");
 const PROSE = strArg("prose");
+/** Which of the desk signs it — chooses the voice and the byline together. */
+const BYLINE = strArg("byline");
 const PUBLISH = process.argv.includes("--publish");
 const DRY = process.argv.includes("--dry");
 const ALLOW_FEW_PICTURES = process.argv.includes("--allow-few-pictures");
@@ -272,6 +277,7 @@ async function main() {
             sources,
             people: PEOPLE,
             films: FILMS,
+            ...(BYLINE ? { byline: BYLINE } : {}),
           },
         ]),
       );
@@ -286,6 +292,7 @@ async function main() {
             ...(BRIEF ? { brief: readFileSync(BRIEF, "utf8").trim() } : {}),
             people: PEOPLE,
             films: FILMS,
+            ...(BYLINE ? { byline: BYLINE } : {}),
           },
         ]),
       );

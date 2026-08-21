@@ -178,6 +178,35 @@ syndicated through it refuse automated fetches from some clients, so the operato
 pastes the facts and the URL stays as the citation the page prints. Generation goes
 through `codex exec`, which is installed on the server rather than locally.
 
+**The news lane** — `npm run news-lane` — is the one exception to that default, and
+it is an exception somebody has to turn on:
+
+```bash
+npm run news-lane -- --dry             # print the plan, write nothing
+npm run news-lane -- --no-publish      # write them, hold every one at DRAFT
+npm run news-lane                      # six pieces, live
+```
+
+It takes six stories off about thirty standing beats, writes each one through the
+same `publish-topic` pipeline an operator would use, and publishes it. Nothing in
+it decides whether the prose is faithful to its sources — nothing can, which is
+why every other path here stops at a draft — so what the lane does instead is
+refuse to publish anything it can find a machine-checkable fault in. A piece with
+fewer than four pictures, or no hero, or a headline turning on a death, an
+addiction, an allegation or a court, or a linked subject its own prose never names,
+or a caption that reads as a place or a filename rather than as a person, is left
+at DRAFT with the reason in `~/fill-logs/news-lane.log`. Held is not lost: the
+piece sits at its own URL, admin-only and `noindex`, until `publish-post <slug>`.
+
+Repeating itself is the other thing it must not do, and that is three gates rather
+than one: URL identity against every `Post.sources` row the site holds, headline
+containment (the same story told at greater length, which a symmetric similarity
+score misses), and a fortnight's rest for the person a piece leads on — applied to
+the run's own output as well as to what is already published. Bylines come from the
+shelf: `CRAFT` and `PEOPLE` and `ISSUE` are signed by the critics whose way of
+looking bears on them, and `INDUSTRY` goes out in the house voice, because none of
+the four has anything to say about a rights negotiation.
+
 ## API (v1)
 
 Public: `GET /api/v1/reviews`, `GET /api/v1/reviews/:slug`, `GET /api/v1/critics`, `GET /api/v1/critics/:slug`, `GET /api/v1/movies`
