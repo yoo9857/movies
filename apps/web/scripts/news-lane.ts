@@ -470,9 +470,7 @@ async function main() {
     // follow. What that costs when a generation then fails is one further story
     // about that person, this run only.
     for (const person of people) seen.rested.add(person.slug);
-    seen.recentLeads += `
-
-${candidate.topic}`;
+    seen.recentLeads += `\n\n${candidate.topic}`;
     if (DRY) {
       written++;
       continue;

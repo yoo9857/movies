@@ -182,7 +182,7 @@ export interface Photo {
  * piece that publishes — and the check downstream is what catches the next way
  * a description turns out to be about the upload.
  */
-const ABOUT_THE_FILE = /file:|cropped (?:version|from)|derivative work|\.(?:jpe?g|png|webp|gif)/i;
+const ABOUT_THE_FILE = /\bfile:|cropped (?:version|from)|derivative work|\.(?:jpe?g|png|webp|gif)\b/i;
 
 export function photoAlt(
   description: string | null,

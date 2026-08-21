@@ -122,6 +122,19 @@ describe("photoAlt", () => {
     expect(
       photoAlt("A cropped version of File:Johnny Depp (3).jpg", "Johnny Depp (3)", "Johnny Depp"),
     ).toBe("Johnny Depp (3)");
+    // Each branch of the pattern, because the first version of it shipped with
+    // two dead ones: both word boundaries went into the source as literal
+    // backspace bytes, which no title contains, and the two live branches were
+    // enough to make the assertions above pass.
+    expect(photoAlt("File:Bong Joon-ho at Cannes.jpg", "Bong Joon-ho 2019", "Bong Joon-ho")).toBe(
+      "Bong Joon-ho 2019",
+    );
+    expect(photoAlt("Bong Joon-ho 2019 portrait.jpeg", "Bong Joon-ho 2019", "Bong Joon-ho")).toBe(
+      "Bong Joon-ho 2019",
+    );
+    expect(
+      photoAlt("Derivative work of an earlier upload.", "Bong Joon-ho 2019", "Bong Joon-ho"),
+    ).toBe("Bong Joon-ho 2019");
     // Sentence by sentence, like the licence instructions: the note about the
     // upload goes and the description of the photograph stays.
     expect(
