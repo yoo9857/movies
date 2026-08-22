@@ -69,6 +69,15 @@ outlet is a rumour, a subject who ran within the fortnight is not coverage, and
 a headline naming nobody we have a page for is a piece with no link graph, which
 is the only reason to write it here rather than link the outlet.
 
+Every taken story runs picture recovery before publication. The recovery chain
+uses linked portraits and film art already held by CinePixo, retries licensed
+Commons/Openverse searches across every linked subject, and finally makes a
+clearly labelled CinePixo editorial graphic when no reusable photograph exists.
+Four pictures remain the layout target; one recovered hero is the hard floor.
+A failed or held attempt does not consume a live slot: the lane keeps walking
+the candidate queue until it reaches the requested publication count or runs
+out of eligible stories.
+
 ## Load
 
 Three to four concurrent fill lanes is the ceiling on this box before the app
