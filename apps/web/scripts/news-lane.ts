@@ -16,13 +16,13 @@
 // decide whether the prose is faithful to its sources — nothing can, which is
 // why `publish-topic` leaves that to a person. Running unattended means that
 // judgement is being skipped, deliberately, by whoever turned the cron on. So
-// the lane spends its care on the failures a machine *can* see, and holds a
-// piece at DRAFT rather than publishing it when any of them trip:
+// the lane spends its care on the failures a machine *can* see. A failed take
+// does not consume a live slot: the queue continues until six publish or there
+// are no eligible stories left.
 //
-//   · fewer than four pictures, or no hero — the house layout, and a bare post
-//     looks abandoned rather than new. The hero is named separately because
-//     `publish-post` refuses one without it and reported that to the lane as an
-//     opaque "Command failed";
+//   · pictures are recovered automatically from linked CinePixo portraits and
+//     film art, licensed Commons/Openverse results, then an honest house graphic.
+//     Four remains the layout target and one hero is the publication floor;
 //   · a headline or standfirst turning on death, addiction, an allegation or a
 //     court — the claims where being wrong is a libel rather than a correction.
 //     `--allow-sensitive` is how somebody takes that on;
@@ -358,7 +358,6 @@ interface Verdict {
   ok: boolean;
   reasons: string[];
   pictures: number;
-  hasHero: boolean;
 }
 
 async function verify(slug: string, minimumPictures = DEFAULT_MIN_POST_PICTURES): Promise<Verdict> {
@@ -373,7 +372,7 @@ async function verify(slug: string, minimumPictures = DEFAULT_MIN_POST_PICTURES)
       people: { select: { person: { select: { name: true } } } },
     },
   });
-  if (!post) return { ok: false, reasons: ["the post is gone"], pictures: 0, hasHero: false };
+  if (!post) return { ok: false, reasons: ["the post is gone"], pictures: 0 };
   const reasons: string[] = [];
 
   const pictures = postPictureCount(post.content, post.image);
@@ -406,7 +405,7 @@ async function verify(slug: string, minimumPictures = DEFAULT_MIN_POST_PICTURES)
       reasons.push(`a picture is described as a file ("${alt.slice(0, 60)}"), not as what it shows`);
     }
   }
-  return { ok: reasons.length === 0, reasons, pictures, hasHero: Boolean(post.image) };
+  return { ok: reasons.length === 0, reasons, pictures };
 }
 
 async function main() {
